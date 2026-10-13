@@ -1,0 +1,745 @@
+// 文件名里的 "Mods.AE2ForTerraria" 就是键前缀,
+// 所以下面的键从「Items」这一层开始写,不要再套一层 Mods / AE2ForTerraria ——
+// 套了的话真实键会变成 Mods.AE2ForTerraria.Mods.AE2ForTerraria.Items.*,
+// tModLoader 找不到,于是自动生成 "M E Storage Unit" 这种乱名字。
+
+Items: {
+	MEDigitalSingularity: {
+		DisplayName: 数字奇点
+		Tooltip:
+			'''
+			为驱动器增加物品总数和类别容量
+			两项上限均为 9,223,372,036,854,775,807
+			物品保存在驱动器中
+			'''
+	}
+
+	MEWirelessBridge: {
+		DisplayName: ME 无线桥接器
+		Tooltip: 同一频道且启用的桥接器会连接网络。右键查看频道、换频道或断开。
+	}
+
+	MECable: {
+		DisplayName: ME 网络线缆
+		Tooltip: 便宜地把 ME 网络连过去,本身不提供容量。
+	}
+
+	MEStorageBus: {
+		DisplayName: ME 存储总线
+		Tooltip:
+			'''
+			贴着原版箱子放置,就能把那个箱子并进 ME 网络。
+			空手右键打开配置:导入 / 导出切换 + 分区清单(白/黑名单,可搜索勾选)。
+			手持物品右键 = 把这个物品加进 / 移出分区清单。
+			'''
+	}
+
+	MEStorageUnit: {
+		DisplayName: ME 存储单元
+		Tooltip: 不需要磁盘的固定容量存储方块。手持 ME 存储升级件右键可以升级。
+	}
+
+	MEAccessTerminal: {
+		DisplayName: ME 访问终端
+		Tooltip:
+			'''
+			右键打开已储存物品，并绑定当前 ME 网络。
+			之后按「远程打开访问终端」键(默认 P)可远程存取该网络的物品。
+			'''
+	}
+
+	MECraftingCpu: {
+		DisplayName: ME 合成 CPU
+		Tooltip:
+			'''
+			兼容原有合成队列；新合成终端已经内置队列功能。
+			手持物品右键加入队列(按住下键一次加 10),空手右键打开队列界面。
+			'''
+	}
+
+	MEDiskDrive: {
+		DisplayName: ME 磁盘驱动器
+		Tooltip:
+			'''
+			把不同级别的存储磁盘插进去提供容量。
+			物品保存在驱动器中，磁盘只提供容量。剩余容量不足时禁止移出或降级磁盘。
+			'''
+	}
+
+	MECraftingTerminal: {
+		DisplayName: ME 合成终端
+		Tooltip:
+			'''
+			右键查看合成配方、任务与工作站；点选物品可查看合成树与缺料。
+			「可合成」只显示当前材料和原配方条件均满足的物品。
+			内置自动合成队列与工作站槽，无需独立 CPU 或装配室。
+			仍需材料、工作站和原配方的环境条件。
+			'''
+	}
+
+	MEMolecularAssembler: {
+		DisplayName: ME 分子装配室
+		Tooltip:
+			'''
+			兼容原有装配任务与工作站；连接合成终端后由终端统一调度。
+			需要把工作站(工作台 / 铁砧 / 熔炉)放进它的槽位,否则对应配方无法合成。
+			不需要写样板:只要配方条件满足且原料齐全就会自动制造。
+			新网络只需合成终端即可自动合成。
+			'''
+	}
+
+	MEDropCollector: {
+		DisplayName: ME 掉落收集器
+		Tooltip:
+			'''
+			把附近的掉落物直接吸入网络。
+			被过滤掉的掉落物会留在原地。
+			右键打开它自己的过滤清单(每块收集器各有一份)。
+			'''
+	}
+
+	MEDisk1K: {
+		DisplayName: ME 存储磁盘（32 类）
+		Tooltip:
+			'''
+			为驱动器增加 32 个类别位
+			每类最多 2,147,483,647 个物品
+			不同词缀、自定义数据分别占类
+			物品保存在驱动器中
+			'''
+	}
+
+	MEDisk4K: {
+		DisplayName: ME 存储磁盘（64 类）
+		Tooltip:
+			'''
+			为驱动器增加 64 个类别位
+			每类最多 2,147,483,647 个物品
+			不同词缀、自定义数据分别占类
+			物品保存在驱动器中
+			'''
+	}
+
+	MEDisk16K: {
+		DisplayName: ME 存储磁盘（128 类）
+		Tooltip:
+			'''
+			为驱动器增加 128 个类别位
+			每类最多 2,147,483,647 个物品
+			不同词缀、自定义数据分别占类
+			物品保存在驱动器中
+			'''
+	}
+
+	MEDisk64K: {
+		DisplayName: ME 存储磁盘（256 类）
+		Tooltip:
+			'''
+			为驱动器增加 256 个类别位
+			每类最多 2,147,483,647 个物品
+			不同词缀、自定义数据分别占类
+			物品保存在驱动器中
+			'''
+	}
+
+	MEStorageUpgrade: {
+		DisplayName: ME 存储升级件
+		Tooltip:
+			'''
+			手持它右键 ME 存储单元即可升一级:
+			Lv.1 8K 字节 -> Lv.2 32K -> Lv.3 128K。
+			'''
+	}
+}
+
+Keybinds: {
+	OpenSearch.DisplayName: 打开物品浏览器
+	OpenRemoteTerminal.DisplayName: 远程打开访问终端
+	OpenNetworkOverview.DisplayName: 打开 ME 网络概览
+	ToggleMagnet.DisplayName: 切换随身掉落磁铁
+}
+
+Tiles: {
+	MEWirelessBridgeTile.MapEntry: ME 无线桥接器
+	MECableTile.MapEntry: ME 网络线缆
+	MEStorageBusTile.MapEntry: ME 存储总线
+	MEStorageUnitTile.MapEntry: ME 存储单元
+	MEAccessTerminalTile.MapEntry: ME 访问终端
+	MECraftingCpuTile.MapEntry: ME 合成 CPU
+	MEDiskDriveTile.MapEntry: ME 磁盘驱动器
+	MECraftingTerminalTile.MapEntry: ME 合成终端
+	MEMolecularAssemblerTile.MapEntry: ME 分子装配室
+	MEDropCollectorTile.MapEntry: ME 掉落收集器
+}
+
+Achievements: {
+	StoreFirstItemAchievement: {
+		FriendlyName: 第一次入库
+		Description: 把物品存进 ME 网络 —— 终端「存入全部」、存储单元右键、掉落收集器、存储总线导入、随身磁铁任意一种都算
+	}
+
+	AutomateFirstItemAchievement: {
+		FriendlyName: 全自动
+		Description: 让分子装配室自动造出一件物品(工作站放齐、设好目标或往 CPU 下单即可)
+	}
+
+	BindTerminalAchievement: {
+		FriendlyName: 随身网络
+		Description: 右键 ME 访问终端绑定网络,之后按键(默认 P)可以远程打开
+	}
+
+	KeepStockAchievement: {
+		FriendlyName: 永不断供
+		Description: 在合成终端选中物品 + 填数量,点「维持库存」;网络里少于这个数就会自动补货
+	}
+
+	BigStorageAchievement: {
+		FriendlyName: 大容量
+		Description: 让一个网络的已用容量达到 64K 字节(插更高级的磁盘,再往里存东西)
+	}
+
+	LongRangeWirelessAchievement: {
+		FriendlyName: 跨世界连线
+		Description: 用无线桥接器把相隔 500 格以上的两个网络连起来(两端设成同一个频道)
+	}
+
+	KeepFiveAchievement: {
+		FriendlyName: 仓库管理员
+		Description: 同时维持 5 种物品的库存
+	}
+
+	FiveAssemblersAchievement: {
+		FriendlyName: 并行生产
+		Description: 让同一个 ME 网络里同时有 5 个分子装配室(多一份并行合成进度)
+	}
+
+	TransferNetworkAchievement: {
+		FriendlyName: 网络搬家
+		Description: 把一整个网络的东西转移到另一个网络(网络概览里「作为来源」→ 选中目标 →「接收转移」)
+	}
+}
+
+Configs: {
+	MEConfig: {
+		DisplayName: ME 网络
+
+		PersonalMagnetEnabled: {
+			Label: 随身掉落磁铁
+			Tooltip: 站在自己的 ME 网络旁边时,附近的掉落物直接进网。默认关闭。
+		}
+
+		PersonalMagnetRadius: {
+			Label: 随身磁铁半径(格)
+			Tooltip: 随身磁铁的覆盖范围。
+		}
+
+		PersonalMagnetFilteredItems: {
+			Label: 随身磁铁过滤清单
+			Tooltip: 只作用于随身磁铁(和掉落收集器的默认清单分开)。
+		}
+
+		PersonalMagnetIsBlacklist: {
+			Label: 磁铁清单用作黑名单
+			Tooltip: 开 = 清单里的不吸;关 = 只吸清单里的。清单为空时不过滤。
+		}
+
+		VoidOverflowDrops: {
+			Label: 满了就销毁掉落物
+			Tooltip: 开着时,掉落收集器 / 随身磁铁遇到「网络满了吸不进去」的掉落物会直接销毁,而不是留在原地。默认关闭。
+		}
+
+		VerboseLogging: {
+			Label: 详细日志
+			Tooltip: 把索引统计、图鉴诊断、商店扫描样本、拼音表大小写进日志。默认关闭。
+		}
+
+		CheatModeEnabled: {
+			Label: 启用作弊模式
+			Tooltip: 开启后物品浏览器右下角出现扳手,点亮它再 Shift+左键可直接刷出物品。默认开启(关掉后扳手按钮不出现)。
+		}
+
+		DropCollectorEnabled: {
+			Label: 启用掉落收集器
+			Tooltip: 新放置的掉落收集器默认是否工作。放好之后每块可以单独开关。
+		}
+
+		DropCollectorRadius: {
+			Label: 收集半径(格)
+			Tooltip: 新放置的掉落收集器的默认覆盖范围。
+		}
+
+		FilterIsBlacklist: {
+			Label: 清单用作黑名单
+			Tooltip: 开 = 清单里的不收;关 = 只收清单里的。作用于新放置的收集器。
+		}
+
+		FilteredItems: {
+			Label: 过滤清单
+			Tooltip: 新放置的收集器的默认过滤清单。
+		}
+
+		CraftTicksPerItem: {
+			Label: 旧装配室合成耗时(tick)
+			Tooltip: 仅用于未连接合成终端的旧装配室。合成终端已取消固定耗时，不受此设置影响。
+		}
+
+		CustomBossOrder: {
+			Label: 自定义 Boss 顺序
+			Tooltip: 每行一个阶段名,从上到下就是先后顺序。留空则使用内置表 / BossChecklist 的顺序。
+		}
+
+		DepositIncludesAmmoAndCoins: {
+			Label: 存入全部包含弹药 / 钱币
+			Tooltip: 开 = 「存入全部」连弹药栏和钱币栏一起存;关 = 只存主背包(默认)。
+		}
+	}
+}
+
+UI: {
+	DigitalSingularityCapacity: 数字奇点
+	TitleItemBrowser: 物品浏览器
+	TitleDrive: ME 磁盘驱动器
+	TitleTerminal: ME 合成终端
+	TitleAssembler: ME 分子装配室
+	TitleCpu: ME 合成 CPU
+	TitleCollector: ME 掉落收集器
+	TitleStorageBus: ME 存储总线
+	HintStorageBus: 贴着原版箱子放置。空清单 = 不过滤;点格子勾选 / 取消,搜索框支持中文 / 拼音。
+	StatusNoBus: 没有绑定存储总线
+	StatusNoFilter: 不过滤
+	BtnSwitchToImport: 改为导入
+	BtnSwitchToExport: 改为导出
+	MsgBusFilterToggled: 分区清单:{0} {1}(共 {2} 项)
+	MsgAdded: 已加入
+	MsgRemoved: 已移出
+	TabItems: 物品
+	TabNpcs: 怪物
+	SortDefault: 排序: 默认
+	SortTier: 排序: 时间点
+	SortName: 排序: 名称
+	SortRecent: 排序: 最近查看
+	SortPrefixed: 排序: 词缀优先
+	BtnStarOn: ★
+	BtnStarOff: ☆
+	MsgFavAdded: 已收藏:
+	MsgFavRemoved: 已取消收藏:
+	SortCount: 排序: 数量
+	PrevPage: 上一页
+	NextPage: 下一页
+	Wrench: 扳手
+	SearchHint: 点这里输入(支持中文 / 拼音)
+	OrderCraft: 下单合成
+	TakeStack: 取出一个堆叠
+	TakeAmount: 取出 x{0}
+	TakeAll: 取出全部
+	DepositAll: 存入全部
+	DepositMainOnly: 存入: 仅主背包
+	DepositWithAmmo: 存入: 含弹药/钱币
+	OnlyStored: 只显示已存
+	IncludeCraftable: 含可合成物品
+	OnlyPrefixedOn: 仅带词缀
+	OnlyPrefixedOff: 全部物品
+	RemoveHead: 移除队首
+	ClearQueue: 清空队列
+	ClearTarget: 清除目标
+	AddHeld: 加入手上物品
+	ClearList: 清空清单
+	RemoveLast: 移出清单最后一项
+	Paging: 第
+	PagingOf: /共
+	LabelInventory: 背包
+	LabelQuantity: 数量
+	LabelQuantityHint: 点这里输数量
+	LabelQuantityTyping: 输入数量
+	LabelTarget: 当前目标
+	LabelTargetNone: 无
+	LabelSlots: 槽位
+	LabelRows: 排
+	LabelMax: 最多
+	LabelStatus: 状态
+	LabelNetworkCapacity: 网络容量
+	LabelCapacity: 容量
+	LabelBytes: 字节
+	LabelKinds: 类
+	LabelItems: 件物品
+	LabelIdle: 空闲
+	LabelCrafting: 正在合成
+	LabelProgress: 进度
+	LabelParallel: 并行数
+	LabelPerItem: 每件
+	LabelTicks: tick
+	LabelCraftingLine: 正在合成: {0}   进度 {1}%   并行数 {2}   每件 {3} tick
+	LabelEmptyQueue: 队列为空
+	LabelEmptyDrive: (空)
+	LabelEmptyDriveHint: 把物品存进来就会显示在这里
+	LblNoSearchHit: 没有匹配「{0}」的物品
+	TitleStorageUnit: ME 存储单元
+	HintStorageUnit: 手持升级件右键方块可以升级;这里的物品存在方块本身
+	BtnUpgradeUnit: 用升级件升级
+	MsgUnitLevel: 等级 Lv.{0} / Lv.{1}
+	BtnNextDrivePage: 内容翻页
+	BtnTakeAllContents: 全部取出
+	BtnClearToGround: 清空到地上
+	ConfirmClearToGround: 再点一次确认清空到地上
+	BtnExportToChest: 导出到箱子
+	MsgExported: 已导出 {0} 件物品到箱子
+	MsgExportNothing: 没有可导出的箱子(需要有导出模式的存储总线贴着箱子)
+	MsgExportSent: 已把「导出到箱子」请求发给服务器
+	MsgTakeAll: 已取出 {0} 件物品(共 {1} 种)
+	MsgTakeAllSent: 已把「全部取出」请求发给服务器
+	DriveContentsHeader: 内容 {0}/{1}  共 {2} 种
+	HintDrive: 左键放入 / 取出磁盘,右键取放一个;拔盘前容量必须够用
+	HintAssembler: 把工作站(工作台 / 铁砧 / 熔炉…)放进槽位;放满一排会自动多出一排
+	HintCollector: 手持物品后点「加入手上物品」,可以把它加进 / 移出这块收集器自己的清单。
+	HintFilterGrid: 下面就是清单本身,点格子可以移出;在上方输入名字 / 拼音搜索其它物品
+	StatusSearchResult: 搜索:「{0}」,命中 {1} 项,点格子加入 / 移出
+	HintCpu: 队列为空时空手右键本方块打开此界面;手持物品右键可加入队列(按住下键 +10)
+	StatusNoNetwork: 没有连接的存储方块(驱动器 / 存储单元)
+	StatusQueueMissing: 队列全部缺料(以队首为例)
+	StatusMissing: 缺料
+	StatusInStock: 库存里已经有
+	StatusFromStock: 从库存取出
+	StatusDone: 完成
+	StatusCrafting: 合成中
+	StatusRemaining: 剩
+	StatusCrafted: 已合成
+	StatusQueueCleared: 队列已清空
+	StatusTargetCleared: 已清除目标
+	StatusIdleRightClick: 空闲:用物品右键设定目标
+	StatusNoAssemblerOrCpu: 网络里既没有合成 CPU 也没有分子装配室,无法下单
+	StatusNoCpuCraft: 已下单(没有合成 CPU,装配室一次只做一个)
+	StatusCollector: 开关
+	StatusCollectorOn: 开
+	StatusCollectorOff: 关
+	StatusRadius: 半径
+	StatusTiles: 格
+	StatusMode: 模式
+	StatusBlacklist: 黑名单(清单里的不收)
+	StatusWhitelist: 白名单(只收清单里的)
+	StatusList: 清单
+	StatusListEmpty: (空)
+	StatusItemsSuffix: 项
+	BtnTurnOn: 点击启用
+	BtnTurnOff: 点击关闭
+	BtnToWhitelist: 改为白名单
+	BtnToBlacklist: 改为黑名单
+	BtnRadiusDown: 半径 -4
+	BtnRadiusUp: 半径 +4
+	BtnCopyGlobal: 复制全局清单
+	BtnCopyToAll: 复制到所有收集器
+	MsgCopiedToAll: 已把设置复制到 {0} 个收集器
+	BtnCopyToAllBuses: 复制到所有总线
+	BtnShowPartition: 分区清单
+	BtnShowContents: 查看内容
+	HintPartition: 分区:空清单 = 不过滤;点格子勾选 / 取消,搜索支持中文 / 拼音
+	MsgCopiedToAllBuses: 已把分区清单复制到 {0} 个存储总线
+	TitleNetworks: ME 网络概览
+	HintNetworks: 点一行选中它,然后在下面输入名字改名。名字存在世界存档里。
+	BtnRename: 重命名
+	BtnRefresh: 刷新
+	BtnMoveUp: 上移
+	BtnMoveTop: 置顶
+	BtnPause: 暂停
+	BtnResume: 继续
+	BtnOutputInventory: 产出:给玩家
+	BtnOutputNetwork: 产出:进网络
+	StatusPaused: 队列已暂停
+	StatusRunning: 运行中
+	LblKeepStock: 保持库存(自动补货)
+	MsgCpuPaused: 合成队列已暂停
+	MsgCpuResumed: 合成队列已继续
+	BtnKeepStock: 维持库存
+	BtnTakeSelected: 取出选中
+	BtnClearSelection: 清空选择
+	MsgTookSelected: 已取出选中的 {0} 类,共 {1} 件
+	MsgKeepAdded: 已设为保持库存:{0} x{1}
+	MsgKeepRemoved: 已取消保持库存:{0}
+	MsgKeepNeedCpu: 需要先接一个 ME 合成 CPU
+	MsgQueueFull: 合成队列已满({0} 项)
+	MsgKeepFull: 「保持库存」最多 {0} 项
+	MsgAchievementUnlocked: 成就达成:
+	LblUnnamed: (未命名)
+	LblBlocks: 方块
+	LblStorages: 存储
+	LabelBlocks: 方块
+	LabelStorages: 存储
+	LblDrives: 驱动器
+	LblUnits: 单元
+	LblTerminals: 终端
+	LblAssemblers: 装配室
+	LblCpus: CPU
+	LblCollectors: 收集器
+	LblBuses: 总线
+	LblBridges: 桥接
+	LblCables: 线缆
+	DiagNoStorage: 没有存储方块 —— 只能看,存不进东西
+	DiagFull: 容量已满 —— 再存会存不进去
+	DiagAlmostFull: 容量已用 {0}% —— 该换更大的磁盘了
+	DiagNoAssembler: 没有分子装配室 —— 无法自动合成
+	DiagNoCpu: 没有合成 CPU —— 下单只能一件一件做
+	DiagNoTerminal: 没有终端方块 —— 只能右键方块打开界面
+	StatusNoCapacity: 无容量
+	MsgNoNetworks: 这个世界里还没找到 ME 网络
+	MsgNetworkCount: 共 {0} 个网络
+	MsgNetworkRenamed: 网络名字已更新
+	BtnOpenNetworkTerminal: 打开该网络的终端
+	BtnBindNetwork: 设为远程绑定
+	MsgBoundNetwork: 已把这个网络设为远程终端绑定
+	MsgSelectNetwork: 先点一行选中一个网络
+	BtnPermissions: 权限设置
+	BtnNetworkList: 返回网络列表
+	BtnCycleLevel: 切换权限
+	LblOwner: 所有者
+	LblAudit: 存取日志
+	LblNextAchievement: 下一个成就
+	LblAchievementCount: 成就
+	BtnAsSource: 作为来源
+	BtnSourceIs: 来源已选
+	BtnReceiveTransfer: 接收转移
+	MsgSourceSet: 已把选中的网络设为转移来源,再选中目标网络点「接收转移」
+	MsgNoSource: 先选一个网络点「作为来源」
+	MsgSameNetwork: 来源和目标不能是同一个网络
+	MsgTransferSent: 已把转移请求发给服务器
+	MsgTransferred: 已转移 {0} 件物品
+	AuditTransfer: 网络转移
+	MsgNetworkSplit: ME 网络被切断了 —— 现在世界上有 {0} 个网络,东西可能留在了另一个网络里
+	MsgNetworkMerged: ME 网络已合并 —— 现在世界上有 {0} 个网络
+	BtnLockHeld: 锁定手上物品
+	BtnLocks: 锁定清单
+	HintLockedList: 锁定清单:被锁的物品只有所有者 / 管理者能取;点格子勾选 / 取消
+	BtnUnlockHeld: 解锁手上物品
+	LblLocked: 已锁定
+	LblTrend: 趋势
+	LblMinutes: 分钟
+	HintLocked: 锁定物品只有所有者 / 管理者能取
+	MsgNoPermissionTarget: 你对目标网络没有管理权限
+	AuditWithdraw: 取出
+	AuditDeposit: 存入
+	AuditOrder: 下单
+	AuditBatch: 整批
+	LblMyLevel: 我的权限
+	LvlNone: 无权限
+	LvlReadOnly: 只读(只能看)
+	LvlUse: 可存取
+	LvlManage: 可管理(能改权限和配置)
+	HintNeedManage: (只有所有者 / 管理者能改)
+	MsgNoPermission: 你没有这个 ME 网络的权限(找所有者要权限)
+	MsgItemLocked: 这件物品被锁定了,只有所有者 / 管理者能取
+	BtnExportList: 导出清单
+	BtnImportList: 导入清单
+	MsgListExported: 已导出 {0} 项到 {1}
+	MsgListImported: 已导入 {0} 项
+	MsgListMissing: 没找到清单文件(先导出一次,或确认文件名是 partition.txt)
+	MsgListExportFailed: 导出失败(看日志)
+	MsgMagnetOn: 随身磁铁:开
+	MsgMagnetOff: 随身磁铁:关
+	MsgMagnetGlobalOff: 但模组配置里总开关是关的
+	LblStatusNoDrive: 未连接驱动器
+	LblStatusDrives: 个驱动器
+	LblStatusAssembler: 装配室就绪
+	LblStatusNoAssembler: 无装配室
+	LblStatusKinds: 种物品
+	LblStatusTotalPrefix: 共
+	LblStatusPage: 第
+	LblStatusCurrentTier: 当前阶段
+	LblStatusTyping: 输入中(回车 / Esc 结束;Ctrl+Z 清空)
+	LblStatusClickSearch: 点搜索框输入;支持中文 / 拼音
+	LblStatusClickHints: 左键/R=来源  右键/U=用途
+	LblStatusModFilter: @模组名 = 只看该模组
+	TipFromMod: 来自
+	LblStatusCheatHint: 作弊模式:Shift+左键直接拿物品
+	LabelNotBound: 未绑定
+	LabelQueue: 队列
+	LblMoreInQueue: …后面还有 {0} 项(用翻页按钮)
+	LblMoreSteps: …还有 {0} 步
+	LblNoNpcSelected: 未选择怪物
+	LblStatsFailed: (属性读取失败)
+	StatusNoCollector: 没有绑定收集器
+	StatusPageOf: 第 {0}/{1} 页
+	NpcLife: 生命
+	NpcDefense: 防御
+	NpcDamage: 接触伤害
+	NpcTypeBoss: 类型:Boss
+	NpcTypeNormal: 类型:普通怪物
+	NpcSpawn: 刷新条件
+	NpcSpawnNone: 暂无数据
+	NpcDrops: 掉落
+	NpcNoDrops: 掉落:无数据
+	NpcBestiaryUnlocked: 图鉴已解锁(击杀
+	NpcBestiaryLocked: 图鉴未解锁
+	MsgStored: 已存入
+	MsgStoredTail: 件物品
+	MsgTargetSet: 合成目标已设为:
+	MsgQueued: 已加入合成队列:
+	MsgQueueTail: 项队列
+	MsgBound: 已绑定该 ME 网络
+	MsgNoBinding: 还没有绑定 ME 访问终端
+	MsgCheatDisabled: 作弊模式已在配置里关闭(设置 → 模组配置 → AE2 for Terraria)
+	MsgCheatOn: 作弊模式:开(Shift + 左键 直接拿物品)
+	MsgCheatOff: 作弊模式:关
+	MsgCheatGave: 作弊:获得
+	MsgPickItem: 请先点选一个目标物品
+	MsgNoDrive: 没有连接的磁盘驱动器
+	MsgOrdered: 已下单:
+	MsgOrderSent: 已把下单请求发给服务器:
+	MsgNoHeldItem: 手上没有物品
+	MsgTookPrefix: 已取出
+	MsgTookSuffix: 个
+	MsgOrderDropsPrefix: 配方只能造出无词缀的版本,词缀要靠重铸
+	MsgChannelShared: 频道 {0} 上已有 {1} 个桥接器
+	MsgChannelFree: 频道 {0} 目前只有这一个桥接器
+	MsgChannel: 频道
+	MsgBusImport: 存储总线:导入(箱子 → 网络)
+	MsgBusExport: 存储总线:导出(网络 → 箱子)
+	MsgUnitUpgraded: 存储单元已升级到 Lv.
+	MsgUnitMax: 这个存储单元已经是最高级了
+	MsgNeedUpgradeItem: 需要手持 ME 存储升级件
+	MsgUpgradeSent: 已把升级请求发给服务器
+	MsgUnitUpgradedDetail: 存储单元升级到 Lv.{0}(容量 {1} 字节)
+	MsgDepositSent: 已把存入请求发给服务器
+	MsgUnitContents: 已存入 {0} 件物品(Lv.{1},{2} / {3} 字节,{4} 类)
+	MsgBoundDetail: 已绑定该 ME 网络(存储方块 {0} 个,{1})。已绑定 {2}/{3} 个,远程按键打开最近绑定的那个。
+	MsgDiskRemoveBlocked: 拔掉后容量不够(已用 {0} 字节,剩余只有 {1})
+	MsgTierTag: 时间点#{0}
+	LblNetStored: 网络存储
+	LblRarity: 稀有度
+	LblMaxStack: 最大堆叠
+	LblTier: 时间点
+	LblAcquire: 获取途径
+	LblRecipeCount: 配方数量
+	LblNoRecipe: 没有配方 —— 只能通过获取途径得到
+	LblNoRecipeShort: 无配方(只能靠掉落 / 商店)
+	TipStored: 网络存量
+	AcqCraft: 合成获得
+	AcqShimmer: 微光转化
+	AcqBag: 宝藏袋开出
+	AcqDrop: 怪物掉落
+	AcqShop: 商店购买
+	AcqEvent: 事件掉落
+	AcqBiome: 环境产出
+	AcqUnknown: 获取途径未知
+	SrcShimmerFrom: 微光转化自「{0}」
+	UseShimmerTo: 投入微光 → 「{0}」
+	SrcDropFromRate: 掉落自「{0}」{1}%
+	SrcDropFrom: 掉落自「{0}」
+	SrcEventDrop: 事件掉落({0})
+	SrcCraftable: 可以合成
+	SrcBiome: 生物群系产出({0})
+	SrcContainer: 可开启的袋子 / 宝箱
+	SrcBagOpenRate: 开启「{0}」获得 {1}%
+	SrcBagOpen: 开启「{0}」获得
+	SrcShopSells: 商店「{0}」出售 {1}
+	SrcShopShort: 商店出售
+	SrcDefeatBag: 击败「{0}」获得
+	SrcDefeatDrop: 击败「{0}」掉落 {1}%
+	SrcDefeatDropShort: 击败「{0}」掉落
+	UseSummon: 用于召唤「{0}」
+	UseSummonGuess: 疑似用于召唤「{0}」(按名字推测)
+	PriceUnknown: (价格未知)
+	PriceGold: "{0} 金"
+	PriceSilver: "{0} 银"
+	PriceCopper: "{0} 铜"
+	LblPickItem: 点击左侧物品查看详情
+	Vanilla_start: 开局
+	Vanilla_king_slime: 史莱姆王后
+	Vanilla_eye: 克苏鲁之眼后
+	Vanilla_evil: 世界吞噬者/克苏鲁之脑后
+	Vanilla_skeletron: 骷髅王后
+	Vanilla_queen_bee: 蜂后后
+	Vanilla_hardmode: 困难模式(血肉墙后)
+	Vanilla_mech: 机械三王后
+	Vanilla_plantera: 世纪之花后
+	Vanilla_golem: 石巨人后
+	Vanilla_duke_fishron: 猪龙鱼公爵后
+	Vanilla_empress: 光之女皇后
+	Vanilla_moonlord: 月亮领主后
+	LblAndMore: " 等"
+	AcqMoreWays: "{0} 等 {1} 种途径"
+	CraftStep: "{0} x{1} -> {2} x{3} ({4} 次)"
+	LblTileHash: 地块 #{0}
+	ResetLayoutShort: 重置
+	ResetLayoutTip: 把这个窗口恢复到默认位置和大小
+	BtnClose: × 关闭
+	HintDriveContents: 左键取一个堆叠,右键取全部
+	LblMoreIngredients: …还有 {0} 种材料(放大窗口可显示更多)
+	BtnHelp: ? 帮助
+	HelpHint: 滚轮上下翻;这篇帮助不分页
+	HelpBody:
+		'''
+		【搜索】
+		Tab 开物品浏览器 / O 网络概览 / P 打开绑定的终端
+		中文 / 英文 / 全拼 / 拼音首字母都能搜
+		@模组名 = 只看这个模组的物品
+		← → Home End 移光标,Delete 删一个,Ctrl+A 全选
+		Ctrl+V 粘贴 / Ctrl+Z 清空 / Ctrl+C 复制
+
+		【浏览】
+		左键 = 看来源(R)  右键 = 看用途(U)
+		方向键选格子 + 回车打开
+		滚轮上下滚(往下滚 = 往后看);PageUp / PageDown 翻一屏
+		星形 = 只看收藏(Ctrl + 左键 收藏 / 取消)
+		排序按钮:默认 / 时间点 / 名称 / 最近查看
+
+		【窗口】
+		窗口的任意空位按住左键就能拖,不用非去抓边框
+		拖右边 / 下边 / 右下角缩放;右上角圆箭头回到默认
+		关闭只关最上面那层,底下的窗口还在
+		刚打开的子页面会自动躲开主窗口
+
+		【作弊扳手】
+		右下角扳手点亮(变红)= 作弊模式
+		点亮后 Shift + 左键直接刷出一组物品
+		配置里关掉「作弊模式」时这个按钮不出现
+
+		【快捷搬运】(终端 / 内容界面)
+		Shift + 左键  网格 = 取一整叠,背包格 = 存进网络
+		Alt + 左键    网格 = 取半组
+		Ctrl + 左键   网格 = 加入多选,配合「取出选中」
+		M = 开关随身掉落磁铁(配置里另有总开关)
+
+		【网络】
+		维持库存 = 少于设定数量自动补货(格子上有青色角标)
+		驱动器 / 存储单元 / 存储总线都能设分区清单
+		网络概览里可以改名、看构成与占用、查存取日志
+		'''
+	LblIme: 输入法
+	ImeOn: 开
+	ImeOff: 关
+	ImeGot: 已收 {0} 字
+	BtnClean: 清空
+	ConfirmClearQueue: 再点一次确认清空队列
+	ConfirmClearList: 再点一次确认清空清单
+	ConfirmTakeAll: 再点一次取出全部
+	ConfirmClearTarget: 再点一次确认清除目标
+	LblRecipeMats: —— 配方材料 ——
+	LblNeedStation: 需要工作站
+	LblNoStation: 无(徒手可做)
+	LblCraftSteps: —— 合成步骤
+	LblReady: ✔ 原料齐全,可以下单
+	LblMissing: —— 缺料 ——
+	LblSources: —— 来源 ——
+	LblUses: —— 用途 ——
+	LblTreasureBag: —— 宝藏袋 / 宝箱内容 ——
+	LblSpawnCondition: 刷新条件
+	LblShop: —— 出售自 ——
+	LblShimmer: —— 微光 ——
+	LblSummon: —— 召唤 ——
+	LblNoSources: 暂无已知来源
+	LblNoUses: 暂无已知用途
+	LblDropRate: 掉落率
+	LblBuyPrice: 价格
+	LblNoItemSelected: 未选择物品
+	LblSourcesShort: 【来源】
+	LblUsesShort: 【用途】
+	LblSourceEntry: 非合成来源
+	LblUseEntry: 其它用途
+	LblRecipeFailed: 配方读取失败
+	LblRecipeConsumes: 这条配方会消耗它
+	LblRecipeMakes: 这条配方能做出它
+	LblHandCraft: 徒手可做
+	LblOutput: 产出
+	LblMoreEntries: …还有 {0} 件
+	HintNoUses: 可能只是材料 / 装饰,或用于其它模组的机制
+	HintNoSources: 只能通过怪物掉落 / 商店 / 微光 / 宝藏袋等方式获得
+	HintClickIngredient: (点材料可跳到那个物品)
+}

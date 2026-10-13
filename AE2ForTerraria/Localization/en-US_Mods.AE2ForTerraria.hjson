@@ -1,0 +1,748 @@
+// 文件名里的 "Mods.AE2ForTerraria" 就是键前缀,
+// 所以下面的键从「Items」这一层开始写,不要再套一层 Mods / AE2ForTerraria ——
+// 套了的话真实键会变成 Mods.AE2ForTerraria.Mods.AE2ForTerraria.Items.*,
+// tModLoader 找不到,于是自动生成 "M E Storage Unit" 这种乱名字。
+
+Items: {
+	MEDigitalSingularity: {
+		DisplayName: Digital Singularity
+		Tooltip:
+			'''
+			Adds total quantity and type capacity to a drive
+			Both limits: 9,223,372,036,854,775,807
+			Items remain stored in the drive
+			'''
+	}
+
+	MEWirelessBridge: {
+		DisplayName: ME Wireless Bridge
+		Tooltip: Enabled bridges on the same channel link networks. Right-click to inspect, change channel or disconnect.
+	}
+
+	MECable: {
+		DisplayName: ME Network Cable
+		Tooltip: Cheaply extends the ME network. Provides no capacity itself.
+	}
+
+	MEStorageBus: {
+		DisplayName: ME Storage Bus
+		Tooltip:
+			'''
+			Place it next to a vanilla chest to bridge that chest into the ME network.
+			Right-click empty-handed to configure: import/export mode plus a partition list
+			(whitelist/blacklist with a searchable grid).
+			Right-click holding an item toggles that item in the partition list.
+			'''
+	}
+
+	MEStorageUnit: {
+		DisplayName: ME Storage Unit
+		Tooltip: Fixed-capacity storage block that needs no disks. Right-click holding an ME Storage Upgrade to raise its level.
+	}
+
+	MEAccessTerminal: {
+		DisplayName: ME Access Terminal
+		Tooltip:
+			'''
+			Right-click to open stored items and bind the current ME network.
+			Press the remote access terminal key (default P) to access its storage from anywhere.
+			'''
+	}
+
+	MECraftingCpu: {
+		DisplayName: ME Crafting CPU
+		Tooltip:
+			'''
+			Legacy queue host. Crafting terminals now include their own queue and station inventory.
+			Right-click with an item to queue it (hold Down to queue 10), right-click empty-handed to open the queue.
+			'''
+	}
+
+	MEDiskDrive: {
+		DisplayName: ME Disk Drive
+		Tooltip:
+			'''
+			Insert storage disks to provide capacity.
+			Items are stored in the drive itself; disks only give capacity,
+			a disk cannot be removed if the remaining capacity cannot hold the contents.
+			'''
+	}
+
+	MECraftingTerminal: {
+		DisplayName: ME Crafting Terminal
+		Tooltip:
+			'''
+			Right-click to browse crafting recipes, tasks and stations.
+			Select an item to see its crafting tree and missing ingredients.
+			Craftable shows only items whose materials and original recipe conditions are satisfied.
+			Includes crafting tasks and station slots; no separate CPU or assembler is required.
+			'''
+	}
+
+	MEMolecularAssembler: {
+		DisplayName: ME Molecular Assembler
+		Tooltip:
+			'''
+			Molecular assembler and crafting CPU combined into one block.
+			Put crafting stations (work bench, anvil, furnace...) into its slots,
+			otherwise recipes requiring them cannot be crafted.
+			No patterns needed: any recipe with met conditions and ingredients is craftable.
+			Crafting is timed per item; more assemblers on the network craft in parallel.
+			'''
+	}
+
+	MEDropCollector: {
+		DisplayName: ME Drop Collector
+		Tooltip:
+			'''
+			Vacuums nearby drops straight into the network.
+			Filtered drops are left on the ground.
+			Right-click to open its own filter (each collector keeps its own list).
+			'''
+	}
+
+	MEDisk1K: {
+		DisplayName: ME Storage Disk (32 Types)
+		Tooltip:
+			'''
+			Adds 32 item identity slots to a drive
+			Up to 2,147,483,647 items per identity
+			Prefixes and custom data use separate slots
+			Items remain stored in the drive
+			'''
+	}
+
+	MEDisk4K: {
+		DisplayName: ME Storage Disk (64 Types)
+		Tooltip:
+			'''
+			Adds 64 item identity slots to a drive
+			Up to 2,147,483,647 items per identity
+			Prefixes and custom data use separate slots
+			Items remain stored in the drive
+			'''
+	}
+
+	MEDisk16K: {
+		DisplayName: ME Storage Disk (128 Types)
+		Tooltip:
+			'''
+			Adds 128 item identity slots to a drive
+			Up to 2,147,483,647 items per identity
+			Prefixes and custom data use separate slots
+			Items remain stored in the drive
+			'''
+	}
+
+	MEDisk64K: {
+		DisplayName: ME Storage Disk (256 Types)
+		Tooltip:
+			'''
+			Adds 256 item identity slots to a drive
+			Up to 2,147,483,647 items per identity
+			Prefixes and custom data use separate slots
+			Items remain stored in the drive
+			'''
+	}
+
+	MEStorageUpgrade: {
+		DisplayName: ME Storage Upgrade
+		Tooltip:
+			'''
+			Right-click an ME Storage Unit while holding this to upgrade it one level
+			(Lv.1 8K bytes -> Lv.2 32K -> Lv.3 128K).
+			'''
+	}
+}
+
+Keybinds: {
+	OpenSearch.DisplayName: Open Item Browser
+	OpenRemoteTerminal.DisplayName: Open Remote Access Terminal
+	OpenNetworkOverview.DisplayName: Open ME Network Overview
+	ToggleMagnet.DisplayName: Toggle Personal Drop Magnet
+}
+
+Tiles: {
+	MEWirelessBridgeTile.MapEntry: ME Wireless Bridge
+	MECableTile.MapEntry: ME Network Cable
+	MEStorageBusTile.MapEntry: ME Storage Bus
+	MEStorageUnitTile.MapEntry: ME Storage Unit
+	MEAccessTerminalTile.MapEntry: ME Access Terminal
+	MECraftingCpuTile.MapEntry: ME Crafting CPU
+	MEDiskDriveTile.MapEntry: ME Disk Drive
+	MECraftingTerminalTile.MapEntry: ME Crafting Terminal
+	MEMolecularAssemblerTile.MapEntry: ME Molecular Assembler
+	MEDropCollectorTile.MapEntry: ME Drop Collector
+}
+
+Achievements: {
+	StoreFirstItemAchievement: {
+		FriendlyName: First Deposit
+		Description: Store an item into an ME network -- any of these count: terminal "Store All", right-clicking a storage unit, a drop collector, a storage bus import, or the personal magnet
+	}
+
+	AutomateFirstItemAchievement: {
+		FriendlyName: Fully Automated
+		Description: Let a molecular assembler craft an item on its own (stations installed, then set a target or order from a CPU)
+	}
+
+	BindTerminalAchievement: {
+		FriendlyName: Network In Your Pocket
+		Description: Right-click an ME access terminal to bind the network, then press the remote key (default P) to open it anywhere
+	}
+
+	KeepStockAchievement: {
+		FriendlyName: Never Run Dry
+		Description: In the terminal, pick an item, set an amount and press "Keep stocked"; the network auto-refills when it drops below that
+	}
+
+	BigStorageAchievement: {
+		FriendlyName: Big Storage
+		Description: Push a single network past 64K bytes of used capacity (insert better disks and keep filling it)
+	}
+
+	LongRangeWirelessAchievement: {
+		FriendlyName: Across the World
+		Description: Link two networks more than 500 tiles apart with wireless bridges (set both to the same channel)
+	}
+
+	KeepFiveAchievement: {
+		FriendlyName: Quartermaster
+		Description: Keep 5 different items stocked at the same time
+	}
+
+	FiveAssemblersAchievement: {
+		FriendlyName: Parallel Production
+		Description: Have 5 molecular assemblers in the same ME network (one more parallel crafting track)
+	}
+
+	TransferNetworkAchievement: {
+		FriendlyName: Network Moving Day
+		Description: Move everything from one network into another - pick As Source on it, then pick the target and press Receive Transfer
+	}
+}
+
+Configs: {
+	MEConfig: {
+		DisplayName: ME Network
+
+		PersonalMagnetEnabled: {
+			Label: Personal Drop Magnet
+			Tooltip: While standing next to your ME network, nearby drops go straight into it. Off by default.
+		}
+
+		PersonalMagnetRadius: {
+			Label: Personal Magnet Radius (tiles)
+			Tooltip: How far the personal magnet reaches.
+		}
+
+		PersonalMagnetFilteredItems: {
+			Label: Personal Magnet Filter
+			Tooltip: Only applies to the personal magnet (separate from the drop collector's default list).
+		}
+
+		PersonalMagnetIsBlacklist: {
+			Label: Use Magnet List As Blacklist
+			Tooltip: On = never vacuum the listed items. Off = only vacuum the listed items. An empty list means no filter.
+		}
+
+		VoidOverflowDrops: {
+			Label: Void Drops When Full
+			Tooltip: When the network is full, drop collectors / the personal magnet destroy the drops they cannot store instead of leaving them on the ground. Off by default.
+		}
+
+		VerboseLogging: {
+			Label: Verbose Logging
+			Tooltip: Writes index statistics, bestiary diagnostics, shop scan samples and the pinyin table size to the log. Off by default.
+		}
+
+		CheatModeEnabled: {
+			Label: Enable Cheat Mode
+			Tooltip: Shows the wrench in the item browser; light it up and Shift+Left-click spawns items. On by default (the button disappears when this is off).
+		}
+
+		DropCollectorEnabled: {
+			Label: Enable Drop Collector
+			Tooltip: Whether newly placed drop collector blocks vacuum items into the network. Each block can be toggled on its own afterwards.
+		}
+
+		DropCollectorRadius: {
+			Label: Collection Radius (tiles)
+			Tooltip: Default reach for newly placed drop collectors.
+		}
+
+		FilterIsBlacklist: {
+			Label: Use List As Blacklist
+			Tooltip: On = never collect the listed items. Off = only collect the listed items. Applies to newly placed collectors.
+		}
+
+		FilteredItems: {
+			Label: Filtered Items
+			Tooltip: Default filter list for newly placed collectors.
+		}
+
+		CraftTicksPerItem: {
+			Label: Legacy Assembler Crafting Ticks
+			Tooltip: Applies only to legacy assemblers without a crafting terminal. Integrated terminal crafting has no fixed delay and ignores this setting.
+		}
+
+		CustomBossOrder: {
+			Label: Custom Boss Order
+			Tooltip: One stage name per line, top to bottom. Leave empty to use the built-in / BossChecklist order.
+		}
+
+		DepositIncludesAmmoAndCoins: {
+			Label: Deposit All includes ammo and coins
+			Tooltip: On = Deposit All also stores your ammo and coin slots. Off = main inventory only (default).
+		}
+	}
+}
+
+UI: {
+	DigitalSingularityCapacity: Digital Singularity
+	TitleItemBrowser: Item Browser
+	TitleDrive: ME Disk Drive
+	TitleTerminal: ME Crafting Terminal
+	TitleAssembler: ME Molecular Assembler
+	TitleCpu: ME Crafting CPU
+	TitleCollector: ME Drop Collector
+	TitleStorageBus: ME Storage Bus
+	HintStorageBus: Place it next to a vanilla chest. An empty list means no filter; click a slot to toggle it, and the search box supports pinyin.
+	StatusNoBus: No storage bus bound
+	StatusNoFilter: no filter
+	BtnSwitchToImport: Switch to import
+	BtnSwitchToExport: Switch to export
+	MsgBusFilterToggled: Bus filter: {0} {1} ({2} entries)
+	MsgAdded: added
+	MsgRemoved: removed
+	TabItems: Items
+	TabNpcs: Monsters
+	SortDefault: Sort: Default
+	SortTier: Sort: Tier
+	SortName: Sort: Name
+	SortRecent: Sort: Recent
+	SortPrefixed: Sort: Prefixed first
+	BtnStarOn: ★
+	BtnStarOff: ☆
+	MsgFavAdded: Favorited:
+	MsgFavRemoved: Unfavorited:
+	SortCount: Sort: Count
+	PrevPage: Prev
+	NextPage: Next
+	Wrench: Wrench
+	SearchHint: Click here to type (Chinese / pinyin)
+	OrderCraft: Order
+	TakeStack: Take a Stack
+	TakeAmount: Take x{0}
+	TakeAll: Take All
+	DepositAll: Store All
+	DepositMainOnly: Store: main inventory
+	DepositWithAmmo: Store: incl. ammo/coins
+	OnlyStored: Stored Only
+	IncludeCraftable: Include Craftable
+	OnlyPrefixedOn: Prefixed only
+	OnlyPrefixedOff: All items
+	RemoveHead: Remove First
+	ClearQueue: Clear Queue
+	ClearTarget: Clear Target
+	AddHeld: Add Held Item
+	ClearList: Clear List
+	RemoveLast: Remove Last Entry
+	Paging: Page
+	PagingOf: of
+	LabelInventory: Inventory
+	LabelQuantity: Amount
+	LabelQuantityHint: Click to type an amount
+	LabelQuantityTyping: Amount
+	LabelTarget: Target
+	LabelTargetNone: none
+	LabelSlots: Slots
+	LabelRows: rows
+	LabelMax: max
+	LabelStatus: Status
+	LabelNetworkCapacity: Network capacity
+	LabelCapacity: Capacity
+	LabelBytes: bytes
+	LabelKinds: kinds
+	LabelItems: items
+	LabelIdle: idle
+	LabelCrafting: Crafting
+	LabelProgress: Progress
+	LabelParallel: Parallel
+	LabelPerItem: Per item
+	LabelTicks: ticks
+	LabelCraftingLine: Crafting: {0}   Progress {1}%   Parallel {2}   Per item {3} ticks
+	LabelEmptyQueue: Queue is empty
+	LabelEmptyDrive: (empty)
+	LabelEmptyDriveHint: Stored items will show up here
+	LblNoSearchHit: Nothing matches "{0}"
+	TitleStorageUnit: ME Storage Unit
+	HintStorageUnit: Right-click the block holding an upgrade to level it up; items live in the block itself
+	BtnUpgradeUnit: Upgrade with held item
+	MsgUnitLevel: Level Lv.{0} / Lv.{1}
+	BtnNextDrivePage: Next page
+	BtnTakeAllContents: Take All
+	BtnClearToGround: Dump to ground
+	ConfirmClearToGround: Click again to dump everything on the ground
+	BtnExportToChest: Export to chests
+	MsgExported: Exported {0} items into chests
+	MsgExportNothing: No usable chest found (an export-mode storage bus next to a chest is required)
+	MsgExportSent: Sent the export request to the server
+	MsgTakeAll: Took {0} items ({1} kinds)
+	MsgTakeAllSent: Sent the take-all request to the server
+	DriveContentsHeader: Contents {0}/{1}  {2} kinds
+	HintDrive: Left-click to insert / take a disk, right-click to move one. Capacity must remain sufficient before removing a disk.
+	HintAssembler: Put crafting stations (work bench / anvil / furnace...) into the slots; a full row grows the next row.
+	HintCollector: Hold an item and press the add button to toggle it in this collector's own list.
+	HintFilterGrid: The grid below is the list itself -- click a slot to remove it; type a name / pinyin above to search other items
+	StatusSearchResult: Search: "{0}" -- {1} hits, click a slot to add / remove
+	HintCpu: Right-click this block empty-handed to open the queue; right-click holding an item to queue it (hold Down for +10).
+	StatusNoNetwork: No storage block connected (drive / storage unit)
+	StatusQueueMissing: Whole queue is missing ingredients (first item shown)
+	StatusMissing: Missing
+	StatusInStock: Already in the network
+	StatusFromStock: Took from stock
+	StatusDone: Done
+	StatusCrafting: Crafting
+	StatusRemaining: left
+	StatusCrafted: Crafted
+	StatusQueueCleared: Queue cleared
+	StatusTargetCleared: Target cleared
+	StatusIdleRightClick: Idle: right-click with an item to set a target
+	StatusNoAssemblerOrCpu: The network has neither a crafting CPU nor a molecular assembler
+	StatusNoCpuCraft: Ordered (no crafting CPU, so the assembler makes one item at a time)
+	StatusCollector: Toggle
+	StatusCollectorOn: ON
+	StatusCollectorOff: OFF
+	StatusRadius: Radius
+	StatusTiles: tiles
+	StatusMode: Mode
+	StatusBlacklist: Blacklist (listed items are ignored)
+	StatusWhitelist: Whitelist (only listed items are collected)
+	StatusList: List
+	StatusListEmpty: (empty)
+	StatusItemsSuffix: items
+	BtnTurnOn: Turn ON
+	BtnTurnOff: Turn OFF
+	BtnToWhitelist: Switch to whitelist
+	BtnToBlacklist: Switch to blacklist
+	BtnRadiusDown: Radius -4
+	BtnRadiusUp: Radius +4
+	BtnCopyGlobal: Copy global list
+	BtnCopyToAll: Copy to all collectors
+	MsgCopiedToAll: Copied the settings to {0} collectors
+	BtnCopyToAllBuses: Copy to all buses
+	BtnShowPartition: Partition
+	BtnShowContents: Contents
+	HintPartition: Partition: an empty list means no filter; click a slot to toggle it, search supports pinyin
+	MsgCopiedToAllBuses: Copied the partition list to {0} storage buses
+	TitleNetworks: ME Network Overview
+	HintNetworks: Click a row to select it, then type a name below. Names are saved in the world.
+	BtnRename: Rename
+	BtnRefresh: Refresh
+	BtnMoveUp: Up
+	BtnMoveTop: Top
+	BtnPause: Pause
+	BtnResume: Resume
+	BtnOutputInventory: Output: to player
+	BtnOutputNetwork: Output: to network
+	StatusPaused: Queue paused
+	StatusRunning: Running
+	LblKeepStock: Keep in stock (auto refill)
+	MsgCpuPaused: Crafting queue paused
+	MsgCpuResumed: Crafting queue resumed
+	BtnKeepStock: Keep stocked
+	BtnTakeSelected: Take selected
+	BtnClearSelection: Clear selection
+	MsgTookSelected: Took {0} kinds ({1} items)
+	MsgKeepAdded: Keeping {0} x{1} in stock
+	MsgKeepRemoved: Stopped keeping {0}
+	MsgKeepNeedCpu: An ME Crafting CPU is required
+	MsgQueueFull: The crafting queue is full ({0} entries)
+	MsgKeepFull: Keep-in-stock holds at most {0} entries
+	MsgAchievementUnlocked: Achievement unlocked:
+	LblUnnamed: (unnamed)
+	LblBlocks: blocks
+	LblStorages: storage
+	LabelBlocks: blocks
+	LabelStorages: storage
+	LblDrives: drives
+	LblUnits: units
+	LblTerminals: terminals
+	LblAssemblers: assemblers
+	LblCpus: CPUs
+	LblCollectors: collectors
+	LblBuses: buses
+	LblBridges: bridges
+	LblCables: cables
+	DiagNoStorage: no storage block -- you can look but not store
+	DiagFull: capacity is full -- further deposits will be refused
+	DiagAlmostFull: capacity {0}% used -- time for bigger disks
+	DiagNoAssembler: no molecular assembler -- auto-crafting is impossible
+	DiagNoCpu: no crafting CPU -- orders are made one item at a time
+	DiagNoTerminal: no terminal block -- you can only open UIs by right-clicking blocks
+	StatusNoCapacity: no capacity
+	MsgNoNetworks: No ME network found in this world yet
+	MsgNetworkCount: "{0} networks"
+	MsgNetworkRenamed: Network name updated
+	BtnOpenNetworkTerminal: Open this network's terminal
+	BtnBindNetwork: Bind as remote
+	MsgBoundNetwork: Bound this network as the remote terminal
+	MsgSelectNetwork: Click a row to select a network first
+	BtnPermissions: Permissions
+	BtnNetworkList: Back to list
+	BtnCycleLevel: Cycle level
+	LblOwner: Owner
+	LblAudit: Access log
+	LblNextAchievement: Next achievement
+	LblAchievementCount: Achievements
+	BtnAsSource: Use as source
+	BtnSourceIs: Source picked
+	BtnReceiveTransfer: Receive transfer
+	MsgSourceSet: Marked the selected network as the transfer source; now pick the target and press Receive transfer
+	MsgNoSource: Pick a network and press "Use as source" first
+	MsgSameNetwork: Source and target cannot be the same network
+	MsgTransferSent: Sent the transfer request to the server
+	MsgTransferred: Transferred {0} items
+	AuditTransfer: network transfer
+	MsgNetworkSplit: The ME network was cut -- the world now has {0} networks, so items may be in another one
+	MsgNetworkMerged: ME networks merged -- the world now has {0} networks
+	BtnLockHeld: Lock held item
+	BtnLocks: Lock list
+	HintLockedList: Lock list: locked items can only be taken by the owner / a manager; click a slot to toggle it
+	BtnUnlockHeld: Unlock held item
+	LblLocked: Locked
+	LblTrend: Trend
+	LblMinutes: min
+	HintLocked: locked items can only be taken by the owner / a manager
+	MsgNoPermissionTarget: You do not have manage rights on the target network
+	AuditWithdraw: took
+	AuditDeposit: stored
+	AuditOrder: ordered
+	AuditBatch: batch
+	LblMyLevel: My level
+	LvlNone: no access
+	LvlReadOnly: read-only
+	LvlUse: use (take/store)
+	LvlManage: manage (permissions and config)
+	HintNeedManage: (only the owner / a manager can change this)
+	MsgNoPermission: You do not have permission for this ME network (ask the owner)
+	MsgItemLocked: This item is locked; only the owner / a manager can take it
+	BtnExportList: Export list
+	BtnImportList: Import list
+	MsgListExported: Exported {0} entries to {1}
+	MsgListImported: Imported {0} entries
+	MsgListMissing: No list file found (export once first, or check that the file is partition.txt)
+	MsgListExportFailed: Export failed (check the log)
+	MsgMagnetOn: Personal magnet: ON
+	MsgMagnetOff: Personal magnet: OFF
+	MsgMagnetGlobalOff: (but the global config switch is off)
+	LblStatusNoDrive: No drive connected
+	LblStatusDrives: drives
+	LblStatusAssembler: Assembler ready
+	LblStatusNoAssembler: No assembler
+	LblStatusKinds: kinds
+	LblStatusTotalPrefix: Total
+	LblStatusPage: Page
+	LblStatusCurrentTier: Current tier
+	LblStatusTyping: Typing (Enter / Esc to finish; Ctrl+Z clears)
+	LblStatusClickSearch: Click the search box to type; Chinese / pinyin supported
+	LblStatusClickHints: Left-click/R = sources   Right-click/U = uses
+	LblStatusModFilter: @modname = only that mod
+	TipFromMod: From
+	LblStatusCheatHint: Cheat mode: Shift+Left-click spawns items
+	LabelNotBound: Not bound
+	LabelQueue: Queue
+	LblMoreInQueue: ... and {0} more (use the page buttons)
+	LblMoreSteps: ... {0} more steps
+	LblNoNpcSelected: No monster selected
+	LblStatsFailed: (failed to read stats)
+	StatusNoCollector: No collector bound
+	StatusPageOf: Page {0}/{1}
+	NpcLife: Life
+	NpcDefense: Defense
+	NpcDamage: Contact Damage
+	NpcTypeBoss: Type: Boss
+	NpcTypeNormal: Type: Normal
+	NpcSpawn: Spawn
+	NpcSpawnNone: no data
+	NpcDrops: Drops
+	NpcNoDrops: Drops: no data
+	NpcBestiaryUnlocked: Bestiary unlocked (kills
+	NpcBestiaryLocked: Bestiary locked
+	MsgStored: Stored
+	MsgStoredTail: items
+	MsgTargetSet: Crafting target set:
+	MsgQueued: Queued:
+	MsgQueueTail: items in queue
+	MsgBound: Bound this ME network
+	MsgNoBinding: No ME access terminal bound yet
+	MsgCheatDisabled: Cheat mode is disabled in the config (Settings -> Mod Configs -> AE2 for Terraria)
+	MsgCheatOn: Cheat mode: ON (Shift + Left-click to spawn)
+	MsgCheatOff: Cheat mode: OFF
+	MsgCheatGave: Cheat: got
+	MsgPickItem: Pick a target item first
+	MsgNoDrive: No disk drive connected
+	MsgOrdered: Ordered:
+	MsgOrderSent: Order sent to the server:
+	MsgNoHeldItem: No item in hand
+	MsgTookPrefix: Took
+	MsgTookSuffix: items of
+	MsgOrderDropsPrefix: Recipes can only make the unprefixed version; prefixes come from reforging
+	MsgChannelShared: Channel {0} already has {1} bridges
+	MsgChannelFree: Channel {0} has only this bridge
+	MsgChannel: Channel
+	MsgBusImport: Storage bus: Import (chest -> network)
+	MsgBusExport: Storage bus: Export (network -> chest)
+	MsgUnitUpgraded: Storage unit upgraded to Lv.
+	MsgUnitMax: This storage unit is already at max level
+	MsgNeedUpgradeItem: Hold an ME Storage Upgrade to level it up
+	MsgUpgradeSent: Upgrade request sent to the server
+	MsgUnitUpgradedDetail: Storage unit upgraded to Lv.{0} (capacity {1} bytes)
+	MsgDepositSent: Store request sent to the server
+	MsgUnitContents: Stored {0} items (Lv.{1}, {2} / {3} bytes, {4} kinds)
+	MsgBoundDetail: Bound this ME network ({0} storage blocks, {1}). Bound {2}/{3}; the remote key opens the most recent one.
+	MsgDiskRemoveBlocked: Not enough capacity after removal (used {0} bytes, only {1} left)
+	MsgTierTag: Tier #{0}
+	LblNetStored: In Network
+	LblRarity: Rarity
+	LblMaxStack: Max Stack
+	LblTier: Tier
+	LblAcquire: Acquisition
+	LblRecipeCount: Recipes
+	LblNoRecipe: No recipe -- obtainable only from sources
+	LblNoRecipeShort: No recipe (drops / shops only)
+	TipStored: In network
+	AcqCraft: Crafted
+	AcqShimmer: Shimmer
+	AcqBag: Treasure bag
+	AcqDrop: Monster drop
+	AcqShop: Shop
+	AcqEvent: Event drop
+	AcqBiome: Biome
+	AcqUnknown: Unknown source
+	SrcShimmerFrom: Shimmer from [{0}]
+	UseShimmerTo: Drop into shimmer -> [{0}]
+	SrcDropFromRate: Dropped by [{0}] {1}%
+	SrcDropFrom: Dropped by [{0}]
+	SrcEventDrop: Event drop ({0})
+	SrcCraftable: Craftable
+	SrcBiome: Biome drop ({0})
+	SrcContainer: Openable bag / crate
+	SrcBagOpenRate: Open [{0}] -> {1}%
+	SrcBagOpen: Open [{0}]
+	SrcShopSells: "[{0}] sells it for {1}"
+	SrcShopShort: Sold by shops
+	SrcDefeatBag: Dropped by [{0}]
+	SrcDefeatDrop: Dropped by [{0}] {1}%
+	SrcDefeatDropShort: Dropped by [{0}]
+	UseSummon: Summons [{0}]
+	UseSummonGuess: Probably summons [{0}] (name guess)
+	PriceUnknown: (unknown price)
+	PriceGold: "{0} gold"
+	PriceSilver: "{0} silver"
+	PriceCopper: "{0} copper"
+	LblPickItem: Click an item on the left
+	Vanilla_start: Start
+	Vanilla_king_slime: After King Slime
+	Vanilla_eye: After Eye of Cthulhu
+	Vanilla_evil: After Eater of Worlds / Brain of Cthulhu
+	Vanilla_skeletron: After Skeletron
+	Vanilla_queen_bee: After Queen Bee
+	Vanilla_hardmode: Hardmode (after Wall of Flesh)
+	Vanilla_mech: After the mechanical bosses
+	Vanilla_plantera: After Plantera
+	Vanilla_golem: After Golem
+	Vanilla_duke_fishron: After Duke Fishron
+	Vanilla_empress: After Empress of Light
+	Vanilla_moonlord: After Moon Lord
+	LblAndMore: " etc."
+	AcqMoreWays: "{0} and {1} more ways"
+	CraftStep: "{0} x{1} -> {2} x{3} ({4} crafts)"
+	LblTileHash: Tile #{0}
+	ResetLayoutShort: Reset
+	ResetLayoutTip: Restore this window to its default position and size
+	BtnClose: × Close
+	HintDriveContents: Left-click takes a stack, right-click takes all
+	LblMoreIngredients: ... {0} more ingredients (enlarge the window to see them)
+	BtnHelp: ? Help
+	HelpHint: Scroll with the wheel; this help has no pages
+	HelpBody:
+		'''
+		[Search]
+		Tab opens the item browser / O network overview / P the bound terminal
+		Chinese / English / full pinyin / initials all work
+		@modname = only items from that mod
+		Left/Right/Home/End move the caret, Delete removes one, Ctrl+A selects all
+		Ctrl+V pastes / Ctrl+Z clears / Ctrl+C copies
+
+		[Browse]
+		Left-click = sources (R)   Right-click = uses (U)
+		Arrow keys pick a slot, Enter opens it
+		The wheel scrolls (down = further along); PageUp / PageDown jump a screen
+		Star = favorites only (Ctrl + Left-click toggles)
+		Sort button: default / tier / name / recent
+
+		[Windows]
+		Press and drag any empty spot in the window to move it
+		Drag the right/bottom/corner edge to resize; the round arrow resets it
+		Close only closes the top window; the ones below stay open
+		A subpage opens beside the main window instead of covering it
+
+		[Cheat wrench]
+		The wrench at the bottom-right turns red = cheat mode
+		With it on, Shift + Left-click spawns a stack of that item
+		The button is hidden when "cheat mode" is disabled in the config
+
+		[Quick move] (terminal and content windows)
+		Shift + Left-click  grid = take a full stack, inventory slot = deposit it
+		Alt + Left-click    grid = take half a stack
+		Ctrl + Left-click   grid = add to the multi-selection, then "Take selected"
+		M = toggle the personal drop magnet (the config has its own switch)
+
+		[Network]
+		Keep stocked auto-refills when the count drops (slots show a cyan badge)
+		Drives, storage units and storage buses all support partition lists
+		The network overview renames networks, shows composition and usage, keeps an access log
+		'''
+	LblIme: IME
+	ImeOn: on
+	ImeOff: off
+	ImeGot: "{0} chars"
+	BtnClean: Clear
+	ConfirmClearQueue: Click again to confirm clearing the queue
+	ConfirmClearList: Click again to confirm clearing the list
+	ConfirmTakeAll: Click again to take everything
+	ConfirmClearTarget: Click again to confirm clearing the target
+	LblRecipeMats: -- Ingredients --
+	LblNeedStation: Station
+	LblNoStation: none (hand craft)
+	LblCraftSteps: -- Crafting Steps
+	LblReady: Ready to craft
+	LblMissing: -- Missing --
+	LblSources: -- Sources --
+	LblUses: -- Uses --
+	LblTreasureBag: -- Treasure Bag / Crate Contents --
+	LblSpawnCondition: Spawn Conditions
+	LblShop: -- Sold By --
+	LblShimmer: -- Shimmer --
+	LblSummon: -- Summons --
+	LblNoSources: No known source
+	LblNoUses: No known use
+	LblDropRate: drop rate
+	LblBuyPrice: price
+	LblNoItemSelected: No item selected
+	LblSourcesShort: "[Sources] "
+	LblUsesShort: "[Uses] "
+	LblSourceEntry: Non-crafting source
+	LblUseEntry: Other uses
+	LblRecipeFailed: Failed to read the recipe
+	LblRecipeConsumes: This recipe consumes it
+	LblRecipeMakes: This recipe makes it
+	LblHandCraft: Hand craft
+	LblOutput: Output
+	LblMoreEntries: ... {0} more
+	HintNoUses: It may be a material / decoration, or used by another mod's mechanics
+	HintNoSources: Obtainable only from monster drops / shops / shimmer / treasure bags
+	HintClickIngredient: (click an ingredient to jump to it)
+}

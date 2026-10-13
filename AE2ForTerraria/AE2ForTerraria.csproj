@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="D:\SteamLibrary\steamapps\common\tModLoader\tMLMod.targets" />
+  <PropertyGroup>
+    <AssemblyName>AE2ForTerraria</AssemblyName>
+    <RootNamespace>AE2ForTerraria</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+  </PropertyGroup>
+</Project>

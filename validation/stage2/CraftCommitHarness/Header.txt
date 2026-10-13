@@ -1,0 +1,28 @@
+using System;
+using System.Collections.Generic;
+using AE2ForTerraria.Core;
+using AE2ForTerraria.Systems;
+using AE2ForTerraria.Content.Tiles;
+using AE2ForTerraria.Content.Achievements;
+using Terraria;
+using Terraria.DataStructures;
+
+// Only the listed methods below are copied from the actual candidate source.
+// The surrounding runtime and planner are explicit controlled test doubles.
+public sealed class SourceAssembler
+{
+    public Point16 Position = new(0,0);
+    public ItemKey ActiveKey = ItemKey.Crafted(2), Target = ItemKey.Crafted(2);
+    public string LastStatus;
+    private MECraftingCpuEntity _activeCpu;
+    private MECraftingCpuEntity.Job _activeJob;
+    public SourceAssembler(MECraftingCpuEntity cpu,MECraftingCpuEntity.Job job) { _activeCpu=cpu; _activeJob=job; }
+    private bool CanUseRecipe(Recipe recipe) => recipe.Condition();
+    private StorageLedger BuildProbe(List<IMEStorage> storage)
+    {
+        var probe=new StorageLedger();
+        foreach(var unit in storage) foreach(var entry in unit.Ledger.Entries) probe.Restore(entry.Key,entry.Value);
+        return probe;
+    }
+    private void ClearActive(string reason) { _activeJob=null; _activeCpu=null; ActiveKey=ItemKey.None; }
+    public bool Commit() => ProduceOne();

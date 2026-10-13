@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <PlannerSource Condition="'$(PlannerSource)' == ''">../../../AE2ForTerraria/Core/CraftPlanning.cs</PlannerSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(PlannerSource)" />
+    <Compile Include="../../../AE2ForTerraria/Core/RecipeIndex.cs" />
+    <Compile Include="../../../AE2ForTerraria/Core/ItemKey.cs" />
+    <Compile Include="../../../AE2ForTerraria/Core/StorageLedger.cs" />
+    <Compile Include="../PlannerRegression.cs" />
+    <Compile Include="Stubs.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>
