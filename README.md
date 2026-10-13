@@ -11,15 +11,14 @@ Terraria / tModLoader 模组：物品与怪物查询、ME 网络存储、自动�
 - `tools/`：资源检查、构建验证与版本同步工具。
 - `validation/stage2/`：筛选保留的独立回归测试输入；这些历史 harness 不代表当前版本已经通过测试。
 - `ui-preview/recipe-browser/FEATURE-PARITY.md`：Recipe Browser 功能对照。
-- `AGENTS.md`：本项目开发、构建、验证与 Git 同步约定。
 
-游戏存档、角色、个人配置、备份、日志、测试结果、提取的游戏预览素材与构建产物保留在本机，由 `.gitignore` 排除。模组实际需要的 PNG 和 `Assets/pinyin.dat` 属于项目输入，纳入版本控制。
+游戏存档、角色、个人配置、助手工作指令（AGENTS.md / agent.md）、备份、日志、测试结果、提取的游戏预览素材与构建产物保留在本机，由 `.gitignore` 排除。模组实际需要的 PNG 和 `Assets/pinyin.dat` 属于项目输入，纳入版本控制。
 
 ## 开发与构建
 
 模组面向 tModLoader；项目的 .NET 目标及语言版本见 `AE2ForTerraria/AE2ForTerraria.csproj`。
 当前项目与部分工具仍使用开发机器的安装路径。换机器后需要配置 tModLoader 路径，不能直接假定可构建。
-具体安装与实际模组环境验证流程见 `AGENTS.md`；构建产物不提交源码仓库。
+具体安装与实际模组环境验证流程见开发机器本地的 `AGENTS.md`；该文件与构建产物不提交源码仓库。
 
 ## 版本同步
 

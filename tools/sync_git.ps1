@@ -28,7 +28,7 @@ try {
     }
     $branch = & git branch --show-current
     if ($LASTEXITCODE -ne 0 -or !$branch) { throw 'A checked-out branch is required.' }
-    & git add --all -- .gitignore README.md AGENTS.md AE2ForTerraria docs tools ui-preview validation
+    & git add --all -- .gitignore README.md AE2ForTerraria docs tools ui-preview validation
     if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the Git index.' }
     & $Python (Join-Path $PSScriptRoot 'check_git_upload.py')
     if ($LASTEXITCODE -ne 0) { throw 'Upload checks failed; nothing was committed or pushed.' }

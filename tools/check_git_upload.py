@@ -21,7 +21,7 @@ for name in filter(None, names):
     lower = name.lower()
     if any(part.lower() in forbidden_dirs for part in path.parts) or lower.endswith(forbidden_suffixes) or re.search(r"\.(?:wld|twld|plr|tplr|bak)(?:\.|$)", lower) or path.name.lower().startswith(".env"):
         errors.append((name, "private or generated file"))
-    if path.name.lower() in {"config.json", "client-config.json", "client-preferences.json", "enabled.json", "ae2forterraria-layout.txt"}:
+    if path.name.lower() in {"agent.md", "agents.md", "config.json", "client-config.json", "client-preferences.json", "enabled.json", "ae2forterraria-layout.txt"}:
         errors.append((name, "personal configuration"))
     if lower.startswith("ui-preview/") and name != "ui-preview/recipe-browser/FEATURE-PARITY.md":
         errors.append((name, "preview data outside tracked scope"))
