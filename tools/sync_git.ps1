@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$Message,
-    [string]$Python = 'python'
+    [string]$Python = 'python',
+    [string]$GitHubCli = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -9,6 +10,21 @@ try {
     $remote = & git remote get-url origin
     if ($LASTEXITCODE -ne 0 -or $remote -ne 'https://github.com/S4kuzy0/AE2ForTerraria.git') {
         throw 'Expected the authorized AE2ForTerraria GitHub remote.'
+    }
+    if (!$GitHubCli) {
+        $portable = Join-Path $PSScriptRoot '.local\github-cli\bin\gh.exe'
+        if (Test-Path -LiteralPath $portable) { $GitHubCli = $portable }
+        else {
+            $installed = Get-Command gh -ErrorAction SilentlyContinue
+            if (!$installed) { throw 'GitHub CLI is required to verify repository privacy.' }
+            $GitHubCli = $installed.Source
+        }
+    }
+    $repoJson = & $GitHubCli repo view 'S4kuzy0/AE2ForTerraria' --json nameWithOwner,isPrivate
+    if ($LASTEXITCODE -ne 0) { throw 'Could not verify repository privacy; upload stopped.' }
+    $repo = $repoJson | ConvertFrom-Json
+    if ($repo.nameWithOwner -ne 'S4kuzy0/AE2ForTerraria' -or !$repo.isPrivate) {
+        throw 'The authorized repository must remain private; upload stopped.'
     }
     $branch = & git branch --show-current
     if ($LASTEXITCODE -ne 0 -or !$branch) { throw 'A checked-out branch is required.' }
