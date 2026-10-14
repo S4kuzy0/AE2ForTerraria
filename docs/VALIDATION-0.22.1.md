@@ -4,7 +4,7 @@
 
 实际改动已落在源码并构建安装，不是仅提交方案。架构、职责及迁移依据见 [架构记录](ARCHITECTURE-0.22.md)。与修改前完整源码备份的差异见 [source-changes.patch](../validation/source-changes.patch)，安装包元数据与存档比对见 [delivery.json](../validation/delivery.json)。
 
-安装位置：`C:\Users\ROG\Documents\My Games\Terraria\tModLoader\Mods\AE2ForTerraria.tmod`。
+安装位置：`<tModLoader 存档目录>\Mods\AE2ForTerraria.tmod`。
 
 源码版本：0.22.1。构建日志显示零错误、零警告。最终包大小为 \(336386\) 字节；最后写入时间为 2026-09-21 14:27:05。SHA256 记录在 delivery.json。构建使用完整源码路径、tModLoader 安装目录作为工作目录，直接写入实际默认存档的 Mods；未安装到旧 calamity-pro 目录。
 

@@ -86,3 +86,10 @@ AE2ForTerraria-Layout.txt
 # These harness files are generated from the current source before a run.
 SourceBus.cs
 SourceAssembler.cs
+
+# Also exclude local instruction overrides at every depth.
+**/[Aa][Gg][Ee][Nn][Tt].[Oo][Vv][Ee][Rr][Rr][Ii][Dd][Ee].[Mm][Dd]
+**/[Aa][Gg][Ee][Nn][Tt][Ss].[Oo][Vv][Ee][Rr][Rr][Ii][Dd][Ee].[Mm][Dd]
+
+# Machine-specific assistant handoff stays local.
+/docs/NEXT-ITERATION-PROMPT.txt

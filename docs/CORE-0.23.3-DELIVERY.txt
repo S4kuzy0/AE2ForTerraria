@@ -1,8 +1,8 @@
 AE2 for Terraria 核心阶段交付与待确认交互
 完成日期：2026-10-03
-源码：C:\Users\ROG\Documents\ChatGPT\ae2 for tr\AE2ForTerraria
+源码：<项目根目录>\AE2ForTerraria
 安装版本：0.23.3
-安装文件：C:\Users\ROG\Documents\My Games\Terraria\tModLoader\Mods\AE2ForTerraria.tmod
+安装文件：<tModLoader 存档目录>\Mods\AE2ForTerraria.tmod
 SHA256：9FBF33149D2C8528C8773BB4AEC676B5FB2283778CF093F09F52BCF4A614DB96
 文件大小：\(450262\,\mathrm{bytes}\)
 安装写入时间：2026-10-03T21:27:21.194577
@@ -35,7 +35,7 @@ E：只检查首个 CPU 导致其他队列停滞，且清理/同步可能找错 
 
 性能证据与边界
 比较相同的满箱、类型不匹配场景：分别设置 \(100\)/\(1000\) 种库存、\(1\)/\(4\) 条总线，测 \(1\) 次冷拓扑扫描与 \(3\) 次连续扫描。以下记录耗时、当前线程分配量和搬运量；这不是实际游戏帧率。身份序列化次数未单独计数。
-日志：C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\server-0.23.2-green.log
+日志：<项目根目录>\validation\server-0.23.2-green.log
 库存 \(100\) 种，总线 \(1\) 条，冷拓扑，\(1\) 次扫描合计 \(174.906\,\mathrm{ms}\)，分配 \(141616392\,\mathrm{bytes}\)，搬运 \(0\) 件。
 库存 \(100\) 种，总线 \(1\) 条，热拓扑，\(3\) 次扫描合计 \(530.077\,\mathrm{ms}\)，分配 \(424822192\,\mathrm{bytes}\)，搬运 \(0\) 件。
 库存 \(100\) 种，总线 \(4\) 条，冷拓扑，\(1\) 次扫描合计 \(542.546\,\mathrm{ms}\)，分配 \(566430264\,\mathrm{bytes}\)，搬运 \(0\) 件。
@@ -44,7 +44,7 @@ E：只检查首个 CPU 导致其他队列停滞，且清理/同步可能找错 
 库存 \(1000\) 种，总线 \(1\) 条，热拓扑，\(3\) 次扫描合计 \(2392.263\,\mathrm{ms}\)，分配 \(4248074520\,\mathrm{bytes}\)，搬运 \(0\) 件。
 库存 \(1000\) 种，总线 \(4\) 条，冷拓扑，\(1\) 次扫描合计 \(3180.404\,\mathrm{ms}\)，分配 \(5664095488\,\mathrm{bytes}\)，搬运 \(0\) 件。
 库存 \(1000\) 种，总线 \(4\) 条，热拓扑，\(3\) 次扫描合计 \(9367.422\,\mathrm{ms}\)，分配 \(16992281552\,\mathrm{bytes}\)，搬运 \(0\) 件。
-日志：C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\server-0.23.3-final.log
+日志：<项目根目录>\validation\server-0.23.3-final.log
 库存 \(100\) 种，总线 \(1\) 条，冷拓扑，\(1\) 次扫描合计 \(1.293\,\mathrm{ms}\)，分配 \(37808\,\mathrm{bytes}\)，搬运 \(0\) 件。
 库存 \(100\) 种，总线 \(1\) 条，热拓扑，\(3\) 次扫描合计 \(0.527\,\mathrm{ms}\)，分配 \(83232\,\mathrm{bytes}\)，搬运 \(0\) 件。
 库存 \(100\) 种，总线 \(4\) 条，冷拓扑，\(1\) 次扫描合计 \(0.385\,\mathrm{ms}\)，分配 \(110960\,\mathrm{bytes}\)，搬运 \(0\) 件。
@@ -72,11 +72,11 @@ GlobalItem.OnCreated 未完整纳入特殊产物兼容；第三方 Condition 可
 存储总线仅支持原版箱子是已批准的设计，本轮未接入 Magic Storage。
 
 复核入口
-C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\installed-0.23.2.json
-C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\installed-0.23.3.json
-C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\server-0.23.3-red.log
-C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\server-0.23.3-final.log
-C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\client-0.23.3-final-console.log
-C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\stage1\verified-network-0.23.3
-C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\risk-audit-current.txt
-C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\ui-preview\qa-results.json
+<项目根目录>\validation\installed-0.23.2.json
+<项目根目录>\validation\installed-0.23.3.json
+<项目根目录>\validation\server-0.23.3-red.log
+<项目根目录>\validation\server-0.23.3-final.log
+<项目根目录>\validation\client-0.23.3-final-console.log
+<项目根目录>\validation\stage1\verified-network-0.23.3
+<项目根目录>\validation\risk-audit-current.txt
+<项目根目录>\validation\ui-preview\qa-results.json
