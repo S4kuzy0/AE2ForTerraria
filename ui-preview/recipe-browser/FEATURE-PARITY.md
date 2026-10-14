@@ -1,5 +1,7 @@
 # JEI 查询界面与 Recipe Browser 功能对照
 
+版本范围：下表保留 0.23.0 阶段的源码对照与预览记录，不代表 0.26.1 已逐项验收。当前需求和验证缺口见 [requirements.md](../../docs/requirements.md)，最新源码核对日期为 2026-10-14（北京时间）。
+
 本文件约束后续实现范围。用户已明确确认最后的紧凑预览并授权写入代码和游戏；本版落地内容及未完成项见 [UI-0.23.0.md](../../docs/UI-0.23.0.md)。表格中“预览”列仍只是预览范围，不得把入口存在当作全部功能验收通过。
 
 对照依据：作者 [SharedUI.cs](https://github.com/JavidPack/RecipeBrowser/blob/1.4/SharedUI.cs)、[ItemCatalogueUI.cs](https://github.com/JavidPack/RecipeBrowser/blob/1.4/ItemCatalogueUI.cs)、[BestiaryUI.cs](https://github.com/JavidPack/RecipeBrowser/blob/1.4/BestiaryUI.cs) 与 [功能说明](https://github.com/JavidPack/RecipeBrowser/blob/1.4/description_workshop.txt)。仅记录源码实际存在的功能，不把注释中的 TODO 算作已实现。
