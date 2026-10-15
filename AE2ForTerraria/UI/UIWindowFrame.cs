@@ -33,6 +33,13 @@ namespace AE2ForTerraria.UI
 		private Vector2 _offset;
 		private Vector2 _dragStart;
 
+		protected override void DrawSelf(SpriteBatch spriteBatch)
+		{
+			var bounds = GetDimensions().ToRectangle();
+			UITheme.Fill(spriteBatch, bounds, BackgroundColor);
+			UITheme.Outline(spriteBatch, bounds, BorderColor);
+		}
+
 		public override void LeftMouseDown(UIMouseEvent evt)
 		{
 			Dragged = false;
@@ -119,20 +126,8 @@ namespace AE2ForTerraria.UI
 		{
 			CalculatedStyle dims = GetDimensions();
 
-			// 以前拖动条是完全不可见的,玩家根本不知道标题栏能拖。
-			// 现在:标题栏单独一层底色 + 悬停高亮 + 底部一条分隔线。
-			bool hovered = ContainsPoint(Main.MouseScreen);
 			var rect = dims.ToRectangle();
-
-			Color background = _dragging
-				? UITheme.Accent * 0.85f
-				: hovered ? UITheme.TitleBarHot : UITheme.TitleBar;
-
-			UITheme.Fill(spriteBatch, rect, background);
-
-			// 顶部一丝高光,让标题栏看起来是浮起来的
-			UITheme.Fill(spriteBatch, new Rectangle(rect.X, rect.Y, rect.Width, 1),
-				new Color(255, 255, 255) * 0.08f);
+			UITheme.Fill(spriteBatch, rect, UITheme.TitleBar);
 
 			// 底部一条分隔线,把标题栏和内容区分开
 			UITheme.Fill(spriteBatch,

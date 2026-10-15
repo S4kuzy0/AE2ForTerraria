@@ -94,6 +94,23 @@ public sealed class UiRegressionSystem : ModSystem
         Click(search,"_npcTab");
         var entries=Field<List<int>>(search,"_filtered");
         Assert(entries.Contains(NPCID.Guide) && entries.Contains(NPCID.Bunny) && entries.Contains(NPCID.BlueSlime),"NPC catalogue includes town NPC, critter and hostile");
+        grid.Update(new GameTime());
+        Assert(!grid.NpcLabels && grid.Columns == Math.Max(1,(int)(grid.GetDimensions().Width/grid.CellSize)),
+            "NPC catalogue uses compact square cells without permanent name captions");
+        var bestiaryOrder=entries.Where(ContentSamples.NpcBestiarySortingId.ContainsKey)
+            .Select(type=>ContentSamples.NpcBestiarySortingId[type]).ToArray();
+        Assert(bestiaryOrder.Zip(bestiaryOrder.Skip(1),(left,right)=>left<=right).All(ordered=>ordered),
+            "default NPC catalogue follows the loaded bestiary order while retaining all NPC categories");
+        try
+        {
+            var dimensions=grid.GetDimensions();
+            int column=Math.Min(2,grid.Columns-1);
+            Main.mouseX=(int)(dimensions.X+(column+.5f)*grid.CellSize);
+            Main.mouseY=(int)(dimensions.Y+.5f*grid.CellSize);
+            grid.Update(new GameTime());
+            Assert(grid.HoveredType==entries[column],"compact NPC hover targets the displayed portrait rather than the former wide card");
+        }
+        finally { Main.mouseX=mouseX; Main.mouseY=mouseY; }
         Assert(BrowserCategories.NpcKind(NPCID.Guide)==3 && BrowserCategories.NpcKind(NPCID.Bunny)==4,"NPC property filters classify town NPC and critter");
         Assert(BrowserCategories.Items.Length==22 && BrowserCategories.Items.All(c=>c.Name!="材料"),"Recipe Browser categories, material remains a filter");
         var weapons=Array.FindIndex(BrowserCategories.Items,c=>c.Name=="武器");
@@ -708,6 +725,20 @@ public sealed class UiRegressionSystem : ModSystem
                         var actionNames=new[]{"_quantityButton","_quantityInput","_orderButton","_keepButton"};
                         var actionRects=actionNames.Select(name=>Field<UIElement>(terminal,name).GetDimensions().ToRectangle()).ToArray();
                         Assert(actionRects.All(rect=>info.ToRectangle().Contains(rect)) && actionRects.SelectMany((a,i)=>actionRects.Skip(i+1).Select(b=>!a.Intersects(b))).All(ok=>ok),"terminal action row stays within reader without overlaps at "+size.X);
+                    }
+                    Assert(new[]{"_frameTop","_frameLeft","_frameRight","_frameBottom","_frameCorner"}
+                        .All(name=>!WindowField<UIFrameGrip>(state,name).HighlightOnHover),
+                        label+" keeps window edges quiet at "+size.X);
+                    if (ReferenceEquals(state,closedTerminal) || ReferenceEquals(state,terminalStations))
+                    {
+                        var gridBounds=Field<UIItemGrid>((TerminalUIState)state,"_grid").GetDimensions().ToRectangle();
+                        var stations=Field<UIStationGrid>((TerminalUIState)state,"_stationGrid");
+                        var stationBounds=stations.GetDimensions().ToRectangle();
+                        var listTitle=Field<UIText>((TerminalUIState)state,"_craftListTitle");
+                        Assert(listTitle.Parent!=null && listTitle.Text=="合成列表" && Field<UIElement>((TerminalUIState)state,"_status").Parent==null
+                            && !stations.Children.OfType<UIText>().Any(),"craft catalogue uses one title and no count or station captions at "+size.X);
+                        Assert(gridBounds.Width>=state.Layout.W-48 && stationBounds.Top-gridBounds.Bottom<=8
+                            && !gridBounds.Intersects(stationBounds),"craft catalogue fills available width and reaches the station slots at "+size.X);
                     }
                     if (ReferenceEquals(state,driveUi) || ReferenceEquals(state,assemblerUi))
                     {

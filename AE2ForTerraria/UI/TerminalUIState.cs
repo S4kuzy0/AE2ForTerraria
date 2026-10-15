@@ -41,6 +41,7 @@ namespace AE2ForTerraria.UI
 
 		private UIBrowserSearchField _searchBox;
 		private UIText _status;
+        private UIText _craftListTitle;
 		private UIItemGrid _grid;
 		private UICapacityBar _capacity;
         private UIText _capacityCount;
@@ -370,6 +371,8 @@ namespace AE2ForTerraria.UI
 
 			_status = new UIText(string.Empty, 0.72f, false);
 			Window.Append(_status);
+            _craftListTitle = new UIText("合成列表", .78f) { TextOriginX = 0 };
+            AddDragTarget(_craftListTitle);
 
             foreach (var e in new UIElement[] { _orderButton, _takeButton, _takeAllButton, _quantityButton, _quantityInput, _keepButton }) { e.Remove(); _info.Append(e); }
             _info.BottomReserve = 68;
@@ -428,17 +431,20 @@ namespace AE2ForTerraria.UI
             }
             else
             {
-                Place(_craftableButton, Pad, top, 170, 26);
+                Place(_craftListTitle, Pad, top + 4, 100, 22);
+                Place(_craftableButton, Pad + 106, top, 140, 26);
                 Place(_sortButton, w - Pad - 170, top, 170, 26);
             }
             top += 32;
             bool showBag = false;
             float inventoryHeight = showBag ? Math.Clamp((h - top - 84) * .52f, 120, 212) : 0;
             float accessActionHeight = IsAccess ? 36 : 0;
-            float stationHeight = !IsAccess && _managementPage == 0 ? _stationGrid.RequiredHeight + 8 : 0;
+            float stationHeight = !IsAccess && _managementPage == 0 ? _stationGrid.RequiredHeight : 0;
             Visible(_stationGrid, stationHeight > 0);
             if (stationHeight > 0) _stationGrid.SetBounds(Pad, h - Pad - _stationGrid.RequiredHeight, inner);
-            float gridHeight = Math.Max(43, h - top - 74 - inventoryHeight - accessActionHeight - stationHeight);
+            float gridBottom = IsAccess ? h - 74 - inventoryHeight - accessActionHeight
+                : h - Pad - stationHeight - 6 - (UISystem.TerminalReadable ? 0 : 28);
+            float gridHeight = Math.Max(43, gridBottom - top);
             Place(_grid, Pad, top, inner - 12, gridHeight);
             Place(_scrollBar, w - Pad - 9, top, 9, gridHeight);
             Place(_capacity, Pad, h - 42, Math.Min(250, inner * .4f), 14);
@@ -448,6 +454,8 @@ namespace AE2ForTerraria.UI
                 IsAccess ? inner - capacityWidth - 10 : inner, 22);
             _status.DynamicallyScaleDownToWidth = true;
             foreach (var element in new UIElement[] { _searchBox, _modButton, _categories, _sortButton, _grid, _scrollBar, _status }) Visible(element, catalogue);
+            Visible(_status, catalogue && (IsAccess || !UISystem.TerminalReadable));
+            Visible(_craftListTitle, catalogue && !IsAccess);
             foreach (var element in new UIElement[] { _takeSelectedButton, _clearSelectionButton, _prefixButton }) Visible(element, catalogue && IsAccess);
             Visible(_craftableButton, catalogue && !IsAccess);
             Visible(_capacity, catalogue && IsAccess && !_itemCapacity);
@@ -462,7 +470,7 @@ namespace AE2ForTerraria.UI
                 _playerInventory.SetTransferHandlers(IsAccess ? DepositSlot : null, IsAccess ? DepositAllOfType : null);
             }
             _catalogueButton.Selected = catalogue; _tasksButton.Selected = _managementPage == 1; _stationsButton.Selected = _managementPage == 2;
-            float drawerH = h - Pad - 48 - stationHeight;
+            float drawerH = h - Pad - 48 - stationHeight - (stationHeight > 0 ? 8 : 0);
             _info.SetBounds(Pad, 48, inner, drawerH);
             Place(_craftReadiness, 10, drawerH - 60, inner - 20, 22);
             if (_info.IsOpen) { _info.Remove(); Window.Append(_info); }
@@ -527,6 +535,8 @@ namespace AE2ForTerraria.UI
 
 		protected override void UpdateWindow(GameTime gameTime)
 		{
+            if (!IsAccess && _managementPage == 0 && !_info.IsOpen
+                && (_status.Parent != null) != !UISystem.TerminalReadable) ApplyLayout();
             if(_stationLayoutDirty) {_stationLayoutDirty=false;ApplyLayout();}
             if(_stationDataDirty) {_stationDataDirty=false;_availability.Refresh();RebuildList(false);UpdateSelectedPlan();}
 			HandleQuantityTyping();
@@ -768,8 +778,7 @@ namespace AE2ForTerraria.UI
 				: UISystem.ActiveNetwork.Count + " " + ModText.Get("LblStatusDrives", "个驱动器");
             if (!IsAccess)
             {
-                string progress = _availability.Catalogue.PendingCount > 0 ? " · 正在核验合成树…" : "";
-                UITextCache.Set(_status, (_range == 1 ? "可合成 " : "全部配方 ") + _filtered.Count + " 种" + progress);
+                UITextCache.Set(_status, UISystem.TerminalReadable ? string.Empty : UISystem.TerminalAccessStatus);
                 return;
             }
 

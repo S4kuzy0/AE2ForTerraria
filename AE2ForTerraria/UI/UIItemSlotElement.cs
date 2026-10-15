@@ -184,15 +184,8 @@ namespace AE2ForTerraria.UI
 			bool hovered = ContainsPoint(Main.MouseScreen);
 			Item item = Getter?.Invoke();
 
-			// 和物品网格同一套槽位样式:稀有度描边 + 悬停高亮
-			Color border = hovered
-				? UITheme.BorderHot
-				: item != null && item.type > 0
-					? UITheme.Rarity(item.rare)
-					: UITheme.Border;
-
 			UITheme.FillRounded(spriteBatch, box, hovered ? UITheme.BtnHot : UITheme.Slot, 3);
-			UITheme.Outline(spriteBatch, box, border, 1);
+			UITheme.Outline(spriteBatch, box, UITheme.ItemBorder, 1);
 
 			if (item == null || item.type <= 0)
 			{

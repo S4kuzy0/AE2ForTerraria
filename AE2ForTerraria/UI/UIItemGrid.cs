@@ -120,7 +120,7 @@ namespace AE2ForTerraria.UI
 		public Func<ItemKey, long> CountProvider;
 
 		/// <summary>
-		/// 可选的「已选中」标记(过滤清单里用)。返回 true 的格子会画一圈绿边 + 角标,
+		/// 可选的「已选中」标记(过滤清单里用)。返回 true 的格子会加深底色并显示角标,
 		/// 这样点一下就能看出勾没勾上。
 		/// </summary>
 		public Func<ItemKey, bool> IsMarked;
@@ -215,7 +215,7 @@ namespace AE2ForTerraria.UI
 				title = "#" + HoveredType;
 			}
 
-			string sub = null;
+			string sub = NpcVisuals.ModName(HoveredType);
 
 			// 出处模组:35 个模组的环境里,同名物品靠这个区分
 			if (!NpcMode)
@@ -529,41 +529,21 @@ namespace AE2ForTerraria.UI
 			var box = new Rectangle((int)position.X + 2, (int)position.Y + 2, CellWidth - 5, CellHeight - 5);
 			bool hovered = key.Equals(HoveredKey);
 
-			// 底色 / 描边走统一令牌;物品格用**稀有度描边**,不用悬停才看得出来
-			Color fill = hovered ? UITheme.BtnHot : UITheme.Slot;
-
 			bool marked = IsMarked != null && IsMarked(key);
 			bool cursored = key.Equals(ActiveKey) && CursorIndex >= 0 && !hovered;
-
-			Color border;
-
-			if (marked)
+			Color fill = marked || cursored ? UITheme.Btn : hovered ? UITheme.BtnHot : UITheme.Slot;
+			if (NpcMode)
 			{
-				border = UITheme.Select;
-			}
-			else if (cursored)
-			{
-				border = UITheme.Warn;
-			}
-			else if (hovered)
-			{
-				border = UITheme.BorderHot;
-			}
-			else if (!NpcMode && itemType > 0)
-			{
-				border = UITheme.Rarity(Terraria.ID.ContentSamples.ItemsByType[itemType].rare);
+				// Native inventory backgrounds give the compact bestiary the same
+				// rounded cells as Recipe Browser, without copying its assets or code.
+				var background = marked || cursored || hovered ? TextureAssets.InventoryBack15.Value : TextureAssets.InventoryBack9.Value;
+				spriteBatch.Draw(background, box, Color.White);
 			}
 			else
 			{
-				border = UITheme.Border;
+				UITheme.Fill(spriteBatch, box, fill);
+				UITheme.Outline(spriteBatch, box, UITheme.ItemBorder, 1);
 			}
-
-			UITheme.Fill(spriteBatch, box, fill);
-			UITheme.Outline(spriteBatch, box, border, 2);
-
-			// 顶部一丝高光,让格子看起来有厚度
-			UITheme.Fill(spriteBatch, new Rectangle(box.X + 2, box.Y + 2, box.Width - 4, 1),
-				new Color(255, 255, 255) * 0.06f);
 
 			if (marked)
 			{

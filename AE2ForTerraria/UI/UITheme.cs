@@ -32,6 +32,7 @@ namespace AE2ForTerraria.UI
 		public static readonly Color PanelAlt = new Color(31, 38, 54);
 		public static readonly Color Field = new Color(20, 26, 38);
 		public static readonly Color Slot = new Color(42, 50, 70);
+		public static readonly Color ItemBorder = Color.Black;
 		public static readonly Color SlotInner = new Color(72, 84, 118);
 		public static readonly Color Border = new Color(58, 71, 99);
 		public static readonly Color BorderHot = new Color(96, 140, 214);

@@ -359,6 +359,7 @@ UI: {
 	LabelStatus: 状态
 	LabelNetworkCapacity: 网络容量
 	LabelCapacity: 容量
+	LabelUsed: 已用
 	LabelBytes: 字节
 	LabelKinds: 类
 	LabelItems: 件物品

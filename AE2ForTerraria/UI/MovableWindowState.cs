@@ -90,7 +90,7 @@ namespace AE2ForTerraria.UI
 		/// <summary>带搜索框的窗口可以覆写成实际焦点状态。</summary>
 		public virtual bool SearchBoxFocused => false;
 		protected virtual bool CornerResizeOnly => false;
-		protected virtual bool HighlightFrame => true;
+		protected virtual bool HighlightFrame => false;
 		protected virtual float ResetButtonWidth => 54f;
 		protected virtual float ChromeGap => 6f;
 		protected virtual float FramelessChromeHeight => 24f;

@@ -193,7 +193,7 @@ namespace AE2ForTerraria.UI
 			};
 			Window.Append(_sortButton);
 
-			_grid = new UIItemGrid { CellSize = 43, NpcLabels = true, InputBlocked = () => _details.BlocksPointer || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null };
+			_grid = new UIItemGrid { CellSize = 43, InputBlocked = () => _details.BlocksPointer || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null };
 			// 回车 = 打开这一项的来源(和左键同一个动作)
 			_grid.OnActivated = key =>
 			{
@@ -780,12 +780,12 @@ namespace AE2ForTerraria.UI
 				Window.Top.Pixels + SearchTop + SearchHeight + 38f));
 		}
 
-        private string SortLabel() => "排序：" + SortName(_sort);
+        private string SortLabel() => "排序：" + (_category == Category.Npc && _sort == SortMode.Default ? "图鉴" : SortName(_sort));
 
         private void CycleSort()
         {
             SortMode[] modes = _category == Category.Npc ? new[] { SortMode.Default, SortMode.Name } : Enum.GetValues<SortMode>();
-            UIChoiceMenu.Show(Window, _sortButton, modes.Select(SortName).ToArray(),
+            UIChoiceMenu.Show(Window, _sortButton, modes.Select(mode => _category == Category.Npc && mode == SortMode.Default ? "图鉴顺序" : SortName(mode)).ToArray(),
                 (index, label) => { _sort = modes[index]; _sortButton.SetText(SortLabel()); Refresh(); });
         }
         private static string SortName(SortMode mode) => mode switch
@@ -795,6 +795,14 @@ namespace AE2ForTerraria.UI
             SortMode.Pick => "镐力", SortMode.Axe => "斧力", SortMode.Hammer => "锤力", SortMode.Fishing => "渔力",
             SortMode.Bait => "饵力", SortMode.Tile => "物块编号", SortMode.WingFlight => "翅膀飞行时间", _ => "默认"
         };
+        private static int CompareBestiaryOrder(int left, int right)
+        {
+            bool hasLeft = ContentSamples.NpcBestiarySortingId.TryGetValue(left, out int leftOrder);
+            bool hasRight = ContentSamples.NpcBestiarySortingId.TryGetValue(right, out int rightOrder);
+            if (hasLeft != hasRight) return hasLeft ? -1 : 1;
+            int order = hasLeft ? leftOrder.CompareTo(rightOrder) : 0;
+            return order != 0 ? order : left.CompareTo(right);
+        }
         private static float SortValue(Item item, SortMode mode) => mode switch
         {
             SortMode.Value => item.value, SortMode.Rarity => item.rare, SortMode.Damage => item.damage, SortMode.Defence => item.defense,
@@ -819,7 +827,7 @@ namespace AE2ForTerraria.UI
 					}
 				}
 
-				_filtered.Sort((a,b) => _sort == SortMode.Name ? string.Compare(NpcIndex.GetName(a), NpcIndex.GetName(b), StringComparison.OrdinalIgnoreCase) : a.CompareTo(b));
+				_filtered.Sort((a,b) => _sort == SortMode.Name ? string.Compare(NpcIndex.GetName(a), NpcIndex.GetName(b), StringComparison.OrdinalIgnoreCase) : CompareBestiaryOrder(a,b));
 			}
 			else
 			{

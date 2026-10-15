@@ -362,6 +362,7 @@ UI: {
 	LabelStatus: Status
 	LabelNetworkCapacity: Network capacity
 	LabelCapacity: Capacity
+	LabelUsed: Used
 	LabelBytes: bytes
 	LabelKinds: kinds
 	LabelItems: items

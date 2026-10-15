@@ -49,7 +49,7 @@ namespace AE2ForTerraria.UI
 			bool hovered = ContainsPoint(Main.MouseScreen);
 
 			UITheme.FillRounded(spriteBatch, box, hovered ? UITheme.BtnHot : UITheme.Panel, 3);
-			UITheme.Outline(spriteBatch, box, hovered ? UITheme.BorderHot : UITheme.Border);
+			UITheme.Outline(spriteBatch, box, UITheme.ItemBorder);
 
 			Main.instance.LoadItem(ItemType);
 			Texture2D texture = TextureAssets.Item[ItemType].Value;
