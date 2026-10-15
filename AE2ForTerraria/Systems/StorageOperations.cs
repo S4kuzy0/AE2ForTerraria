@@ -13,6 +13,55 @@ namespace AE2ForTerraria.Systems;
 /// <summary>Shared single-player/server inventory actions. UI never reconstructs or destroys stored items.</summary>
 public static class StorageOperations
 {
+    public readonly record struct DepositPreview(long Requested, long Accepted, string Reason)
+    {
+        public string Message => Accepted <= 0 ? "无法存入：" + Reason
+            : Accepted < Requested ? "可存入 " + Accepted + " 件；其余保留。" + Reason
+            : "可存入全部 " + Accepted + " 件";
+    }
+
+    /// <summary>Read-only prediction using the same identity, partitions and ledger rules as Deposit.</summary>
+    public static DepositPreview PreviewDeposit(List<IMEStorage> storage, Item item)
+    {
+        long requested = item == null || item.IsAir ? 0 : item.stack;
+        if (requested <= 0) return new(0, 0, "请先选择物品");
+        if (storage == null || storage.Count == 0) return new(requested, 0, "没有连接的存储设备");
+        ItemKey key = ItemKey.FromItem(item);
+        long remaining = requested;
+        bool allowed = false, types = false, excess = false, quantity = false;
+        foreach (var unit in storage)
+        {
+            if (!unit.Allows(key)) continue;
+            allowed = true;
+            var ledger = unit.Ledger;
+            remaining -= ledger.Insert(key, remaining, simulate: true);
+            if (remaining <= 0) return new(requested, requested, null);
+            excess |= ledger.StoredTypeCount > ledger.MaxTypes;
+            types |= !ledger.Contains(key) && ledger.StoredTypeCount >= ledger.MaxTypes;
+            quantity |= ledger.GetAmount(key) >= ledger.MaxAmountPerType || ledger.StoredTotalAmount == long.MaxValue;
+        }
+        string reason = !allowed ? "所有存储设备的过滤规则都拒绝此物品"
+            : excess ? "已有类别超过容量；可右键驱动器继续加盘，或先取出物品"
+            : types ? "物品类别已满；请右键驱动器加盘，已有类别仍可存入"
+            : quantity ? "该物品数量已达上限；请增加驱动器或使用数字奇点"
+            : "可用容量不足；请右键驱动器加盘";
+        return new(requested, requested - remaining, reason);
+    }
+
+    internal static string DepositRemainderReason(List<IMEStorage> storage, Player player, bool extras = false,
+        int onlySlot = -1, int onlyType = 0, ulong slotMask = ulong.MaxValue)
+    {
+        for (int slot = 0; slot < InventoryScope.DepositSlotCount(player, extras); slot++)
+        {
+            if ((onlySlot >= 0 && slot != onlySlot) || (slotMask & (1UL << slot)) == 0) continue;
+            var item = player.inventory[slot];
+            if (item == null || item.IsAir || item.favorited || onlyType > 0 && item.type != onlyType) continue;
+            var preview = PreviewDeposit(storage, item);
+            if (preview.Accepted < preview.Requested) return preview.Reason;
+        }
+        return "没有可存入的物品，或背包物品已变化；收藏物品会保留";
+    }
+
     /// <summary>Called after authority/permission checks; client UI only sends an upgrade intent.</summary>
     public static bool TryUpgradeStorageUnit(MEStorageUnitEntity unit, Player player, int inventorySlot = -1)
     {

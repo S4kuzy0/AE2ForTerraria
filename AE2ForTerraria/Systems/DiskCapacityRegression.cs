@@ -57,6 +57,20 @@ public static class DiskCapacityRegression
         check(ledger.StoredTypeCount == 32 && ledger.Insert(ItemKey.Crafted(33), 1) == 0
             && ledger.Insert(ItemKey.Crafted(1), 1) == 1,
             "full type slots reject only new identities while existing identities still accept items");
+        var rejected = new Item(33, 7);
+        var units = new List<IMEStorage> { drive };
+        int beforeVersion = ledger.Version;
+        var preview = StorageOperations.PreviewDeposit(units, rejected);
+        check(preview.Accepted == 0 && preview.Reason.Contains("类别") && preview.Reason.Contains("加盘")
+            && ledger.Version == beforeVersion && rejected.stack == 7
+            && MENetwork.Deposit(units, rejected) == 0 && rejected.stack == 7,
+            "full-type preflight gives an add-disk reason without consuming or changing the item");
+        check(StorageOperations.PreviewDeposit(units, new Item(1, 7)).Accepted == 7,
+            "full-type preflight still accepts an existing identity");
+        drive.Filter = new() { 1 }; drive.IsWhitelist = true; drive.MarkFilterDirty();
+        check(StorageOperations.PreviewDeposit(units, rejected).Reason.Contains("过滤"),
+            "preflight distinguishes partition refusal from capacity refusal");
+        drive.Filter.Clear(); drive.MarkFilterDirty();
         ledger.Restore(ItemKey.Crafted(33), 5);
         check(ledger.StoredTypeCount == 33 && ledger.Insert(ItemKey.Crafted(1), 1) == 0
             && ledger.Extract(ItemKey.Crafted(33), 2) == 2,

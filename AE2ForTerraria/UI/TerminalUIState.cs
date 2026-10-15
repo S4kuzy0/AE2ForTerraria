@@ -41,7 +41,6 @@ namespace AE2ForTerraria.UI
 
 		private UIBrowserSearchField _searchBox;
 		private UIText _status;
-        private UIText _craftListTitle;
 		private UIItemGrid _grid;
 		private UICapacityBar _capacity;
         private UIText _capacityCount;
@@ -288,7 +287,11 @@ namespace AE2ForTerraria.UI
 			_info = new UIBrowserDetails(Window, terminal: true);
             _craftReadiness = new UIText("", .72f) { DynamicallyScaleDownToWidth = true };
             _info.Append(_craftReadiness);
-            _info.Selected = key => { _selected = key; _managementPage=0; UpdateSelectedPlan(); ApplyLayout(); };
+            _info.Selected = key =>
+            {
+                _selected = key; _orderQuantity = _info.Quantity; _managementPage = 0;
+                _quantityButton.SetText(QuantityLabel()); UpdateSelectedPlan(); ApplyLayout();
+            };
             _info.Closed = () => ApplyLayout();
             _info.FavoriteChanged = () => RebuildList(false);
             _stationGrid.LayoutChanged = () => _stationLayoutDirty=true;
@@ -371,8 +374,6 @@ namespace AE2ForTerraria.UI
 
 			_status = new UIText(string.Empty, 0.72f, false);
 			Window.Append(_status);
-            _craftListTitle = new UIText("合成列表", .78f) { TextOriginX = 0 };
-            AddDragTarget(_craftListTitle);
 
             foreach (var e in new UIElement[] { _orderButton, _takeButton, _takeAllButton, _quantityButton, _quantityInput, _keepButton }) { e.Remove(); _info.Append(e); }
             _info.BottomReserve = 68;
@@ -431,8 +432,7 @@ namespace AE2ForTerraria.UI
             }
             else
             {
-                Place(_craftListTitle, Pad, top + 4, 100, 22);
-                Place(_craftableButton, Pad + 106, top, 140, 26);
+                Place(_craftableButton, Pad, top, 140, 26);
                 Place(_sortButton, w - Pad - 170, top, 170, 26);
             }
             top += 32;
@@ -455,7 +455,6 @@ namespace AE2ForTerraria.UI
             _status.DynamicallyScaleDownToWidth = true;
             foreach (var element in new UIElement[] { _searchBox, _modButton, _categories, _sortButton, _grid, _scrollBar, _status }) Visible(element, catalogue);
             Visible(_status, catalogue && (IsAccess || !UISystem.TerminalReadable));
-            Visible(_craftListTitle, catalogue && !IsAccess);
             foreach (var element in new UIElement[] { _takeSelectedButton, _clearSelectionButton, _prefixButton }) Visible(element, catalogue && IsAccess);
             Visible(_craftableButton, catalogue && !IsAccess);
             Visible(_capacity, catalogue && IsAccess && !_itemCapacity);
@@ -490,11 +489,14 @@ namespace AE2ForTerraria.UI
             else
             {
                 Visible(_selectionLabel, false);
-                UIElement[] actions = { _quantityButton, _quantityInput, _orderButton, _keepButton };
-                float actionW = (inner - 38) / 4;
-                for (int i = 0; i < actions.Length; i++)
+                if (!_selected.IsAir)
                 {
-                    _info.Append(actions[i]); Place(actions[i], 10 + i * (actionW + 6), drawerH - 34, actionW, 28);
+                    UIElement[] actions = { _quantityButton, _quantityInput, _orderButton, _keepButton };
+                    float actionW = (inner - 38) / 4;
+                    for (int i = 0; i < actions.Length; i++)
+                    {
+                        _info.Append(actions[i]); Place(actions[i], 10 + i * (actionW + 6), drawerH - 34, actionW, 28);
+                    }
                 }
             }
             _quantityInput.SetPadding(0); _quantityText.Width.Set(-12, 1); _quantityText.DynamicallyScaleDownToWidth = true;
@@ -1255,6 +1257,9 @@ namespace AE2ForTerraria.UI
 					+ ModText.Get("MsgStoredTail", "件物品"));
 			}
 
+            else UIStatus.Toast("未存入：" + StorageOperations.DepositRemainderReason(UISystem.ActiveNetwork, player,
+                _depositAmmoAndCoins, onlyType: type));
+
 			return true;
 		}
 
@@ -1263,9 +1268,11 @@ namespace AE2ForTerraria.UI
         {
             if (!IsAccess || !UISystem.TerminalCanUse || MENet.CursorPending || MENet.InventoryTransactionPending) return;
             if (Main.netMode == NetmodeID.MultiplayerClient) { MENet.DepositCursor(UISystem.ActiveTerminalPos); return; }
+            var preview = StorageOperations.PreviewDeposit(UISystem.ActiveNetwork, Main.mouseItem);
+            if (preview.Accepted <= 0) { UIStatus.Toast(preview.Message); return; }
             long moved=MENetwork.Deposit(UISystem.ActiveNetwork,Main.mouseItem);
             Main.LocalPlayer.inventory[58]=Main.mouseItem.Clone();
-            if (moved>0) { AfterNetworkChange(); UIStatus.Toast("已存入 "+moved+" 件"); }
+            if (moved>0) { AfterNetworkChange(); UIStatus.Toast("已存入 "+moved+" 件" + (moved < preview.Requested ? "；其余留在手中。" + preview.Reason : "")); }
             else UIStatus.Toast("存储空间不足或过滤规则拒绝此物品");
         }
         private bool DepositSlot(Item item, int slotIndex)
@@ -1301,6 +1308,8 @@ namespace AE2ForTerraria.UI
 				return true;
 			}
 
+            var preview = StorageOperations.PreviewDeposit(UISystem.ActiveNetwork, item);
+            if (preview.Accepted <= 0) { UIStatus.Toast(preview.Message); return true; }
 			long moved = MENetwork.Deposit(UISystem.ActiveNetwork, item);
 			if (moved > 0)
 			{
@@ -1342,7 +1351,8 @@ namespace AE2ForTerraria.UI
             if (Main.netMode == NetmodeID.MultiplayerClient) { MENet.DepositAll(UISystem.ActiveTerminalPos,_depositAmmoAndCoins); return; }
             long moved = StorageOperations.DepositInventory(UISystem.ActiveNetwork,Main.LocalPlayer,_depositAmmoAndCoins);
             AfterNetworkChange();
-            UIStatus.Toast("已存入 " + moved + " 件；收藏与未存入的物品保留在背包");
+            UIStatus.Toast(moved > 0 ? "已存入 " + moved + " 件；收藏与未存入的物品保留在背包"
+                : "未存入：" + StorageOperations.DepositRemainderReason(UISystem.ActiveNetwork, Main.LocalPlayer, _depositAmmoAndCoins));
         }
 
         private void AfterNetworkChange()
@@ -1378,6 +1388,13 @@ namespace AE2ForTerraria.UI
 		/// </summary>
 		protected override void DrawHoverTooltip(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch)
 		{
+            if (IsAccess && !Main.mouseItem.IsAir && _grid.Parent != null && _grid.ContainsPoint(Main.MouseScreen))
+            {
+                string message = Main.netMode == NetmodeID.MultiplayerClient
+                    ? "存入时由服务器核验容量；未能存入的物品保留在手中"
+                    : StorageOperations.PreviewDeposit(UISystem.ActiveNetwork, Main.mouseItem).Message;
+                UITooltip.Draw(spriteBatch, "存入网络", message); return;
+            }
 			_info?.DrawTooltip(spriteBatch);
             _searchBox?.DrawCandidates();
             _grid?.DrawTooltip(spriteBatch, key =>

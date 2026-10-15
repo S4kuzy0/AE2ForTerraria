@@ -142,6 +142,15 @@ public sealed class UiRegressionSystem : ModSystem
         Click(craft,"_tasksButton");
         Assert(Field<UIElement>(craft,"_playerInventory").Parent == null,
             "task management does not leave the station backpack active");
+        var reader = Field<UIBrowserDetails>(craft,"_info");
+        reader.Show(ItemKey.Crafted(ItemID.WoodenSword), 10); reader.Close(); reader.Show(ItemKey.Crafted(ItemID.Torch), 1);
+        Invoke(reader,"Back");
+        Assert(reader.Quantity == 10 && Field<long>(craft,"_orderQuantity") == 10,
+            "terminal history restores both preview and actual order quantity together");
+        reader.ShowNpc(NPCID.Guide);
+        Assert(Field<ItemKey>(craft,"_selected").IsAir && Field<UIElement>(craft,"_orderButton").Parent == null,
+            "NPC navigation clears the previous craft target and its order action");
+        reader.Close();
         Assert(UISystem.GetStoredAmount(ItemKey.Crafted(ItemID.Wood))==321,"catalogue interactions do not mutate storage");
         EmbeddedInventoryRegression.Run(Assert);
         AEUiSessionRegression.Run(Assert);
@@ -181,7 +190,7 @@ public sealed class UiRegressionSystem : ModSystem
             player.inventory[45] = new Item(ItemID.Wood, 7); UIStatus.Clear();
             Assert(player.GetModPlayer<MEPlayer>().ShiftClickSlot(player.inventory,0,45)
                 && player.inventory[45].stack == 7 && drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood)) == before+20
-                && UIStatus.Active().Any(line => line.Text.Contains("未存入")),
+                && UIStatus.Active().Any(line => line.Text.Contains("数量已达上限")),
                 "full storage shift deposit preserves the item and tells the player why nothing moved");
         }
         finally
@@ -398,6 +407,21 @@ public sealed class UiRegressionSystem : ModSystem
             int savedScroll=Field<int>(details,"_scroll"),savedStations=Field<int>(details,"_stationScroll"),recipePage=Field<int>(details,"_recipe");
             details.Show(ItemKey.Crafted(ItemID.Torch));Field<UIButton>(details,"_back").LeftClick(new UIMouseEvent(details,Vector2.Zero));
             Assert(details.SelectedKey.Type==large.createItem.type && Field<int>(details,"_recipe")==recipePage && Field<int>(details,"_scroll")==savedScroll && Field<int>(details,"_stationScroll")==savedStations,"history restores selected recipe and independent scroll positions");
+            details.Show(ItemKey.Crafted(ItemID.Wood), 10); details.Close(); details.Show(ItemKey.Crafted(ItemID.Torch), 1);
+            Invoke(details,"Back");
+            Assert(details.SelectedKey.Type==ItemID.Wood && Field<long>(details,"_quantity")==10,
+                "catalogue close and new selection retain navigation history and quantity");
+            Invoke(details,"Forward");
+            Assert(details.SelectedKey.Type==ItemID.Torch && Field<long>(details,"_quantity")==1,
+                "forward returns to the later catalogue selection");
+            details.SetTab(2); Invoke(details,"Back");
+            Assert(Field<int>(details,"_tab")==0,"back restores the preceding recipe tab");
+            Invoke(details,"Forward");
+            Assert(Field<int>(details,"_tab")==2,"forward restores the uses tab");
+            details.ShowNpc(NPCID.Guide); details.Close(); details.Show(ItemKey.Crafted(ItemID.Gel)); Invoke(details,"Back");
+            Assert(Field<int>(details,"_npc")==NPCID.Guide,"item and NPC history survives returning to the catalogue");
+            details.Show(ItemKey.Crafted(ItemID.StoneBlock));
+            Assert(!Field<UIButton>(details,"_forward").Enabled,"a new navigation branch clears forward history");
             int groupIndex=Enumerable.Range(0,Recipe.numRecipes).First(i=>!Main.recipe[i].Disabled && Main.recipe[i].acceptedGroups.Any(id=>RecipeGroup.recipeGroups[id].ValidItems.Count>1 && Main.recipe[i].requiredItem.Any(item=>RecipeGroup.recipeGroups[id].ValidItems.Contains(item.type))));
             var grouped=Main.recipe[groupIndex];details.Show(ItemKey.Crafted(grouped.createItem.type));
             SetField(details,"_recipe",StorageSystem.Recipes.GetRecipesFor(ItemKey.Crafted(grouped.createItem.type)).ToList().IndexOf(groupIndex));Invoke(details,"Rebuild");RenderProbe(search,null);
@@ -734,9 +758,10 @@ public sealed class UiRegressionSystem : ModSystem
                         var gridBounds=Field<UIItemGrid>((TerminalUIState)state,"_grid").GetDimensions().ToRectangle();
                         var stations=Field<UIStationGrid>((TerminalUIState)state,"_stationGrid");
                         var stationBounds=stations.GetDimensions().ToRectangle();
-                        var listTitle=Field<UIText>((TerminalUIState)state,"_craftListTitle");
-                        Assert(listTitle.Parent!=null && listTitle.Text=="合成列表" && Field<UIElement>((TerminalUIState)state,"_status").Parent==null
-                            && !stations.Children.OfType<UIText>().Any(),"craft catalogue uses one title and no count or station captions at "+size.X);
+                        var filter=Field<UIButton>((TerminalUIState)state,"_craftableButton");
+                        Assert(Math.Abs(filter.GetDimensions().X-gridBounds.X)<1 && Field<UIElement>((TerminalUIState)state,"_status").Parent==null
+                            && Field<UIElement>((TerminalUIState)state,"_selectionLabel").Parent==null
+                            && !stations.Children.OfType<UIText>().Any(),"craft catalogue left-aligns the filter and has no count or station captions at "+size.X);
                         Assert(gridBounds.Width>=state.Layout.W-48 && stationBounds.Top-gridBounds.Bottom<=8
                             && !gridBounds.Intersects(stationBounds),"craft catalogue fills available width and reaches the station slots at "+size.X);
                     }

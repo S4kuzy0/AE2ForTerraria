@@ -187,12 +187,13 @@ public static partial class MENet
                 if (item?.favorited == false && identity.Matches(item)) eligibleSlots |= 1UL << slot;
             }
             if (!CheckPermission(ClientInventoryDeposit, position, who)) return;
-            long moved = StorageOperations.DepositInventory(MENetwork.CollectStorage(position.X, position.Y),
+            var storage = MENetwork.CollectStorage(position.X, position.Y);
+            long moved = StorageOperations.DepositInventory(storage,
                 player, extras, onlySlot, onlyType, eligibleSlots, syncEquipment: false);
             SendNetworkLedgers(position.X, position.Y);
             AuditDeposit(position, who, moved);
             Notify(who, moved == 0
-                ? "未存入：请检查存储容量、过滤规则或背包物品是否已变化"
+                ? "未存入：" + StorageOperations.DepositRemainderReason(storage, player, extras, onlySlot, onlyType, eligibleSlots)
                 : onlySlot >= 0 || onlyType > 0
                     ? "已存入 " + moved + " 件；未存入的物品保留在背包"
                     : "已存入 " + moved + " 件；收藏和未能存入的物品保留在背包");

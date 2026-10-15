@@ -55,6 +55,8 @@ namespace AE2ForTerraria.Systems
 				return;
 			}
 
+            foreach (var line in Lines)
+                if (line.Text == text && line.Color == color) { line.ExpireAt = _now + Lifetime; return; }
 			Lines.Add(new Line { Text = text, Color = color, ExpireAt = _now + Lifetime });
 
 			while (Lines.Count > MaxLines)

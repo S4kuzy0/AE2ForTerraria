@@ -22,10 +22,11 @@ internal sealed class UIBrowserDetails : UIElement
     private readonly List<(Rectangle Bounds, Row Row)> _hits = new();
     private readonly List<(Row Row, string Text, bool First)> _wrapped = new();
     private float _wrappedWidth = -1;
-    private readonly Stack<(ItemKey Key, int Npc, int Tab, int Recipe, int Scroll, int Stations)> _history = new();
+    private readonly record struct Page(ItemKey Key, int Npc, int Tab, int Recipe, int Scroll, int Stations, long Quantity);
+    private readonly Stack<Page> _history = new();
     private readonly UIButton[] _tabs;
     private readonly UIButton _close, _back, _previous, _next, _favorite, _forward;
-    private readonly Stack<(ItemKey Key, int Npc, int Tab, int Recipe, int Scroll, int Stations)> _future = new();
+    private readonly Stack<Page> _future = new();
     public Action FavoriteChanged;
     public Action Closed;
     private readonly UIElement _host;
@@ -55,6 +56,7 @@ internal sealed class UIBrowserDetails : UIElement
     public bool IsOpen { get; private set; }
     public float BottomReserve;
     public ItemKey SelectedKey => _key;
+    public long Quantity => _quantity;
     private int ReaderScroll => _plan?.Parent == this ? _plan.ScrollOffset : _scroll;
     public bool BlocksPointer => IsOpen && ContainsPoint(Main.MouseScreen);
     public UIBrowserDetails(UIElement host, bool terminal = false)
@@ -103,7 +105,7 @@ internal sealed class UIBrowserDetails : UIElement
     public void Show(ItemKey key, long quantity = 1, bool uses = false, bool remember = true, bool preserveTab = false)
     {
         if (key.IsAir) return;
-        if (remember && IsOpen && (!_key.Equals(key) || _npc > 0)) Remember();
+        if (remember && (!_key.Equals(key) || _npc > 0 || !preserveTab && _tab != (uses ? 2 : 0))) Remember();
         bool changed = !_key.Equals(key) || _npc > 0;
         _key = key; _npc = 0; _quantity = quantity;
         int previousScroll = ReaderScroll, previousStations = _stationScroll;
@@ -115,35 +117,53 @@ internal sealed class UIBrowserDetails : UIElement
     }
     public void ShowNpc(int type, bool remember = true)
     {
-        if (remember && IsOpen) Remember();
-        _npc = type; _key = ItemKey.None; _tab = 1; Open(); Rebuild();
+        if (remember && (_npc != type || !_key.IsAir)) Remember();
+        _npc = type; _key = ItemKey.None; _tab = 1; Open(); Rebuild(); Selected?.Invoke(ItemKey.None);
+    }
+    private Page CurrentPage => new(_key, _npc, _tab, _recipe, ReaderScroll, _stationScroll, _quantity);
+    private static void Push(Stack<Page> stack, Page page)
+    {
+        if (stack.Count >= 64)
+        {
+            var recent = stack.Take(63).Reverse().ToArray();
+            stack.Clear(); foreach (var entry in recent) stack.Push(entry);
+        }
+        stack.Push(page);
     }
     private void Remember()
     {
-        if (_history.Count >= 64) _history.Clear();
-        _history.Push((_key, _npc, _tab, _recipe, ReaderScroll, _stationScroll)); _future.Clear();
+        if (_key.IsAir && _npc <= 0) return;
+        Push(_history, CurrentPage); _future.Clear();
+    }
+    private void Restore(Page page)
+    {
+        _tab = page.Tab;
+        if (page.Npc > 0) ShowNpc(page.Npc, false);
+        else Show(page.Key, page.Quantity, false, false, preserveTab: true);
+        _tab = page.Tab; _recipe = page.Recipe; _quantity = page.Quantity;
+        Rebuild(); _scroll = page.Scroll; if (_plan?.Parent == this) _plan.ScrollOffset = page.Scroll;
+        _stationScroll = page.Stations;
     }
     private void Back()
     {
         if (_history.Count == 0) return;
-        _future.Push((_key, _npc, _tab, _recipe, ReaderScroll, _stationScroll));
-        var entry = _history.Pop(); _tab = entry.Tab;
-        if (entry.Npc > 0) ShowNpc(entry.Npc, false); else Show(entry.Key, _quantity, false, false, preserveTab: true);
-        _recipe = entry.Recipe; Rebuild(); _scroll = entry.Scroll; if (_plan?.Parent == this) _plan.ScrollOffset = entry.Scroll; _stationScroll = entry.Stations;
+        Push(_future, CurrentPage); Restore(_history.Pop());
     }
     private void Forward()
     {
         if (_future.Count == 0) return;
-        _history.Push((_key, _npc, _tab, _recipe, ReaderScroll, _stationScroll)); var entry = _future.Pop(); _tab = entry.Tab;
-        if (entry.Npc > 0) ShowNpc(entry.Npc, false); else Show(entry.Key, _quantity, false, false, preserveTab: true);
-        _recipe = entry.Recipe; Rebuild(); _scroll = entry.Scroll; if (_plan?.Parent == this) _plan.ScrollOffset = entry.Scroll; _stationScroll = entry.Stations;
+        Push(_history, CurrentPage); Restore(_future.Pop());
     }
     private void UpdateFavorite() => _favorite.Selected = BrowserFavorites.Contains(_npc > 0 ? _npc : _key.Type, _npc > 0);
-    public void SetTab(int tab) { _tab = tab; _recipe = 0; Rebuild(); }
+    public void SetTab(int tab)
+    {
+        if (_npc > 0 || tab < 0 || tab >= _tabs.Length || tab == _tab) return;
+        Remember(); _tab = tab; _recipe = 0; Rebuild();
+    }
     private void CycleRecipe(int delta)
     {
         if (_recipeCount <= 1) return;
-        _recipe = (_recipe + delta + _recipeCount) % _recipeCount; _alternativeSelection.Clear(); Rebuild();
+        Remember(); _recipe = (_recipe + delta + _recipeCount) % _recipeCount; _alternativeSelection.Clear(); Rebuild();
     }
     public void SetBounds(float x, float y, float width, float height)
     {

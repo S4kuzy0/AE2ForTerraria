@@ -101,8 +101,10 @@ public static partial class MENet
             if (message == ClientSlotAction) ApplySlot(position,slot,station,right,who);
             else
             {
+                var preview = StorageOperations.PreviewDeposit(MENetwork.CollectStorage(position.X, position.Y), Main.player[who].inventory[58]);
                 long moved=ApplyCursorDeposit(position,Main.player[who]);
-                Notify(who,moved>0 ? "已存入 "+moved+" 件" : "未存入：终端已变化、空间不足或过滤规则拒绝物品");
+                Notify(who,moved>0 ? "已存入 "+moved+" 件" + (moved < preview.Requested ? "；其余保留在手中。" + preview.Reason : "")
+                    : preview.Accepted > 0 ? "未存入：目标已变化，请重新打开访问终端" : preview.Message);
                 SendNetworkLedgers(position.X,position.Y);
                 if (moved > 0) NetMessage.SendData(MessageID.SyncEquipment,-1,-1,null,who,58);
             }

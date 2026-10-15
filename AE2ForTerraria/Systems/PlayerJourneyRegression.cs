@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AE2ForTerraria.Content.Items;
@@ -51,6 +52,8 @@ public sealed class PlayerJourneyRegression : ModSystem
     private Dictionary<ItemKey, long> _savedStock;
     private int[] _inventoryBeforeOverlap;
     private bool _enabled;
+    private bool _copiedWorld;
+    private string _expectedWorldName = FixtureWorld;
     private bool _settingsCaptured, _oldAutoPause, _oldMapEnabled, _oldFullscreen;
     private int _oldWidth, _oldHeight;
     private readonly Dictionary<int, Rectangle> _nativeSlotBounds = new();
@@ -58,8 +61,15 @@ public sealed class PlayerJourneyRegression : ModSystem
     private string _lastClickType, _failure;
     private int _driveClicks, _clickGuardWaitFrames, _totalClickGuardWaitFrames;
     private int _overlapInventorySlot = -1, _foregroundClicksBeforeOverlap;
+    private int _worldRightFrames;
+    private Point16 _worldRightTarget;
+    private Vector2? _copiedAnchor;
+    private UIElement _clickTarget;
+    private int _clickGridType;
 
     private delegate void InputHook(Action original);
+    private delegate void PlayerHook(Action<Player> original, Player player);
+    private delegate bool LayerHook(Func<GameInterfaceLayer, bool> original, GameInterfaceLayer layer);
     private delegate string TextHook(Func<string, bool, string> original, string text, bool multiline);
     private delegate void PlayerSaveHook(Action<PlayerFileData, bool> original, PlayerFileData data, bool skipMap);
     private delegate void WorldSaveHook(Action<bool, bool> original, bool cloud, bool resetTime);
@@ -81,14 +91,44 @@ public sealed class PlayerJourneyRegression : ModSystem
         RequireDirectoryIsReal(_directory);
         _worldPath = Path.Combine(_directory, "sandbox.wld");
         _playerPath = Path.Combine(_directory, "actor.plr");
+        _copiedWorld = Environment.GetEnvironmentVariable("AE2_JOURNEY_COPIED_WORLD") == "1";
         if (!File.Exists(_worldPath) || !File.Exists(Path.ChangeExtension(_worldPath, ".twld")))
             throw new InvalidOperationException("Copy the independently named validation world and its twld into the run directory first.");
         foreach (string path in new[] { _worldPath, Path.ChangeExtension(_worldPath, ".twld"), _playerPath, Path.ChangeExtension(_playerPath, ".tplr") })
             if (File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidOperationException("Journey files must not be symlinks: " + path);
+        if (_copiedWorld)
+        {
+            using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(_directory, "snapshot.json")));
+            if (Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(_worldPath))) != manifest.RootElement.GetProperty("WorldHash").GetString()
+                || Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.ChangeExtension(_worldPath, ".twld")))) != manifest.RootElement.GetProperty("ModWorldHash").GetString())
+                throw new InvalidOperationException("Copied-world snapshot does not match its manifest.");
+        }
         _enabled = true;
         On_Main.Draw += Draw;
         MonoModHooks.Add(Method(typeof(PlayerInput), "UpdateInput"), new InputHook(UpdateInput));
+        MonoModHooks.Add(Method(typeof(GameInterfaceLayer), "Draw"), new LayerHook((original, layer) =>
+        {
+            bool before = Main.LocalPlayer.mouseInterface;
+            bool result = original(layer);
+            if (IsSandbox() && _worldRightFrames > 0 && !before && Main.LocalPlayer.mouseInterface)
+                Mod.Logger.Info("AE2 JOURNEY POINTER OWNER: " + layer.Name);
+            return result;
+        }));
+        MonoModHooks.Add(Method(typeof(Player), "LookForTileInteractions"), new PlayerHook((original, player) =>
+        {
+            if (IsSandbox() && _worldRightFrames > 0)
+                Mod.Logger.Info("AE2 JOURNEY NATIVE INPUT: " + JsonSerializer.Serialize(new
+                {
+                    _worldRightFrames, Main.mouseRight, Main.mouseRightRelease, player.controlUseTile, player.releaseUseTile,
+                    player.mouseInterface, Main.blockInput, Main.drawingPlayerChat, Player.tileTargetX, Player.tileTargetY,
+                    target = _worldRightTarget.ToString(), pointer = Main.MouseWorld.ToString(),
+                    captured = AEUiSession.CapturesInput, triggerRight = PlayerInput.Triggers.Current.MouseRight,
+                    Main.blockMouse, player.tileInteractAttempted, player.tileInteractionHappened,
+                    range = player.IsInTileInteractionRange(Player.tileTargetX, Player.tileTargetY, TileReachCheckSettings.Simple)
+                }));
+            original(player);
+        }));
         MonoModHooks.Modify(Method(typeof(Main), "DoUpdate", typeof(GameTime).MakeByRefType()), KeepSandboxUpdating);
         MonoModHooks.Add(Method(typeof(Main), "GetInputText", typeof(string), typeof(bool)), new TextHook(InputText));
         MonoModHooks.Add(Method(typeof(ItemSlot), "Draw", typeof(SpriteBatch), typeof(Item[]), typeof(int), typeof(int), typeof(Vector2), typeof(Color)),
@@ -159,7 +199,7 @@ public sealed class PlayerJourneyRegression : ModSystem
     }
 
     private bool IsSandbox() => _entered && Main.netMode == NetmodeID.SinglePlayer
-        && Main.worldName == FixtureWorld && SamePath(Main.ActiveWorldFileData?.Path, _worldPath)
+        && Main.worldName == _expectedWorldName && SamePath(Main.ActiveWorldFileData?.Path, _worldPath)
         && SamePath(Main.ActivePlayerFileData?.Path, _playerPath) && Main.LocalPlayer.name == FixturePlayer;
 
     private void Draw(On_Main.orig_Draw original, Main self, GameTime time)
@@ -192,8 +232,9 @@ public sealed class PlayerJourneyRegression : ModSystem
     private void EnterWorld()
     {
         WorldFileData world = WorldFile.GetAllMetadata(_worldPath, false);
-        if (world == null || world.Name != FixtureWorld || !SamePath(world.Path, _worldPath))
+        if (world == null || !_copiedWorld && world.Name != FixtureWorld || !SamePath(world.Path, _worldPath))
             throw new InvalidOperationException("Journey requires the known independent validation world, never a user's world.");
+        _expectedWorldName = world.Name;
         PlayerFileData data;
         if (_reload)
         {
@@ -230,6 +271,19 @@ public sealed class PlayerJourneyRegression : ModSystem
         if (!_enabled || _done || _saving || !IsSandbox() || Main.gameMenu) return;
         PlayerInput.Triggers.Current.Reset();
         PlayerInput.Triggers.Current.Right = _moveRight;
+        if (_clickFrames > 0 && _clickTarget != null)
+        {
+            _pointer = _clickTarget.GetDimensions().Center();
+            if (_clickTarget is UIItemGrid grid && _clickGridType > 0)
+            {
+                int index = grid.KeyMode ? Field<List<ItemKey>>(grid, "_keys").FindIndex(key => key.Type == _clickGridType)
+                    : Field<List<int>>(grid, "_items").IndexOf(_clickGridType);
+                int row = index / grid.Columns - Field<int>(grid, "_rowOffset");
+                var bounds = grid.GetDimensions();
+                _pointer = new Vector2(bounds.X + index % grid.Columns * grid.CellSize + grid.CellSize / 2,
+                    bounds.Y + row * grid.CellSize + grid.CellSize / 2);
+            }
+        }
         bool left = _clickFrames == 3 || _clickFrames == 2;
         // Native SetState/ResetState reserves 200 ms for opening-click suppression. Wait for
         // that actual timer to expire; never clear it or mistake the suppressed click for a bug.
@@ -247,17 +301,25 @@ public sealed class PlayerJourneyRegression : ModSystem
                     + "; guardMs=" + ClickGuardMilliseconds() + "; hasFocus=" + Main.hasFocus);
                 _clickGuardWaitFrames = 0;
             }
-            if (_clickFrames > 0) _clickFrames--;
+            if (_clickFrames > 0 && --_clickFrames == 0) _clickTarget = null;
         }
         PlayerInput.Triggers.Current.MouseLeft = left;
+        bool right = _worldRightFrames == 3 || _worldRightFrames == 2;
+        if (_worldRightFrames > 0)
+        {
+            _pointer = Vector2.Transform(new Vector2(_worldRightTarget.X * 16 + 8, _worldRightTarget.Y * 16 + 8)
+                - Main.screenPosition, Main.GameViewMatrix.TransformationMatrix) / Main.UIScale;
+            _worldRightFrames--;
+        }
+        PlayerInput.Triggers.Current.MouseRight = right;
         PlayerInput.Triggers.Update();
         PlayerInput.MouseInfoOld = PlayerInput.MouseInfo;
         PlayerInput.MouseInfo = new MouseState((int)(_pointer.X * Main.UIScale), (int)(_pointer.Y * Main.UIScale), 0,
-            left ? ButtonState.Pressed : ButtonState.Released, ButtonState.Released, ButtonState.Released,
+            left ? ButtonState.Pressed : ButtonState.Released, ButtonState.Released, right ? ButtonState.Pressed : ButtonState.Released,
             ButtonState.Released, ButtonState.Released);
         PlayerInput.MouseX = PlayerInput.MouseInfo.X; PlayerInput.MouseY = PlayerInput.MouseInfo.Y;
         PlayerInput.UpdateMainMouse();
-        Main.mouseLeft = left; Main.mouseRight = false; Main.mouseMiddle = false;
+        Main.mouseLeft = left; Main.mouseRight = right; Main.mouseMiddle = false;
         Main.keyState = new KeyboardState();
         PlayerInput.CacheZoomableValues();
     }
@@ -273,15 +335,18 @@ public sealed class PlayerJourneyRegression : ModSystem
         if (!_enabled || _done || _saving || !IsSandbox() || Main.gameMenu || WorldGen.noMapUpdate) return;
         try
         {
+            if (_copiedWorld && _copiedAnchor.HasValue)
+            { Main.LocalPlayer.Center = _copiedAnchor.Value; Main.LocalPlayer.velocity = Vector2.Zero; }
             Main.LocalPlayer.statLife = Main.LocalPlayer.statLifeMax2;
             Main.LocalPlayer.immune = true; Main.LocalPlayer.immuneTime = 60;
             if (++_worldFrames < 90) return;
             if (!_prepared)
             {
                 _prepared = true;
-                if (_reload) BuildReloadSteps(); else { PrepareArena(); BuildSteps(); }
+                if (_copiedWorld) BuildCopiedWorldSteps();
+                else if (_reload) BuildReloadSteps(); else { PrepareArena(); BuildSteps(); }
             }
-            if (--_delay > 0 || _capture != null || _clickFrames > 0 || _steps.Count == 0) return;
+            if (--_delay > 0 || _capture != null || _clickFrames > 0 || _worldRightFrames > 0 || _steps.Count == 0) return;
             var step = _steps.Dequeue();
             long start = Stopwatch.GetTimestamp();
             step.Run();
@@ -296,6 +361,14 @@ public sealed class PlayerJourneyRegression : ModSystem
     private void PrepareArena()
     {
         Require(IsSandbox() && !Main.gameMenu, "real world and isolated player are active");
+        var notices = typeof(InGameNotificationsTracker).GetField("_notifications", BindingFlags.Static | BindingFlags.NonPublic)
+            ?.GetValue(null) as System.Collections.IEnumerable;
+        if (notices != null)
+            foreach (var notice in notices) Mod.Logger.Info("AE2 JOURNEY ENTRY NOTICE: " + notice.GetType().FullName);
+        // Newly constructed test actors receive large mod introduction cards in the native
+        // notification layer. They cover the world's mouse target; exclude this fixture-only
+        // obstruction before testing machines, without changing mods or personal preferences.
+        InGameNotificationsTracker.Clear();
         int x = Math.Clamp(Main.spawnTileX + 60, 100, Main.maxTilesX - 140);
         int floor = Math.Clamp(Main.spawnTileY - 5, 100, Main.maxTilesY - 100);
         foreach (var pair in TileEntity.ByPosition.Where(pair => pair.Key.X >= x - 20 && pair.Key.X <= x + 100
@@ -336,6 +409,57 @@ public sealed class PlayerJourneyRegression : ModSystem
 
     private void Step(string name, Action action, int delay = 30) => _steps.Enqueue((name, action, delay));
 
+    private void BuildCopiedWorldSteps()
+    {
+        Require(IsSandbox() && _copiedWorld, "interaction inspection uses only the verified world copy and isolated actor");
+        InGameNotificationsTracker.Clear();
+        Main.LocalPlayer.GetModPlayer<MEPlayer>().MagnetEnabled = false;
+        _drive = TileEntity.ByPosition.Values.OfType<MEDiskDriveEntity>().FirstOrDefault()
+            ?? throw new InvalidOperationException("Copied world contains no disk drive entity.");
+        _drivePosition = _drive.Position;
+        _savedStock = _drive.Ledger.Entries.ToDictionary(pair => pair.Key, pair => pair.Value);
+        Mod.Logger.Info("AE2 COPIED WORLD DRIVE: types=" + _drive.Ledger.StoredTypeCount + "/" + _drive.Ledger.MaxTypes
+            + "; amount=" + _drive.Ledger.StoredTotalAmount + "; disks=" + _drive.Disks.Count(item => !item.IsAir));
+        int access = ModContent.TileType<MEAccessTerminalTile>(), craft = ModContent.TileType<MECraftingTerminalTile>(),
+            driveType = ModContent.TileType<MEDiskDriveTile>();
+        var machines = MENetwork.Collect(_drivePosition.X, _drivePosition.Y)
+            .Select(point => MachineTiles.Origin(point.X, point.Y)).Distinct()
+            .Where(point => { int type = MachineTiles.CanonicalType(Main.tile[point.X, point.Y].TileType);
+                return type == access || type == craft || type == driveType; }).Take(6).ToArray();
+        Require(machines.Length > 0, "existing saved machine anchors are discovered without rebuilding the network");
+        foreach (var origin in machines)
+        {
+            int type = MachineTiles.CanonicalType(Main.tile[origin.X, origin.Y].TileType);
+            int size = MachineTiles.IsLarge(Main.tile[origin.X, origin.Y].TileType) ? 2 : 1;
+            for (int dx = 0; dx < size; dx++) for (int dy = 0; dy < size; dy++)
+            {
+                var cell = new Point16(origin.X + dx, origin.Y + dy);
+                Step("prepare copied-world native target " + cell, () =>
+                {
+                    UISystem.CloseAll(); Main.playerInventory = false;
+                    _copiedAnchor = new Vector2(cell.X * 16 - 32, cell.Y * 16 + 8);
+                    Main.LocalPlayer.Center = _copiedAnchor.Value;
+                });
+                Step("press copied-world native MouseRight " + cell, () =>
+                { _worldRightTarget = cell; _worldRightFrames = 4; });
+                Step("verify copied-world machine " + cell, () =>
+                {
+                    Require(type == driveType ? ReferenceEquals(UISystem.SecondaryInterface.CurrentState, UISystem.DriveState)
+                        : ReferenceEquals(UISystem.Interface.CurrentState, UISystem.TerminalState),
+                        "saved machine opens through native mouse input at " + cell);
+                    if (type != driveType) Require(UISystem.ActiveTerminalViewMode == (type == access ? TerminalViewMode.Access : TerminalViewMode.Craft),
+                        "saved terminal selects its correct access/crafting mode");
+                });
+            }
+        }
+        Step("finish copied-world inspection without saving", () =>
+        {
+            Require(_drive.Ledger.Entries.Count == _savedStock.Count && _savedStock.All(pair => _drive.Ledger.GetAmount(pair.Key) == pair.Value),
+                "opening saved machines does not alter the copied inventory");
+            UISystem.CloseAll(); _done = true; WriteResult(true, null); RestoreSettings(); Main.instance.Exit();
+        });
+    }
+
     private void BuildSteps()
     {
         Step("open JEI and begin movement", () =>
@@ -368,6 +492,19 @@ public sealed class PlayerJourneyRegression : ModSystem
             Require(Field<UIBrowserDetails>(UISystem.SearchState, "_details").IsOpen, "item click opens JEI details during real gameplay");
             Require(!AEUiSession.KeyboardCaptured, "item click leaves text entry");
             _capture = "03-jei-item-details";
+        });
+        Step("prepare native world right-click", () =>
+        {
+            UISystem.CloseAll(); Main.playerInventory = false;
+            Main.LocalPlayer.Center = new Vector2(_drivePosition.X * 16 - 32, _drivePosition.Y * 16 + 8);
+            Main.LocalPlayer.velocity = Vector2.Zero;
+        });
+        Step("inject native world right-click", () =>
+        { _worldRightTarget = _drivePosition; _worldRightFrames = 4; });
+        Step("verify native world dispatch", () =>
+        {
+            Require(ReferenceEquals(UISystem.SecondaryInterface.CurrentState, UISystem.DriveState),
+                "injected native MouseRight opens a machine without calling its RightClick callback");
         });
         Step("open actual disk drive", () =>
         {
@@ -529,6 +666,7 @@ public sealed class PlayerJourneyRegression : ModSystem
             _inventoryBeforeOverlap = Main.LocalPlayer.inventory.Select(item => HashCode.Combine(item.type, item.stack, item.prefix)).ToArray();
             _foregroundClicksBeforeOverlap = _driveClicks;
             _lastClickBounds = slot.GetDimensions().ToRectangle(); _lastClickType = "three-way-overlap";
+            _clickTarget = null;
             _clickFrames = 4;
         });
         Step("check no input fallthrough and save", () =>
@@ -540,6 +678,63 @@ public sealed class PlayerJourneyRegression : ModSystem
             Require(_drive.Disks[0].type == ModContent.ItemType<MEDisk1K>() && Main.mouseItem.IsAir,
                 "removing the only occupied disk is refused without item loss");
             _capture = "08-foreground-drive";
+        });
+        Step("fill identity capacity and reject a new item", () =>
+        {
+            UISystem.CloseAll(); RightClick(_accessPosition); PositionWindow(UISystem.TerminalState);
+            for (int type = 1; _drive.Ledger.StoredTypeCount < 32; type++)
+                _drive.Ledger.Insert(ItemKey.Crafted(type), 1);
+            Main.LocalPlayer.inventory[25] = new Item(ItemID.LunarBar, 7);
+            Main.LocalPlayer.inventory[26] = new Item(ModContent.ItemType<MEDisk1K>());
+            var preview = StorageOperations.PreviewDeposit(UISystem.ActiveNetwork, Main.LocalPlayer.inventory[25]);
+            Require(preview.Accepted == 0 && preview.Reason.Contains("加盘"), "full identity capacity is reported before attempting a deposit");
+            NativePick(25); Click(Field<UIItemGrid>(UISystem.TerminalState, "_grid"));
+        });
+        Step("check full cursor rejection and prepare drive recovery", () =>
+        {
+            Require(Main.mouseItem.type == ItemID.LunarBar && Main.mouseItem.stack == 7
+                && _drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.LunarBar)) == 0,
+                "full identity deposit leaves all seven items on the cursor and creates no ledger entry");
+            Require(UIStatus.Active().Any(line => line.Text.Contains("类别已满")), "the rejected deposit explicitly tells the player to add a disk");
+            bool left = Main.mouseLeft, release = Main.mouseLeftRelease;
+            using (AEUiSession.EnterOwnedInput())
+            {
+                Main.mouseLeft = Main.mouseLeftRelease = true;
+                ItemSlot.LeftClick(Main.LocalPlayer.inventory, 0, 25);
+            }
+            Main.mouseLeft = left; Main.mouseLeftRelease = release;
+            Require(Main.mouseItem.IsAir && Main.LocalPlayer.inventory[25].stack == 7, "rejected cursor stack returns through the native inventory slot");
+            UISystem.CloseAll(); Main.playerInventory = false;
+            Main.LocalPlayer.Center = new Vector2(_drivePosition.X * 16 - 32, _drivePosition.Y * 16 + 8);
+            Main.LocalPlayer.velocity = Vector2.Zero;
+        });
+        Step("right-click full drive with native input", () =>
+        { _worldRightTarget = _drivePosition; _worldRightFrames = 4; });
+        Step("install expansion disk through the open full drive", () =>
+        {
+            Require(ReferenceEquals(UISystem.SecondaryInterface.CurrentState, UISystem.DriveState),
+                "a drive at its identity limit still opens from native MouseRight");
+            NativePick(26); Click(Field<List<UIItemSlotElement>>(UISystem.DriveState, "_slots")[1]);
+        });
+        Step("verify expansion and retry refused stack", () =>
+        {
+            Require(_drive.Ledger.MaxTypes == 64 && _drive.Disks[1].type == ModContent.ItemType<MEDisk1K>()
+                && Main.mouseItem.IsAir && Main.LocalPlayer.inventory[26].IsAir,
+                "adding a disk raises full-drive capacity without moving stored contents");
+            UISystem.CloseAll(); RightClick(_accessPosition);
+            _pointer = new Vector2(20, 680);
+        });
+        Step("deposit the preserved stack after expansion", () =>
+        {
+            Require(Main.LocalPlayer.GetModPlayer<MEPlayer>().ShiftClickSlot(Main.LocalPlayer.inventory, 0, 25)
+                && Main.LocalPlayer.inventory[25].IsAir && _drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.LunarBar)) == 7,
+                "expansion permits exactly the seven previously refused items to be deposited");
+            UIStatus.Clear(); bool damaged = false;
+            for (int i = 0; i < 10; i++)
+                Require(!TileLoader.GetTile(Main.tile[_craftPosition.X, _craftPosition.Y].TileType)
+                    .CanKillTile(_craftPosition.X, _craftPosition.Y, ref damaged), "a terminal containing stations remains protected");
+            Require(UIStatus.Active().Count == 1, "repeated station protection checks produce one readable notification");
+            _capture = "10-capacity-recovered";
         });
         Step("save sandbox and reload", () =>
         {
@@ -605,6 +800,7 @@ public sealed class PlayerJourneyRegression : ModSystem
     {
         Require(element != null && element.Parent != null, "click target is attached to its live interface");
         _pointer = element.GetDimensions().Center(); _clickFrames = 4;
+        _clickTarget = element; _clickGridType = 0;
         _lastClickBounds = element.GetDimensions().ToRectangle(); _lastClickType = element.GetType().Name;
         Mod.Logger.Info("AE2 JOURNEY CLICK: " + JsonSerializer.Serialize(DiagnosticState()));
     }
@@ -621,6 +817,7 @@ public sealed class PlayerJourneyRegression : ModSystem
         _pointer = new Vector2(bounds.X + (index % grid.Columns) * grid.CellSize + grid.CellSize / 2,
             bounds.Y + displayedRow * grid.CellSize + grid.CellSize / 2);
         _clickFrames = 4;
+        _clickTarget = grid; _clickGridType = itemType;
     }
 
     private static void PositionWindow(MovableWindowState window)
@@ -646,7 +843,18 @@ public sealed class PlayerJourneyRegression : ModSystem
         Require(!Main.mouseItem.IsAir, "vanilla ItemSlot.LeftClick transfers the inventory item to the cursor");
     }
 
-    private static void RightClick(Point16 position) => TileLoader.GetTile(Main.tile[position.X, position.Y].TileType).RightClick(position.X, position.Y);
+    private static void RightClick(Point16 position)
+    {
+        // Exercise the game's reach/release/TileLoader dispatch, never call ModTile.RightClick directly.
+        var player = Main.LocalPlayer;
+        player.Center = new Vector2(position.X * 16 + 8, position.Y * 16 + 8);
+        player.velocity = Vector2.Zero;
+        Player.tileTargetX = position.X; Player.tileTargetY = position.Y;
+        Main.SmartInteractShowingGenuine = false;
+        player.controlUseTile = true; player.releaseUseTile = true;
+        Method(typeof(Player), "LookForTileInteractions").Invoke(player, null);
+        player.controlUseTile = false;
+    }
 
     private void Require(bool condition, string message)
     {
