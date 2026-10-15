@@ -86,29 +86,30 @@ namespace AE2ForTerraria.Content.Tiles
 			return Place(i, j);
 		}
 
-		/// <summary>把任务加进队列;已经排了同一个物品就累加数量。</summary>
-		/// <summary>入队。队列满了返回 false(不静默丢弃,让调用方提示玩家)。</summary>
+		/// <summary>兼容入口：同身份、同请求人的任务在数值允许时合并，不限制队列长度。</summary>
 		public bool Enqueue(ItemKey key, long count, string requestedBy = null)
+            => TryEnqueue(key, count, requestedBy, true, out _);
+
+        internal bool TryEnqueue(ItemKey key, long count, string requestedBy, bool merge, out Job job)
 		{
+            job = null;
 			if (!SavedItemGuard.IsValidType(key.Type) || key.Prefix != 0 || key.Data != null || count <= 0)
 			{
 				return false;
 			}
 
-			foreach (Job existing in Jobs)
-			{
-				if (existing.Key.Equals(key) && string.Equals(existing.RequestedBy ?? "", requestedBy ?? "", StringComparison.Ordinal))
-				{
-                    // A full numeric range is a representation boundary, not an arbitrary
-                    // order cap. Keep a second job when the existing total cannot merge.
-					if (existing.Total > long.MaxValue - count || existing.Remaining > long.MaxValue - count) continue;
-                    existing.Remaining += count;
-					existing.Total += count;
-					return true;
-				}
-			}
+            if (merge)
+                foreach (Job existing in Jobs)
+                {
+                    if (!existing.Key.Equals(key) || !string.Equals(existing.RequestedBy ?? "", requestedBy ?? "", StringComparison.Ordinal)) continue;
+                    // Preserve the full numeric range without overflowing a merged order.
+                    if (existing.Total > long.MaxValue - count || existing.Remaining > long.MaxValue - count) continue;
+                    existing.Remaining += count; existing.Total += count;
+                    job = existing;
+                    return true;
+                }
 
-			Jobs.Add(new Job
+			Jobs.Add(job = new Job
 			{
 				Key = key,
 				Remaining = count,

@@ -1,6 +1,6 @@
 displayName = AE2 for Terraria
 author = ROG
-version = 0.26.3
+version = 0.26.4
 homepage =
 side =
 playableOnPreview = false

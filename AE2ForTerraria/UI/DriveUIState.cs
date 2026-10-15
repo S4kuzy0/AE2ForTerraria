@@ -15,7 +15,7 @@ namespace AE2ForTerraria.UI
 	/// <summary>磁盘驱动器界面:排列磁盘槽位、显示容量占用,并列出已存了什么。</summary>
 	public sealed class DriveUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(800f, 600f, 680f, 500f);
+		private static readonly WindowGeometry Geometry = new WindowGeometry(800f, 500f, 680f, 320f);
 
 		private readonly List<UIItemSlotElement> _slots = new List<UIItemSlotElement>();
 		private UIText _capacity;
@@ -28,7 +28,6 @@ namespace AE2ForTerraria.UI
 		private MEDiskDriveEntity _drive;
 		private UIPanel _capacityBar;
 		private UIPanel _capacityFill;
-        private UIPlayerInventoryPanel _inventory;
 
 		public override void OnInitialize()
 		{
@@ -67,8 +66,6 @@ namespace AE2ForTerraria.UI
 				ApplyPanelVisibility();
 			};
 			Window.Append(_tabButton);
-            _inventory = new UIPlayerInventoryPanel();
-            Window.Append(_inventory);
 
 			for (int i = 0; i < MEDiskDriveEntity.DiskSlots; i++)
 			{
@@ -106,7 +103,6 @@ namespace AE2ForTerraria.UI
 		protected override void ApplyLayout()
 		{
 			base.ApplyLayout();
-            float inventoryTop = Geo.H - 224f;
 
 			for (int i = 0; i < _slots.Count; i++)
 			{
@@ -133,17 +129,16 @@ namespace AE2ForTerraria.UI
 
 			_contents.Place(listLeft - 4f, 46f,
 				Math.Max(80f, Geo.W - listLeft - Pad),
-				Math.Max(120f, inventoryTop - 86f));
+				Math.Max(120f, Geo.H - 94f));
 
 			_partition.Place(listLeft - 4f, 46f,
 				Math.Max(80f, Geo.W - listLeft - Pad),
-				Math.Max(120f, inventoryTop - 86f));
+				Math.Max(120f, Geo.H - 94f));
 
 			_tabButton.Left.Set(listLeft - 4f, 0f);
-			_tabButton.Top.Set(inventoryTop - 32f, 0f);
+			_tabButton.Top.Set(Geo.H - 42f, 0f);
 			_tabButton.Width.Set(120f, 0f);
 			_tabButton.Height.Set(26f, 0f);
-            _inventory.SetBounds(Pad + 8f, inventoryTop, Geo.W - Pad * 2f - 16f, 208f);
 
 			Window.Recalculate();
 			ApplyPanelVisibility();

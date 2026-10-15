@@ -106,9 +106,9 @@ namespace AE2ForTerraria.Systems
                     var assembler = MENetwork.FindAssembler(position.X,position.Y);
                     if (cpu != null)
                     {
-                        bool added = cpu.Enqueue(key,amount,Main.player[whoAmI].name);
+                        bool added = TerminalCraftingExecutor.Submit(cpu,key,amount,Main.player[whoAmI].name,out string result);
                         if (added) AuditOrder(position,whoAmI,key,amount);
-                        SendCpu(cpu.Position); Notify(whoAmI,added ? "合成任务已加入队列" : "物品或数量无效");
+                        Notify(whoAmI,result);
                     }
                     else if (assembler != null && amount == 1)
                     { assembler.Target=key; SendAssembler(assembler.Position); Notify(whoAmI,"已设定装配目标"); }

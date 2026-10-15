@@ -107,9 +107,8 @@ internal static class AutocraftingRegression
             check(full.Ledger.GetAmount(ItemKey.Crafted(ItemID.Torch)) == 8 && worker.Target.IsAir,
                 "pending manufacture resumes when storage capacity is restored");
 
-            // The actual terminal command now belongs only to the crafting view.
-            // Its network has an integrated terminal, not an uninitialized access UI
-            // pointing at a legacy assembler coordinate.
+            // Core tests the shared authority operation; the client render suite separately
+            // clicks a fully initialized order button. No server fixture needs UI/font setup.
             world.Reset();
             var host = world.Place(new MECraftingTerminalEntity(), ModContent.TileType<MECraftingTerminalTile>(), 30, 30);
             var stock = world.Place(new MEStorageUnitEntity(), ModContent.TileType<MEStorageUnitTile>(), 31, 30);
@@ -120,22 +119,19 @@ internal static class AutocraftingRegression
             Main.LocalPlayer.Center = new Vector2(host.Position.X * 16f + 8f, host.Position.Y * 16f + 8f);
             NetworkRegistry.TryClaim(MENetwork.CanonicalAnchor(MENetwork.Collect(30, 30)), Main.LocalPlayer.name);
             UISystem.SetActiveNetwork(new() { stock }, null, host);
-            var craftView = new TerminalUIState();
-            typeof(TerminalUIState).GetField("_viewMode", Hidden).SetValue(craftView, TerminalViewMode.Craft);
-            typeof(TerminalUIState).GetField("_selected", Hidden).SetValue(craftView, ItemKey.Crafted(ItemID.Torch));
-            typeof(TerminalUIState).GetMethod("OrderCraft", Hidden).Invoke(craftView, null);
-            check(host.Jobs.Count == 1 && host.Jobs[0].Key.Type == ItemID.Torch && host.Jobs[0].Remaining == 1,
-                "craft view command queues newly manufactured output on the integrated terminal");
+            check(TerminalCraftingExecutor.Submit(host,ItemKey.Crafted(ItemID.Torch),1,Main.LocalPlayer.name,out string result)
+                && host.Jobs.Count == 0 && stock.Ledger.GetAmount(ItemKey.Crafted(ItemID.Torch)) == 8 && result.StartsWith("合成完成"),
+                "shared manual order completes new output synchronously on the integrated terminal");
             var accessView = new TerminalUIState();
             typeof(TerminalUIState).GetField("_selected", Hidden).SetValue(accessView, ItemKey.Crafted(ItemID.Torch));
             typeof(TerminalUIState).GetMethod("OrderCraft", Hidden).Invoke(accessView, null);
-            check(host.Jobs.Count == 1 && stock.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood)) == 1,
+            check(host.Jobs.Count == 0 && stock.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood)) == 0,
                 "access view cannot enqueue crafts or consume materials through the terminal command");
             host.Update();
             check(host.Jobs.Count == 0 && stock.Ledger.GetAmount(ItemKey.Crafted(ItemID.Torch)) == 8
                 && stock.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood)) == 0
                 && stock.Ledger.GetAmount(ItemKey.Crafted(ItemID.Gel)) == 0,
-                "integrated terminal executes the real craft-view command without CPU or assembler and preserves existing target stock");
+                "world update after an instant command cannot duplicate its completed output");
         }
         finally
         {

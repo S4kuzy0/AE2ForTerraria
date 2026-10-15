@@ -266,6 +266,17 @@ namespace AE2ForTerraria.Systems
 			packet.Send(toClient);
 		}
 
+        internal static void NotifyCraftCompleted(string playerName, string text)
+        {
+            if (string.IsNullOrEmpty(playerName)) return; // Anonymous keep-stock jobs stay quiet.
+            if (IsServer)
+            {
+                foreach (var player in Main.player)
+                    if (player?.active == true && player.name == playerName) { Notify(player.whoAmI, text); break; }
+            }
+            else if (Main.netMode == NetmodeID.SinglePlayer && Main.LocalPlayer?.name == playerName) UIStatus.Toast(text);
+        }
+
 		public static void ClaimNetwork(Point16 anchor)
 		{
 			if (!IsClient)

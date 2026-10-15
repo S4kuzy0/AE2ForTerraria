@@ -969,18 +969,14 @@ namespace AE2ForTerraria.UI
 			// 有独立合成 CPU 就排进队列(能排队、有进度),否则退回装配室的单一目标
 			if (UISystem.ActiveCraftingCpu != null)
 			{
-				if (!UISystem.ActiveCraftingCpu.Enqueue(ItemKey.Crafted(orderType), _orderQuantity, Main.LocalPlayer?.name))
+                if (!TerminalCraftingExecutor.Submit(UISystem.ActiveCraftingCpu, ItemKey.Crafted(orderType), _orderQuantity, Main.LocalPlayer?.name, out string result))
 				{
-					UIStatus.Toast("物品或数量无效", new Color(255, 180, 180));
+                    UIStatus.Toast(result, new Color(255, 180, 180));
 					return;
 				}
 
-				UISystem.ActiveCraftingCpu.LastStatus = ModText.Get("MsgOrdered", "已下单:")
-					+ name + " x" + _orderQuantity;
-				UIStatus.Toast(ModText.Get("MsgQueued", "已加入合成队列:") + name + " x" + _orderQuantity
-					+ "(" + ModText.Get("LabelQueue", "队列") + " "
-					+ UISystem.ActiveCraftingCpu.Jobs.Count + " "
-					+ ModText.Get("StatusItemsSuffix", "项") + ")");
+                UIStatus.Toast(result);
+                AfterNetworkChange();
 				return;
 			}
 

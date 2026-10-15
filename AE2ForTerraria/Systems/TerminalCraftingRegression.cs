@@ -41,6 +41,53 @@ public static class TerminalCraftingRegression
             check(f.Terminal.Jobs.Count==0 && f.Storage.Ledger.GetAmount(Torch)==100009 && f.Storage.Ledger.GetAmount(Wood)==66666,
                 "terminal crafts full affordable batch immediately without CPU or assembler and preserves existing output");
 
+            f=Setup();
+            check(TerminalCraftingExecutor.Submit(f.Terminal,Torch,10,null,out string immediate)
+                && f.Terminal.Jobs.Count==0 && f.Storage.Ledger.GetAmount(Torch)==12 && f.Storage.Ledger.GetAmount(Wood)==16,
+                "manual submission commits all four triple-output batches before returning without a world tick");
+            check(immediate.StartsWith("合成完成") && immediate.Contains("10"),
+                "instant submission returns an explicit completion notice with requested quantity");
+            f=Setup();f.Terminal.Enqueue(Torch,300);var older=f.Terminal.Jobs[0];older.Paused=true;
+            check(TerminalCraftingExecutor.Submit(f.Terminal,Torch,3,null,out _)
+                && f.Terminal.Jobs.Count==1 && ReferenceEquals(f.Terminal.Jobs[0],older) && older.Paused && older.Remaining==300
+                && f.Storage.Ledger.GetAmount(Torch)==3 && f.Storage.Ledger.GetAmount(Wood)==19,
+                "new manual order executes independently of an older paused order for the same item");
+            f=Setup();f.Terminal.Paused=true;
+            check(TerminalCraftingExecutor.Submit(f.Terminal,Torch,3,null,out string suspended)
+                && suspended.Contains("暂停") && f.Terminal.Jobs.Count==1 && f.Terminal.Jobs[0].LastStatus==suspended
+                && f.Storage.Ledger.GetAmount(Wood)==20,
+                "instant order respects a paused host and keeps unconsumed work with an explanation");
+            f.Terminal.Paused=false;f.Terminal.Update();
+            check(f.Terminal.Jobs.Count==0 && f.Storage.Ledger.GetAmount(Torch)==3,
+                "paused manual order completes normally when resumed");
+            f=Setup();f.Storage.Filter.Add(ItemID.Wood);f.Storage.IsWhitelist=true;f.Storage.MarkFilterDirty();
+            check(TerminalCraftingExecutor.Submit(f.Terminal,Torch,3,null,out string refused)
+                && !refused.StartsWith("合成完成") && f.Storage.Ledger.GetAmount(Wood)==20
+                && f.Storage.Ledger.GetAmount(Torch)==0 && f.Terminal.Jobs.Count==1,
+                "instant output refusal cannot report completion or consume ingredients");
+            f=Setup();
+            check(!TerminalCraftingExecutor.Submit(f.Terminal,Torch,0,null,out _)
+                && f.Terminal.Jobs.Count==0 && f.Storage.Ledger.GetAmount(Wood)==20,
+                "instant submission validates quantity before queue or inventory mutation");
+
+            int localIndex=Main.myPlayer; Player previousLocal=Main.player[localIndex];
+            try
+            {
+                Main.player[localIndex]=new Player { active=true,whoAmI=localIndex,name="AE2CompletionNotice" };
+                f=Setup(1);var noticeAnchor=MENetwork.CanonicalAnchor(MENetwork.Collect(30,30));
+                NetworkRegistry.TryClaim(noticeAnchor,Main.LocalPlayer.name);
+                f.Terminal.Enqueue(Torch,6,Main.LocalPlayer.name);UIStatus.Clear();f.Terminal.Update();
+                check(f.Terminal.Jobs.Count==1 && !System.Linq.Enumerable.Any(UIStatus.Active(),line=>line.Text.StartsWith("合成完成")),
+                    "partially executed waiting job does not emit a false completion notice");
+                f.Storage.Ledger.Insert(Wood,1);f.Terminal.Update();
+                check(f.Terminal.Jobs.Count==0 && System.Linq.Enumerable.Count(UIStatus.Active(),line=>line.Text.StartsWith("合成完成"))==1,
+                    "restocked named job notifies its local requester when the final batch completes");
+                f.Terminal.Update();
+                check(System.Linq.Enumerable.Count(UIStatus.Active(),line=>line.Text.StartsWith("合成完成"))==1,
+                    "later world updates cannot repeat a completed order notification");
+            }
+            finally { Main.player[localIndex]=previousLocal;UIStatus.Clear(); }
+
             f=Setup();f.Terminal.Enqueue(Torch,3);var paused=f.Terminal.Jobs[0];paused.Paused=true;
             f.Terminal.Update();
             check(f.Storage.Ledger.GetAmount(Wood)==20 && paused.Remaining==3,"individual task pause does not consume materials");

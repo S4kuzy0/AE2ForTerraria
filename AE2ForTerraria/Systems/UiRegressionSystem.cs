@@ -152,6 +152,19 @@ public sealed class UiRegressionSystem : ModSystem
             "NPC navigation clears the previous craft target and its order action");
         reader.Close();
         Assert(UISystem.GetStoredAmount(ItemKey.Crafted(ItemID.Wood))==321,"catalogue interactions do not mutate storage");
+        var orderDrive=UISystem.ActiveNetwork.OfType<MEDiskDriveEntity>().First();
+        var orderStock=orderDrive.Ledger.Copy();
+        try
+        {
+            reader.Show(ItemKey.Crafted(ItemID.Torch),3); UIStatus.Clear();
+            long beforeOrder=orderDrive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Torch));
+            Click(craft,"_orderButton");
+            Assert(orderDrive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Torch))>=beforeOrder+3,
+                "real order button stores output synchronously without running a terminal Update");
+            Assert(UIStatus.Active().Any(line=>line.Text.StartsWith("合成完成")),
+                "real instant order button displays completion rather than only a queue notice");
+        }
+        finally { orderDrive.Ledger.ReplaceContents(orderStock); UISystem.RefreshNetwork(); reader.Close(); UIStatus.Clear(); }
         EmbeddedInventoryRegression.Run(Assert);
         AEUiSessionRegression.Run(Assert);
         ValidateCompactControls();
@@ -765,7 +778,16 @@ public sealed class UiRegressionSystem : ModSystem
                         Assert(gridBounds.Width>=state.Layout.W-48 && stationBounds.Top-gridBounds.Bottom<=8
                             && !gridBounds.Intersects(stationBounds),"craft catalogue fills available width and reaches the station slots at "+size.X);
                     }
-                    if (ReferenceEquals(state,driveUi) || ReferenceEquals(state,assemblerUi))
+                    if (ReferenceEquals(state,driveUi))
+                    {
+                        var contents=Field<UIStorageContents>(state,"_contents").GetDimensions().ToRectangle();
+                        var window=WindowField<UIWindowPanel>(state,"<Window>k__BackingField").GetDimensions().ToRectangle();
+                        var toggle=Field<UIElement>(state,"_tabButton").GetDimensions().ToRectangle();
+                        Assert(!WindowField<UIWindowPanel>(state,"<Window>k__BackingField").Children.OfType<UIPlayerInventoryPanel>().Any()
+                            && contents.Bottom<=toggle.Top && toggle.Bottom<=window.Bottom && window.Bottom-contents.Bottom<70,
+                            "drive removes its duplicate backpack and expands contents to its bottom controls at "+size.X);
+                    }
+                    if (ReferenceEquals(state,assemblerUi))
                     {
                         string bagField = state is TerminalUIState ? "_playerInventory" : "_inventory";
                         var bag = Field<UIPlayerInventoryPanel>(state,bagField);

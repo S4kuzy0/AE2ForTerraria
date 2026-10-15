@@ -679,6 +679,7 @@ namespace AE2ForTerraria.Systems
 
 			DriveState.SetDrive(drive);
 			SecondaryInterface?.SetState(DriveState);
+            Main.playerInventory = true;
 		}
 
 		public static void OpenTerminal(int i, int j, TerminalViewMode mode = TerminalViewMode.Craft)

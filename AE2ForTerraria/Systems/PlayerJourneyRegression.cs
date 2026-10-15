@@ -43,7 +43,7 @@ public sealed class PlayerJourneyRegression : ModSystem
     private readonly Queue<(string Name, Action Run, int Delay)> _steps = new();
     private readonly Stopwatch _elapsed = new();
     private string _directory, _worldPath, _playerPath, _capture, _nextText;
-    private bool _entered, _prepared, _done, _saving, _reload, _moveRight;
+    private bool _entered, _prepared, _done, _saving, _reload, _moveRight, _instantOrderObserved;
     private int _menuFrames, _worldFrames, _delay, _clickFrames, _checksPassed, _backgroundClicks;
     private Vector2 _pointer = new(12, 680), _movementStart;
     private Point16 _accessPosition, _drivePosition, _craftPosition;
@@ -508,8 +508,10 @@ public sealed class PlayerJourneyRegression : ModSystem
         });
         Step("open actual disk drive", () =>
         {
-            UISystem.CloseAll(); RightClick(_drivePosition);
+            UISystem.CloseAll(); RightClick(_drivePosition); PositionWindow(UISystem.DriveState);
             Require(ReferenceEquals(UISystem.SecondaryInterface.CurrentState, UISystem.DriveState), "world drive right-click opens the drive window");
+            Require(Main.playerInventory && !Descendants(UISystem.DriveState).OfType<UIPlayerInventoryPanel>().Any(),
+                "drive opens native inventory and contains no duplicate backpack");
             var slot = Field<List<UIItemSlotElement>>(UISystem.DriveState, "_slots")[0];
             slot.OnLeftMouseDown += (_, _) => Mod.Logger.Info("AE2 JOURNEY DISK DOWN: " + JsonSerializer.Serialize(DiagnosticState()));
             slot.OnLeftClick += (_, _) =>
@@ -517,7 +519,18 @@ public sealed class PlayerJourneyRegression : ModSystem
                 _driveClicks++;
                 Mod.Logger.Info("AE2 JOURNEY DISK CLICK: " + JsonSerializer.Serialize(DiagnosticState()));
             };
-            NativePick(20); Click(Field<List<UIItemSlotElement>>(UISystem.DriveState, "_slots")[0]);
+        });
+        Step("pick disk from uncovered native inventory", () =>
+        {
+            Require(_nativeSlotBounds.TryGetValue(20,out var bounds) && !AEUiSession.CoversPoint(bounds.Center.ToVector2()),
+                "the drawn native inventory disk slot is outside the drive window");
+            _pointer=bounds.Center.ToVector2();_clickTarget=null;_clickFrames=4;
+        });
+        Step("put native inventory disk into drive", () =>
+        {
+            Require(Main.mouseItem.type==ModContent.ItemType<MEDisk1K>() && Main.LocalPlayer.inventory[20].IsAir,
+                "native inventory mouse click picks up disk without an AE-owned input override");
+            Click(Field<List<UIItemSlotElement>>(UISystem.DriveState, "_slots")[0]);
         });
         Step("verify disk insertion", () =>
         {
@@ -592,14 +605,24 @@ public sealed class PlayerJourneyRegression : ModSystem
             Require(Field<UIBrowserDetails>(UISystem.TerminalState, "_info").IsOpen,
                 "crafting recipe detail opens in the real terminal");
             _capture = "06-crafting-station-and-recipe";
-            Click(Field<UIElement>(UISystem.TerminalState, "_orderButton"));
-        }, 180);
+            var orderButton = Field<UIElement>(UISystem.TerminalState, "_orderButton");
+            // Observe after the real handler, before another world update can run the queue.
+            orderButton.OnLeftClick += (_, _) => _instantOrderObserved =
+                _drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.WoodenSword)) > 0
+                && UIStatus.Active().Any(line => line.Text.StartsWith("合成完成"));
+            Click(orderButton);
+        }, 10);
         Step("check actual craft execution and task page", () =>
         {
+            Require(_instantOrderObserved,
+                "the actual order click completes and reports its output before returning");
             Require(_drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.WoodenSword)) >= 1,
-                "normal world ticks execute the UI crafting order and store its output");
+                "completed crafting output remains in storage after the click");
             Require(_drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood)) < 90,
                 "craft execution consumes stored materials");
+            Require(UIStatus.Active().Any(line=>line.Text.StartsWith("合成完成")),
+                "actual crafting click displays its completion toast immediately");
+            _capture = "06b-instant-craft-complete";
             Click(Field<UIElement>(UISystem.TerminalState, "_tasksButton"));
         });
         Step("check and capture task page", () =>

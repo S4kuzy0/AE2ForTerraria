@@ -20,6 +20,36 @@ public sealed class TerminalCraftingExecutor
     private int _cursor;
     public void Reset() => _cursor=0;
 
+    /// <summary>Manual orders execute synchronously; blocked work remains a normal durable job.</summary>
+    public static bool Submit(MECraftingCpuEntity host, ItemKey key, long count, string requester, out string status)
+    {
+        status = "物品、数量或合成设备无效";
+        if (Main.netMode == NetmodeID.MultiplayerClient || host == null
+            || !TileEntity.ByPosition.TryGetValue(host.Position, out var live) || !ReferenceEquals(live, host)) return false;
+        var terminal = MENetwork.FindCraftingTerminal(host.Position.X, host.Position.Y);
+        // Do not merge a new click into an older paused or oversized job.
+        if (!host.TryEnqueue(key, count, requester, terminal == null, out var job)) return false;
+        bool crafted = false;
+        if (terminal == null) status = "已加入旧设备队列";
+        else if (host.Paused) status = "队列已暂停；任务已保留";
+        else
+        {
+            var storage = MENetwork.CollectStorage(host.Position.X, host.Position.Y);
+            crafted = TryExecute(terminal, host, job, storage, out status, notifyCompletion: false);
+            if (!crafted && host.Jobs.Contains(job)) status = "暂未合成：" + status + "；任务已保留";
+        }
+        job.LastStatus = status;
+        host.LastStatus = status;
+        if (terminal != null) terminal.LastStatus = status;
+        MENet.SendCpu(host.Position);
+        if (crafted)
+        {
+            MENet.SendNetworkLedgers(host.Position.X, host.Position.Y);
+            AchievementTriggers.Trigger<AutomateFirstItemAchievement>();
+        }
+        return true;
+    }
+
     public static bool HasStation(IReadOnlyList<Item> stations,int tile)
     {
         foreach (var item in stations)
@@ -134,7 +164,7 @@ public sealed class TerminalCraftingExecutor
     }
 
     private static bool TryExecute(MECraftingTerminalEntity terminal,MECraftingCpuEntity host,MECraftingCpuEntity.Job job,
-        List<IMEStorage> storage,out string status,MEMolecularAssemblerEntity legacy=null)
+        List<IMEStorage> storage,out string status,MEMolecularAssemblerEntity legacy=null,bool notifyCompletion=true)
     {
         status="等待处理";
         if (!IsCurrent(terminal,host,job,legacy)) { status="任务已暂停、取消或断开"; return false; }
@@ -224,7 +254,9 @@ public sealed class TerminalCraftingExecutor
                 if (job.Remaining==0) host.DropJob(job);
                 else host.ActiveJob=job;
             }
-            status=job.Remaining==0 ? "已完成："+Lang.GetItemNameValue(job.Key.Type) : "合成中，剩余 "+job.Remaining;
+            status=job.Remaining==0 ? "合成完成："+Lang.GetItemNameValue(job.Key.Type)+"（需求 "+job.Total+" 件）"
+                : "已合成 "+completed+" 件，剩余 "+job.Remaining;
+            if (job.Remaining==0 && notifyCompletion) MENet.NotifyCraftCompleted(job.RequestedBy,status);
             return true;
         }
         return false;
