@@ -25,7 +25,7 @@ internal sealed class UIBrowserDetails : UIElement
     private readonly record struct Page(ItemKey Key, int Npc, int Tab, int Recipe, int Scroll, int Stations, long Quantity);
     private readonly Stack<Page> _history = new();
     private readonly UIButton[] _tabs;
-    private readonly UIButton _close, _back, _previous, _next, _favorite, _forward;
+    private readonly UIButton _back, _previous, _next, _favorite, _forward;
     private readonly Stack<Page> _future = new();
     public Action FavoriteChanged;
     public Action Closed;
@@ -62,7 +62,6 @@ internal sealed class UIBrowserDetails : UIElement
     public UIBrowserDetails(UIElement host, bool terminal = false)
     {
         _host = host;
-        _close = Button("返回目录", () => Close());
         _back = Button("返回", Back);
         _forward = Button("前进", Forward);
         _favorite = Button("收藏", () => { BrowserFavorites.Toggle(_npc > 0 ? _npc : _key.Type, _npc > 0); UpdateFavorite(); FavoriteChanged?.Invoke(); });
@@ -146,7 +145,7 @@ internal sealed class UIBrowserDetails : UIElement
     }
     private void Back()
     {
-        if (_history.Count == 0) return;
+        if (_history.Count == 0) { Close(); return; }
         Push(_future, CurrentPage); Restore(_history.Pop());
     }
     private void Forward()
@@ -175,7 +174,7 @@ internal sealed class UIBrowserDetails : UIElement
     {
         float offset = 16 * (1 - _entrance) * (1 - _entrance);
         Place(this, _x + offset, _y, Math.Max(100, _width - offset), _height);
-        Place(_back, 10, 4, 46, 22); Place(_forward, 60, 4, 46, 22); Place(_favorite, _width - offset - 150, 4, 46, 22); Place(_close, _width - offset - 100, 4, 90, 22);
+        Place(_back, 10, 4, 46, 22); Place(_forward, 60, 4, 46, 22); Place(_favorite, _width - offset - 56, 4, 46, 22);
         if (_width < 520)
         {
             float compactTab = (_width - offset - 142) / 4;
@@ -221,7 +220,7 @@ internal sealed class UIBrowserDetails : UIElement
             foreach (var item in Main.LocalPlayer.inventory) if (item != null && !item.IsAir) AccumulateOwned(item.type, item.stack);
         _plan?.Remove();
         GameDataIndex.EnsureBuilt();
-        _back.Enabled = _history.Count > 0; _forward.Enabled = _future.Count > 0; UpdateFavorite();
+        _forward.Enabled = _future.Count > 0; UpdateFavorite();
         for (int i = 0; i < 4; i++) { _tabs[i].Selected = i == _tab; _tabs[i].Enabled = _npc == 0; }
         if (_npc > 0) BuildNpc();
         else

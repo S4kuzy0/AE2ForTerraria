@@ -84,6 +84,43 @@ public sealed class UiRegressionSystem : ModSystem
         if (!condition) throw new InvalidOperationException("AE2 BROWSER CHECK FAILED: " + label);
         Mod.Logger.Info("AE2 BROWSER CHECK PASS: " + label);
     }
+    private void ValidateUnifiedBackNavigation()
+    {
+        foreach (bool terminal in new[] { false, true })
+        {
+            MovableWindowState state = terminal ? NewTerminal(TerminalViewMode.Craft) : NewSearch();
+            var reader = Field<UIBrowserDetails>(state, terminal ? "_info" : "_details");
+            var grid = Field<UIItemGrid>(state, "_grid");
+            // Observe the initial network snapshot before measuring navigation.
+            state.Update(new GameTime());
+            int revision = grid.Revision;
+            float scroll = grid.ScrollRatio;
+            reader.Show(ItemKey.Crafted(ItemID.WoodenSword), 7);
+            state.Update(new GameTime());
+            var back = Field<UIButton>(reader, "_back");
+            var forward = Field<UIButton>(reader, "_forward");
+            void Back() => back.LeftClick(new UIMouseEvent(back, back.GetDimensions().Center()));
+            Assert(back.Enabled && !forward.Enabled, "first detail page has an active return to catalogue");
+            Assert(reader.Children.OfType<UIButton>().Count(button => button.Text.StartsWith("返回", StringComparison.Ordinal)) == 1,
+                "details expose one return action in the upper left");
+            Back();
+            Assert(!reader.IsOpen && reader.Parent == null && grid.Parent != null,
+                "root back closes details and reveals the existing catalogue");
+            Assert(!terminal || Field<UIElement>(state, "_stationGrid").Parent != null,
+                "root back restores the craft catalogue station slots");
+            reader.Show(ItemKey.Crafted(ItemID.WoodenSword), 7);
+            reader.Show(ItemKey.Crafted(ItemID.Torch), 3);
+            Back();
+            Assert(reader.IsOpen && reader.SelectedKey.Type == ItemID.WoodenSword && reader.Quantity == 7 && forward.Enabled,
+                "unified back restores the previous item and quantity before returning to catalogue");
+            forward.LeftClick(new UIMouseEvent(forward, forward.GetDimensions().Center()));
+            Assert(reader.SelectedKey.Type == ItemID.Torch && reader.Quantity == 3,
+                "forward remains usable after unified back");
+            Back(); Back();
+            Assert(!reader.IsOpen && grid.Revision == revision && grid.ScrollRatio == scroll,
+                "exhausting detail history returns to the catalogue without rebuilding or scrolling it");
+        }
+    }
     private void ValidateBrowser()
     {
         Assert(StorageSystem.Recipes.OutputTypes.All(type => StorageSystem.Recipes.GetRecipesFor(ItemKey.Crafted(type)).All(index => Main.recipe[index].createItem.type == type && !Main.recipe[index].Disabled)),
@@ -793,6 +830,7 @@ public sealed class UiRegressionSystem : ModSystem
             Assert(UISystem.GetStationHosts().Count==2 && UISystem.GetStationHosts().Sum(host=>host.Stations.Count(item=>item!=null && !item.IsAir))==2
                 && ReferenceEquals(UISystem.ActiveCraftingTerminal,craftingTerminal) && UISystem.TerminalCanManage,
                 "integrated station fixture resolves installed stations and editable terminal through actual network membership");
+            ValidateUnifiedBackNavigation();
             ValidateBrowser();
             foreach (var size in new[] { new Point(800,600), new Point(1280,720), new Point(1920,1080) })
             {
