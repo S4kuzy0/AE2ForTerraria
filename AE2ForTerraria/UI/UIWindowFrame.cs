@@ -299,11 +299,17 @@ namespace AE2ForTerraria.UI
 		public float MinPanelHeight = 320f;
 
 		private bool _resizing;
+        private Vector2 _cornerOffset;
 
 		public static UIResizeGrip Create(UIElement target, Action onResized)
 		{
 			var grip = new UIResizeGrip { Target = target, OnResized = onResized };
-			grip.OnLeftMouseDown += (evt, element) => grip._resizing = true;
+			grip.OnLeftMouseDown += (evt, element) =>
+            {
+                grip._resizing = true;
+                grip._cornerOffset = new Vector2(target.Left.Pixels + target.Width.Pixels,
+                    target.Top.Pixels + target.Height.Pixels) - evt.MousePosition;
+            };
 			grip.OnLeftMouseUp += (evt, element) => grip._resizing = false;
 			return grip;
 		}
@@ -324,11 +330,13 @@ namespace AE2ForTerraria.UI
 				return;
 			}
 
-			float width = Math.Max(MinPanelWidth, Main.MouseScreen.X - Target.Left.Pixels);
-			float height = Math.Max(MinPanelHeight, Main.MouseScreen.Y - Target.Top.Pixels);
+            float maxWidth = Math.Max(MinPanelWidth, MovableWindowState.ViewportSize.X - Math.Max(0, Target.Left.Pixels));
+            float maxHeight = Math.Max(MinPanelHeight, MovableWindowState.ViewportSize.Y - Math.Max(0, Target.Top.Pixels));
+			float width = Math.Clamp(Main.MouseScreen.X - Target.Left.Pixels + _cornerOffset.X, MinPanelWidth, maxWidth);
+			float height = Math.Clamp(Main.MouseScreen.Y - Target.Top.Pixels + _cornerOffset.Y, MinPanelHeight, maxHeight);
+            if (width == Target.Width.Pixels && height == Target.Height.Pixels) return;
 			Target.Width.Set(width, 0f);
 			Target.Height.Set(height, 0f);
-			Target.Recalculate();
 			OnResized?.Invoke();
 		}
 

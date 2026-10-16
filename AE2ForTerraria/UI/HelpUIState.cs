@@ -12,7 +12,7 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public sealed class HelpUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(780f, 560f, 520f, 320f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 
 		/// <summary>
 		/// 帮助正文的回退文案。**要和 Localization 里的 `UI.HelpBody` 保持一致** ——
@@ -34,7 +34,7 @@ namespace AE2ForTerraria.UI
 			+ "排序按钮:默认 / 时间点 / 名称 / 最近查看\n"
 			+ "\n【窗口】\n"
 			+ "窗口的任意空位按住左键就能拖,不用非去抓边框\n"
-			+ "拖右边 / 下边 / 右下角缩放;右上角圆箭头回到默认\n"
+			+ "只拖右下角斜线缩放；其余边框移动，右上角重置布局\n"
 			+ "关闭只关最上面那层,底下的窗口还在\n"
 			+ "刚打开的子页面会自动躲开主窗口\n"
 			+ "\n【作弊扳手】\n"
@@ -68,7 +68,7 @@ namespace AE2ForTerraria.UI
 			_body.SetText(ModText.Get("HelpBody", HelpFallback));
 			_hint.SetText(ModText.Get("HelpHint", "滚轮上下翻;这篇帮助没有分页"));
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		/// <summary>语言切换 / 重新打开时刷一遍正文。</summary>

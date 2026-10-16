@@ -21,7 +21,7 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public sealed class TerminalUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(1000f, 720f, 680f, 500f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
         private UIPlayerInventoryPanel _playerInventory;
         private UIText _selectionLabel;
         private UIText _craftReadiness;
@@ -103,27 +103,27 @@ namespace AE2ForTerraria.UI
 			Geometry.Key = "TerminalUIState.v3";
             InitWindow(Geometry, "", frameless: true);
             Window.BackgroundColor = new Color(42, 54, 87);
-            _catalogueButton=new UIButton("物品");
-            _catalogueButton.OnLeftClick+=(_,_)=>{_managementPage=0;_info?.Close();ApplyLayout();};
-            _recipesButton=new UIButton("配方");
+            _catalogueButton=new UIButton("物品", .75f);
+            _catalogueButton.OnLeftClick+=(_,_)=>{_managementPage=0;_info?.Close();RequestLayout();};
+            _recipesButton=new UIButton("配方", .75f);
             _recipesButton.OnLeftClick+=(_,_)=>
             {
                 _managementPage=0;
                 if (!_selected.IsAir) Select(_selected);
                 else if (_filtered.Count>0) Select(_filtered[0]);
                 else UIStatus.Toast("先选择一个物品");
-                ApplyLayout();
+                RequestLayout();
             };
-            _tasksButton=new UIButton("任务");
+            _tasksButton=new UIButton("任务", .75f);
             _tasksButton.OnLeftClick+=(_,_)=>ShowManagement(false);
-            _stationsButton=new UIButton("工作站");
+            _stationsButton=new UIButton("工作站", .75f);
             _stationsButton.OnLeftClick+=(_,_)=>ShowManagement(true);
             foreach(var button in new[]{_catalogueButton,_recipesButton,_tasksButton,_stationsButton}) Window.Append(button);
             _categories = new UIBrowserCategoryBar();
-            _categories.Changed = () => { ApplyLayout(); RebuildList(); };
+            _categories.Changed = () => { RequestLayout(); RebuildList(); };
             Window.Append(_categories);
             _inventoryButton = new UIButton("背包");
-            _inventoryButton.OnLeftClick += (_, _) => { _inventoryVisible = !_inventoryVisible; _inventoryButton.Selected = _inventoryVisible; ApplyLayout(); };
+            _inventoryButton.OnLeftClick += (_, _) => { _inventoryVisible = !_inventoryVisible; _inventoryButton.Selected = _inventoryVisible; RequestLayout(); };
             Window.Append(_inventoryButton);
             _starButton = new UIIconButton(UIIconButton.IconKind.Star);
             _starButton.OnLeftClick += (_, _) => { _favoritesOnly = !_favoritesOnly; _starButton.Filled = _favoritesOnly; RebuildList(); };
@@ -156,7 +156,7 @@ namespace AE2ForTerraria.UI
 
 			_grid = new UIItemGrid
 			{
-				CellSize = 43,
+				CellSize = 32,
                 InputBlocked = () => _info?.BlocksPointer == true || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null,
                 CountProvider = key => IsAccess ? UISystem.GetStoredAmount(key) : 0,
 
@@ -290,9 +290,9 @@ namespace AE2ForTerraria.UI
             _info.Selected = key =>
             {
                 _selected = key; _orderQuantity = _info.Quantity; _managementPage = 0;
-                _quantityButton.SetText(QuantityLabel()); UpdateSelectedPlan(); ApplyLayout();
+                _quantityButton.SetText(QuantityLabel()); UpdateSelectedPlan(); RequestLayout();
             };
-            _info.Closed = () => ApplyLayout();
+            _info.Closed = () => RequestLayout();
             _info.FavoriteChanged = () => RebuildList(false);
             _stationGrid.LayoutChanged = () => _stationLayoutDirty=true;
             _stationGrid.ContentsChanged = () => _stationDataDirty=true;
@@ -377,7 +377,7 @@ namespace AE2ForTerraria.UI
 
             foreach (var e in new UIElement[] { _orderButton, _takeButton, _takeAllButton, _quantityButton, _quantityInput, _keepButton }) { e.Remove(); _info.Append(e); }
             _info.BottomReserve = 68;
-            ApplyLayout();
+            RequestLayout();
         }
 
         private static void Place(UIElement e, float x, float y, float w, float h)
@@ -386,7 +386,7 @@ namespace AE2ForTerraria.UI
         {
             if (IsAccess) return;
             _info.Close();_searchFocused=false;_quantityTyping=false;
-            _managementPage=stations ? 2 : 1;_management.Show(stations);ApplyLayout();
+            _managementPage=stations ? 2 : 1;_management.Show(stations);RequestLayout();
         }
         private bool CanConfigure(int level)
         {
@@ -410,18 +410,18 @@ namespace AE2ForTerraria.UI
             float w = Geo.W, h = Geo.H, inner = w - Pad * 2;
             bool catalogue = _managementPage == 0 && !_info.IsOpen;
             _catalogueButton.SetText(IsAccess ? "已储存" : "配方");
-            Place(_catalogueButton, Pad, Pad, IsAccess ? 76 : 54, 26);
+            Place(_catalogueButton, Pad, Pad, 80, 22);
             Visible(_recipesButton, false);
             Visible(_tasksButton, !IsAccess); Visible(_stationsButton, false);
-            Place(_tasksButton, Pad + 60, Pad, 54, 26); Place(_stationsButton, Pad + 120, Pad, 68, 26);
+            Place(_tasksButton, Pad + 84, Pad, 80, 22); Place(_stationsButton, Pad + 168, Pad, 80, 22);
             Visible(_inventoryButton, false); Visible(_depositButton, IsAccess);
-            Place(_inventoryButton, Pad + 82, Pad, 58, 26); Place(_depositButton, Pad + 82, Pad, 88, 26);
+            Place(_inventoryButton, Pad + 84, Pad, 80, 22); Place(_depositButton, Pad + 84, Pad, 80, 22);
             _inventoryButton.Selected = IsAccess && _inventoryVisible;
-            Place(_starButton, w - Pad - 132, Pad, 38, 24);
-            Place(_searchBox, Pad, 48, inner - 158, 28);
-            Place(_modButton, w - Pad - 150, 48, 150, 28);
-            Place(_categories, Pad, 82, inner, 32);
-            float top = 82 + _categories.Arrange(inner) + 5;
+            Place(_starButton, w - Pad - 122, Pad, 42, 22);
+            Place(_searchBox, Pad, 36, inner - 128, 24);
+            Place(_modButton, w - Pad - 122, 36, 122, 24);
+            Place(_categories, Pad, 64, inner, 22);
+            float top = 64 + _categories.Arrange(inner) + 5;
             float controlW = (inner - 18) / 4;
             if (IsAccess)
             {
@@ -438,8 +438,8 @@ namespace AE2ForTerraria.UI
             top += 32;
             bool showBag = false;
             float inventoryHeight = showBag ? Math.Clamp((h - top - 84) * .52f, 120, 212) : 0;
-            float accessActionHeight = IsAccess ? 36 : 0;
-            float stationHeight = !IsAccess && _managementPage == 0 ? _stationGrid.RequiredHeight : 0;
+            float accessActionHeight = IsAccess ? 54 : 0;
+            float stationHeight = !IsAccess && catalogue ? _stationGrid.RequiredHeight : 0;
             Visible(_stationGrid, stationHeight > 0);
             if (stationHeight > 0) _stationGrid.SetBounds(Pad, h - Pad - _stationGrid.RequiredHeight, inner);
             float gridBottom = IsAccess ? h - 74 - inventoryHeight - accessActionHeight
@@ -450,6 +450,7 @@ namespace AE2ForTerraria.UI
             Place(_capacity, Pad, h - 42, Math.Min(250, inner * .4f), 14);
             float capacityWidth = _itemCapacity ? Math.Min(440, inner * .64f) : Math.Min(250, inner * .4f);
             Place(_capacityCount, Pad, h - 40, capacityWidth, 22);
+            _capacityCount.DynamicallyScaleDownToWidth = true;
             Place(_status, IsAccess ? Pad + capacityWidth + 10 : Pad, h - 40 - stationHeight,
                 IsAccess ? inner - capacityWidth - 10 : inner, 22);
             _status.DynamicallyScaleDownToWidth = true;
@@ -469,8 +470,8 @@ namespace AE2ForTerraria.UI
                 _playerInventory.SetTransferHandlers(IsAccess ? DepositSlot : null, IsAccess ? DepositAllOfType : null);
             }
             _catalogueButton.Selected = catalogue; _tasksButton.Selected = _managementPage == 1; _stationsButton.Selected = _managementPage == 2;
-            float drawerH = h - Pad - 48 - stationHeight - (stationHeight > 0 ? 8 : 0);
-            _info.SetBounds(Pad, 48, inner, drawerH);
+            float drawerH = h - Pad - 36 - stationHeight - (stationHeight > 0 ? 8 : 0);
+            _info.SetBounds(Pad, 36, inner, drawerH);
             Place(_craftReadiness, 10, drawerH - 60, inner - 20, 22);
             if (_info.IsOpen) { _info.Remove(); Window.Append(_info); }
             foreach (var action in new UIElement[] { _quantityButton, _quantityInput, _orderButton, _keepButton, _takeButton, _takeAllButton }) action.Remove();
@@ -478,12 +479,13 @@ namespace AE2ForTerraria.UI
             {
                 Visible(_selectionLabel, catalogue);
                 float y = top + gridHeight + 4;
-                Place(_selectionLabel, Pad, y, Math.Max(70, inner - 444), 28);
+                Place(_selectionLabel, Pad, y, inner, 18);
                 UIElement[] actions = { _quantityButton, _quantityInput, _takeButton, _takeAllButton };
                 for (int i = 0; i < actions.Length; i++)
                 {
                     if (catalogue) Window.Append(actions[i]);
-                    Place(actions[i], w - Pad - 432 + i * 108, y, 102, 28);
+                    float actionWidth = (inner - 18) / 4;
+                    Place(actions[i], Pad + i * (actionWidth + 6), y + 20, actionWidth, 24);
                 }
             }
             else
@@ -503,7 +505,7 @@ namespace AE2ForTerraria.UI
             if (_management != null)
             {
                 Visible(_management, !IsAccess && _managementPage != 0);
-                _management.SetBounds(Pad, 48, inner, h - Pad - 48 - (showBag ? inventoryHeight + 8 : 0));
+                _management.SetBounds(Pad, 36, inner, h - Pad - 36 - (showBag ? inventoryHeight + 8 : 0));
             }
             Window.Recalculate();
         }
@@ -532,14 +534,14 @@ namespace AE2ForTerraria.UI
             _info?.Close();
 			RefreshLockAnchor();
 			RebuildList();
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		protected override void UpdateWindow(GameTime gameTime)
 		{
             if (!IsAccess && _managementPage == 0 && !_info.IsOpen
-                && (_status.Parent != null) != !UISystem.TerminalReadable) ApplyLayout();
-            if(_stationLayoutDirty) {_stationLayoutDirty=false;ApplyLayout();}
+                && (_status.Parent != null) != !UISystem.TerminalReadable) RequestLayout();
+            if(_stationLayoutDirty) {_stationLayoutDirty=false;RequestLayout();}
             if(_stationDataDirty) {_stationDataDirty=false;_availability.Refresh();RebuildList(false);UpdateSelectedPlan();}
 			HandleQuantityTyping();
 			UpdateTakeLabel();
@@ -634,7 +636,7 @@ namespace AE2ForTerraria.UI
 			_capacity.Max = unlimited ? 0 : max;
 			_capacity.Label = ModText.Get("LabelNetworkCapacity", "网络容量");
             if(unlimited) UITextCache.Set(_capacityCount,"已储存 "+totalItems.ToString("N0")+" 件");
-            if(_itemCapacity!=unlimited) {_itemCapacity=unlimited;ApplyLayout();}
+            if(_itemCapacity!=unlimited) {_itemCapacity=unlimited;RequestLayout();}
 		}
 
 		/// <summary>

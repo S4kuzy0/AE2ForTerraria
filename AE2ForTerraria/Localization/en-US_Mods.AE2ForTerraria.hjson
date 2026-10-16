@@ -686,7 +686,7 @@ UI: {
 
 		[Windows]
 		Press and drag any empty spot in the window to move it
-		Drag the right/bottom/corner edge to resize; the round arrow resets it
+		Resize only with the bottom-right grip; other edges move. Reset restores the layout
 		Close only closes the top window; the ones below stay open
 		A subpage opens beside the main window instead of covering it
 

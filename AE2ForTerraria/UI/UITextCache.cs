@@ -8,6 +8,7 @@ namespace AE2ForTerraria.UI
 	{
 		private sealed class Value { public string Text; }
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<UIText,Value> Last = new();
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<UIText,object> Fitted = new();
 
 		public static void Set(UIText text, string value)
 		{
@@ -17,8 +18,16 @@ namespace AE2ForTerraria.UI
 			}
 
 			value ??= string.Empty;
+            bool fittedNow = text.DynamicallyScaleDownToWidth && !Fitted.TryGetValue(text, out _);
+            if (fittedNow)
+            {
+                // UIText.Recalculate calls InternalSetText, which restores its natural
+                // MinWidth. This callback runs after that write and before layout uses it.
+                text.OnInternalTextChange += () => text.MinWidth.Set(0, 0);
+                Fitted.Add(text, new object());
+            }
 
-			if (Last.TryGetValue(text, out var previous) && previous.Text == value)
+			if (!fittedNow && Last.TryGetValue(text, out var previous) && previous.Text == value)
 			{
 				return;
 			}

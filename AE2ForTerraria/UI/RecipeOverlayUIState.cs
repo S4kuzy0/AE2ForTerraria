@@ -17,7 +17,7 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public sealed class RecipeOverlayUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(780f, 540f, 560f, 400f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 
 		private const int IngredientSize = 40;
 		private const int IngredientStep = 46;
@@ -68,7 +68,7 @@ namespace AE2ForTerraria.UI
 			_next.OnLeftClick += (evt, element) => Turn(1);
 			Window.Append(_next);
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		public void Show(int itemType, bool uses)

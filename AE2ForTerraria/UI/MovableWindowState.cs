@@ -2,6 +2,7 @@ using System;
 using AE2ForTerraria.Systems;
 using Microsoft.Xna.Framework;
 using Terraria;
+using Terraria.GameInput;
 using Terraria.GameContent.UI.Elements;
 using Terraria.UI;
 
@@ -26,6 +27,9 @@ namespace AE2ForTerraria.UI
 		/// <summary>持久化用的键(默认取窗口类名)。</summary>
 		public string Key;
 
+        // Recipe Browser's default body size, in Terraria UI coordinates.
+        public static WindowGeometry Compact() => new(475f, 350f, 415f, 300f);
+
 		public WindowGeometry(float width, float height, float minWidth = 400f, float minHeight = 240f)
 		{
 			W = width;
@@ -49,13 +53,13 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public abstract class MovableWindowState : UIState
 	{
-		protected const float TitleHeight = 32f;
+		protected const float TitleHeight = 26f;
 
 		/// <summary>
 		/// 内容离窗口边缘的留白。**必须比底板那圈边框(12px)大一点** ——
 		/// 不然按钮会压在边框上,看起来像跑到窗口外面去了。
 		/// </summary>
-		protected const float Pad = 16f;
+		protected const float Pad = 8f;
 
 		/// <summary>边框拖拽区厚度(拖这里 = 移动 / 缩放)。</summary>
 		protected const float FrameGrip = 10f;
@@ -68,11 +72,14 @@ namespace AE2ForTerraria.UI
 		public WindowGeometry Layout => Geo;
 
         internal Rectangle InteractionBounds => Window?.GetDimensions().ToRectangle() ?? Rectangle.Empty;
+        internal static Vector2 ViewportSize => PlayerInput.OriginalScreenSize / Main.UIScale;
 
 		/// <summary>true = 没有标题栏(全靠拖边框移动 / 缩放)。</summary>
 		public bool Frameless { get; private set; }
 
 		private float _lastScreenWidth, _lastScreenHeight;
+        private bool _updatingChildren, _layoutPending;
+        private Action _afterChildren;
         private UIDragBar _dragBar;
 		private UIResizeGrip _grip;
 		private UIIconButton _closeButton;
@@ -89,11 +96,24 @@ namespace AE2ForTerraria.UI
 
 		/// <summary>带搜索框的窗口可以覆写成实际焦点状态。</summary>
 		public virtual bool SearchBoxFocused => false;
-		protected virtual bool CornerResizeOnly => false;
+		protected virtual bool CornerResizeOnly => true;
 		protected virtual bool HighlightFrame => false;
-		protected virtual float ResetButtonWidth => 54f;
-		protected virtual float ChromeGap => 6f;
-		protected virtual float FramelessChromeHeight => 24f;
+		protected virtual float ResetButtonWidth => 42f;
+		protected virtual float ChromeGap => 4f;
+		protected virtual float FramelessChromeHeight => 22f;
+
+        // A grip updates inside Window.Children enumeration. Layouts may reparent
+        // controls, so flush them only after the complete child update has returned.
+        protected void RequestLayout()
+        {
+            if (_updatingChildren) _layoutPending = true;
+            else ApplyLayout();
+        }
+        internal void AfterChildUpdate(Action change)
+        {
+            if (_updatingChildren) _afterChildren += change;
+            else change();
+        }
 
 		/// <summary>
 		/// 把一个子元素也当成"窗口空位":点它按住左键同样能拖动窗口。
@@ -126,13 +146,14 @@ namespace AE2ForTerraria.UI
 			{
 				Geo.Key = GetType().Name;
 			}
+            if (!Geo.Key.EndsWith(".compact1", StringComparison.Ordinal)) Geo.Key += ".compact1";
 
 			WindowLayout.Apply(Geo.Key, Geo);
 
 			Window = new UIWindowPanel();
             Window.SetPadding(0f);
 			Window.Target = Window;
-			Window.OnMoved = ApplyLayout;
+			Window.OnMoved = RequestLayout;
 			Window.HAlign = 0f;
 			Window.VAlign = 0f;
 			Window.BackgroundColor = UITheme.WindowBg * 0.97f;
@@ -147,11 +168,11 @@ namespace AE2ForTerraria.UI
 
 			// 边框四条拖拽区(最先添加,这样后面的按钮 / 内容能盖在它们上面)。
 			// 拖动上边 / 左边 = 移窗口,右边 = 改宽,下边 = 改高,右下角 = 一起改。
-			_frameTop = UIFrameGrip.Create(Window, UIFrameGrip.GripMode.Move, ApplyLayout);
-			_frameLeft = UIFrameGrip.Create(Window, UIFrameGrip.GripMode.Move, ApplyLayout);
-			_frameRight = UIFrameGrip.Create(Window, CornerResizeOnly ? UIFrameGrip.GripMode.Move : UIFrameGrip.GripMode.Width, ApplyLayout);
-			_frameBottom = UIFrameGrip.Create(Window, CornerResizeOnly ? UIFrameGrip.GripMode.Move : UIFrameGrip.GripMode.Height, ApplyLayout);
-			_frameCorner = UIFrameGrip.Create(Window, UIFrameGrip.GripMode.Both, ApplyLayout);
+			_frameTop = UIFrameGrip.Create(Window, UIFrameGrip.GripMode.Move, RequestLayout);
+			_frameLeft = UIFrameGrip.Create(Window, UIFrameGrip.GripMode.Move, RequestLayout);
+			_frameRight = UIFrameGrip.Create(Window, CornerResizeOnly ? UIFrameGrip.GripMode.Move : UIFrameGrip.GripMode.Width, RequestLayout);
+			_frameBottom = UIFrameGrip.Create(Window, CornerResizeOnly ? UIFrameGrip.GripMode.Move : UIFrameGrip.GripMode.Height, RequestLayout);
+			_frameCorner = UIFrameGrip.Create(Window, UIFrameGrip.GripMode.Both, RequestLayout);
 			foreach (var frame in new[] { _frameTop, _frameLeft, _frameRight, _frameBottom, _frameCorner })
 				frame.HighlightOnHover = HighlightFrame;
 
@@ -173,7 +194,7 @@ namespace AE2ForTerraria.UI
 			// 有标题栏的窗口照旧:标题栏也能拖
 			if (!frameless)
 			{
-				_dragBar = UIDragBar.Create(Window, ApplyLayout);
+				_dragBar = UIDragBar.Create(Window, RequestLayout);
 				_dragBar.Title = title;
 				Window.Append(_dragBar);
 			}
@@ -193,7 +214,7 @@ namespace AE2ForTerraria.UI
 			};
 			Window.Append(_resetButton);
 
-			_grip = UIResizeGrip.Create(Window, ApplyLayout);
+			_grip = UIResizeGrip.Create(Window, RequestLayout);
 			_grip.MinPanelWidth = geometry.MinW;
 			_grip.MinPanelHeight = geometry.MinH;
 			_grip.Width.Set(20f, 0f);
@@ -214,22 +235,22 @@ namespace AE2ForTerraria.UI
 			}
 
 			// 窗口永远不超过屏幕(留一点边距);但不能小于设计的最小尺寸。
-			float maxW = Math.Max(Geo.MinW, Main.screenWidth / Main.UIScale - 24f);
-			float maxH = Math.Max(Geo.MinH, Main.screenHeight / Main.UIScale - 24f);
+			float maxW = Math.Max(Geo.MinW, ViewportSize.X - 24f);
+			float maxH = Math.Max(Geo.MinH, ViewportSize.Y - 24f);
 			Geo.W = Math.Min(Geo.W, maxW);
 			Geo.H = Math.Min(Geo.H, maxH);
 
 			if (Geo.X < 0f || Geo.Y < 0f)
 			{
 				// 居中
-				Geo.X = Math.Max(0f, (Main.screenWidth / Main.UIScale - Geo.W) / 2f);
-				Geo.Y = Math.Max(0f, (Main.screenHeight / Main.UIScale - Geo.H) / 2f);
+				Geo.X = Math.Max(0f, (ViewportSize.X - Geo.W) / 2f);
+				Geo.Y = Math.Max(0f, (ViewportSize.Y - Geo.H) / 2f);
 			}
 			else
 			{
 				// 玩家拖过位置就保留,但别让窗口跑到屏幕外面
-				Geo.X = Math.Clamp(Geo.X, 0f, Math.Max(0f, Main.screenWidth / Main.UIScale - Geo.W));
-				Geo.Y = Math.Clamp(Geo.Y, 0f, Math.Max(0f, Main.screenHeight / Main.UIScale - Geo.H));
+				Geo.X = Math.Clamp(Geo.X, 0f, Math.Max(0f, ViewportSize.X - Geo.W));
+				Geo.Y = Math.Clamp(Geo.Y, 0f, Math.Max(0f, ViewportSize.Y - Geo.H));
 			}
 
 			Window.Left.Set(Geo.X, 0f);
@@ -303,14 +324,14 @@ namespace AE2ForTerraria.UI
 
 			if (Geo.X < 0f || Geo.Y < 0f)
 			{
-				Geo.X = Math.Max(0f, (Main.screenWidth / Main.UIScale - Geo.W) / 2f);
-				Geo.Y = Math.Max(0f, (Main.screenHeight / Main.UIScale - Geo.H) / 2f);
+				Geo.X = Math.Max(0f, (ViewportSize.X - Geo.W) / 2f);
+				Geo.Y = Math.Max(0f, (ViewportSize.Y - Geo.H) / 2f);
 			}
 			else
 			{
 				// 拖过头也别把窗口扔出屏幕:至少留 80px 宽 / 40px 高在里面,还能抓回来
-				Geo.X = Math.Clamp(Geo.X, 80f - Geo.W, Math.Max(0f, Main.screenWidth / Main.UIScale - 80f));
-				Geo.Y = Math.Clamp(Geo.Y, 0f, Math.Max(0f, Main.screenHeight / Main.UIScale - 40f));
+				Geo.X = Math.Clamp(Geo.X, 80f - Geo.W, Math.Max(0f, ViewportSize.X - 80f));
+				Geo.Y = Math.Clamp(Geo.Y, 0f, Math.Max(0f, ViewportSize.Y - 40f));
 			}
 
 			Window.Left.Set(Geo.X, 0f);
@@ -382,8 +403,12 @@ namespace AE2ForTerraria.UI
 
 		public sealed override void Update(GameTime gameTime)
 		{
-			base.Update(gameTime);
-            float w=Main.screenWidth/Main.UIScale,h=Main.screenHeight/Main.UIScale;
+            _updatingChildren = true;
+            try { base.Update(gameTime); }
+            finally { _updatingChildren = false; }
+            var changes = _afterChildren; _afterChildren = null; changes?.Invoke();
+            if (_layoutPending) { _layoutPending = false; ApplyLayout(); }
+            float w=ViewportSize.X,h=ViewportSize.Y;
             if (w!=_lastScreenWidth || h!=_lastScreenHeight) { _lastScreenWidth=w; _lastScreenHeight=h; FitToScreen(); ApplyLayout(); }
             SyncGeometry();
 			UpdateWindow(gameTime);

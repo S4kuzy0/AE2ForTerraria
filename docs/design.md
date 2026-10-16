@@ -1,6 +1,6 @@
 # 设计与数据说明
 
-适用源码：0.26.4；核对日期：2026-10-15（北京时间）。源码根目录为 `AE2ForTerraria/`。本文件记录模块边界与关键数据流，不逐个解释简单函数。历史架构记录见 [ARCHITECTURE-0.22.md](ARCHITECTURE-0.22.md)。
+适用源码：0.26.5；核对日期：2026-10-16（北京时间）。源码根目录为 `AE2ForTerraria/`。本文件记录模块边界与关键数据流，不逐个解释简单函数。历史架构记录见 [ARCHITECTURE-0.22.md](ARCHITECTURE-0.22.md)。
 
 ## 技术与模块边界
 
@@ -78,5 +78,11 @@
 `StorageSystem` 创建索引与规划器，最终配方和阶段数据在 `PostSetupRecipes` 重建；来源索引等待内容注册完整后建立。卸载和换世界时清理相关静态状态。客户端核心夹具运行在加载完成的菜单绘制线程，避免与后台加载并发借用全局状态。
 
 ## 扩展原则
+
+0.26.5 将窗口默认几何集中到 `WindowGeometry.Compact()`；`.compact1` 布局键在首次打开时忽略旧尺寸，保留旧记录供回滚，后续仍读取新键。尺寸统一基于 `PlayerInput.OriginalScreenSize / Main.UIScale`，避免在已缩放的 UI 上下文中再次缩放 Main 屏幕尺寸。窄分类栏、驱动器和管理页根据实际宽度重排。
+
+`MovableWindowState.RequestLayout` 在子控件更新期间只标记待重排，等完整子树更新结束后调用 `ApplyLayout`；下拉菜单自我移除也使用 `AfterChildUpdate`。这是为修复父级枚举期间移除、追加控件的异常。手柄保存初始抓取偏移，限制窗口尺寸，并在尺寸未变时跳过重算。静态排版检查必须与连续完整更新和真实输入旅程搭配。
+
+尺寸参考为 [Recipe Browser 的配置默认值](https://github.com/JavidPack/RecipeBrowser/blob/1.4/RecipeBrowserClientConfig.cs)及[顶部按钮定义](https://github.com/JavidPack/RecipeBrowser/blob/1.4/RecipeBrowserUI.cs)，2026-10-16 核对提交 `f23758a6397898701149d42c51de64314cb4447a`。仅参考尺寸和交互，使用项目自身代码；仓库未发现明确许可证，不复制其实现或资源，不新增运行依赖。
 
 新增设备优先实现现有存储/分区契约，物品身份沿用统一 codec，操作接入共享业务、权限、保存和协议。新增执行路径同时说明回调安全、原子性及预算。接口、包体、保存字段、缓存失效或 UI 行为改变时，修订本文件和[需求与验收](requirements.md)。

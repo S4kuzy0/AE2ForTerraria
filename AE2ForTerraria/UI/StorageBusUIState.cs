@@ -23,7 +23,7 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public sealed class StorageBusUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(620f, 500f, 500f, 380f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 
 		private MEStorageBusEntity _bus;
 
@@ -184,7 +184,7 @@ namespace AE2ForTerraria.UI
 			};
 			Window.Append(_grid);
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		private UITextPanel<string> MakeButton(string text, Action onClick)
@@ -371,42 +371,26 @@ namespace AE2ForTerraria.UI
 
 		protected override void ApplyLayout()
 		{
-			base.ApplyLayout();
+            base.ApplyLayout();
 
-			_status.Left.Set(Pad + 8f, 0f);
-			_status.Top.Set(38f, 0f);
-
-			_hint.Left.Set(Pad + 8f, 0f);
-			_hint.Top.Set(60f, 0f);
-
-			float x = Pad + 8f;
-			float y = 86f;
-			Place(_modeButton, ref x, y, 110f);
-			Place(_listModeButton, ref x, y, 130f);
-
-			x = Pad + 8f;
-			y += 34f;
-			Place(_addHeldButton, ref x, y, 172f);
-			Place(_clearButton, ref x, y, 132f);
-
-			x = Pad + 8f;
-			y += 34f;
-			Place(_copyToAllButton, ref x, y, 170f);
-			Place(_exportListButton, ref x, y, 110f);
-			Place(_importListButton, ref x, y, 110f);
-
-			_search.Left.Set(Pad + 8f, 0f);
-			_search.Top.Set(192f, 0f);
-			_search.Width.Set(Math.Max(160f, Geo.W - Pad * 2f - 16f), 0f);
-			_search.Height.Set(24f, 0f);
-
-			_grid.Left.Set(Pad + 4f, 0f);
-			_grid.Top.Set(224f, 0f);
-			_grid.Width.Set(Math.Max(120f, Geo.W - Pad * 2f - 8f), 0f);
-			_grid.Height.Set(Math.Max(80f, Geo.H - 224f - 16f), 0f);
-
-			Window.Recalculate();
-		}
+            float width = Geo.W - Pad * 2;
+            _status.Left.Set(Pad, 0); _status.Top.Set(32, 0); _status.Width.Set(width, 0);
+            _status.DynamicallyScaleDownToWidth = true;
+            _hint.Left.Set(Pad, 0); _hint.Top.Set(52, 0); _hint.Width.Set(width, 0);
+            _hint.DynamicallyScaleDownToWidth = true;
+            UIElement[][] rows = { new UIElement[] { _modeButton, _listModeButton },
+                new UIElement[] { _addHeldButton, _clearButton },
+                new UIElement[] { _copyToAllButton, _exportListButton, _importListButton } };
+            for (int row = 0; row < rows.Length; row++)
+            {
+                float cell = (width - (rows[row].Length - 1) * 6) / rows[row].Length;
+                float x = Pad;
+                foreach (var button in rows[row]) { Place(button, ref x, 76 + row * 26, cell); button.Height.Set(22, 0); }
+            }
+            _search.Left.Set(Pad, 0); _search.Top.Set(158, 0); _search.Width.Set(width, 0); _search.Height.Set(22, 0);
+            _grid.Left.Set(Pad, 0); _grid.Top.Set(186, 0); _grid.Width.Set(width, 0); _grid.Height.Set(Math.Max(50, Geo.H - 194), 0);
+            Window.Recalculate();
+        }
 
 		private static void Place(UIElement element, ref float x, float y, float width)
 		{

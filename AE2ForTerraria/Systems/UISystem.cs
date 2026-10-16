@@ -713,6 +713,7 @@ namespace AE2ForTerraria.Systems
 		public static void OpenAssembler(MEMolecularAssemblerEntity assembler)
 		{
 			EnsureStates();
+            Main.playerInventory = true;
 			CloseOverlay();
 
 			if (!ActivateState("分子装配室", AssemblerState))

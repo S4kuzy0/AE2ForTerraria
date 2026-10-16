@@ -17,7 +17,13 @@ internal sealed class UIChoiceMenu : UIElement
     private int _scroll;
     private bool _wasDown;
     private Rectangle _anchorBounds, _hostBounds;
-    public static void Close() { _active?.Remove(); _active = null; }
+    public static void Close()
+    {
+        var menu = _active; _active = null;
+        if (menu == null) return;
+        if (menu.Parent?.Parent is MovableWindowState owner) owner.AfterChildUpdate(menu.Remove);
+        else menu.Remove();
+    }
     public static void Show(UIElement host, UIElement anchor, string[] choices, Action<int, string> choose)
     {
         // The trigger belongs to its own popup. Toggle on click (release), never dismiss it on press.

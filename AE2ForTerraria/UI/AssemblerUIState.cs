@@ -16,7 +16,7 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public sealed class AssemblerUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(640f, 600f, 560f, 500f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 
 		private readonly List<UIItemSlotElement> _slots = new List<UIItemSlotElement>();
 		private int _visibleSlots;
@@ -31,7 +31,6 @@ namespace AE2ForTerraria.UI
 		private UITextPanel<string> _clearButton;
 		private MEMolecularAssemblerEntity _assembler;
 		private double _clearConfirmUntil;
-        private UIPlayerInventoryPanel _inventory;
 
 		public override void OnInitialize()
 		{
@@ -85,10 +84,8 @@ namespace AE2ForTerraria.UI
 				}
 			};
 			Window.Append(_clearButton);
-            _inventory = new UIPlayerInventoryPanel();
-            Window.Append(_inventory);
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		public void SetAssembler(MEMolecularAssemblerEntity assembler)
@@ -107,58 +104,36 @@ namespace AE2ForTerraria.UI
 
 		protected override void ApplyLayout()
 		{
-			base.ApplyLayout();
+            base.ApplyLayout();
 
-			const float slotStartX = Pad + 10f;
-			const float slotStartY = 96f;
-			float inventoryTop = Geo.H - 224f;
-            int stationRows = Math.Max(1, (_slots.Count + MEMolecularAssemblerEntity.SlotsPerRow - 1)
-                / MEMolecularAssemblerEntity.SlotsPerRow);
-            float step = Math.Min(51f, Math.Max(20f, (inventoryTop - slotStartY - 30f) / stationRows));
-
-			for (int i = 0; i < _slots.Count; i++)
-			{
-				_slots[i].Left.Set(slotStartX + (i % MEMolecularAssemblerEntity.SlotsPerRow) * step, 0f);
-				_slots[i].Top.Set(slotStartY + (i / MEMolecularAssemblerEntity.SlotsPerRow) * step, 0f);
-                _slots[i].Width.Set(step - 4f, 0f);
-                _slots[i].Height.Set(step - 4f, 0f);
-			}
-
-			float textLeft = slotStartX + MEMolecularAssemblerEntity.SlotsPerRow * 51f + 16f;
-			_target.Left.Set(textLeft, 0f);
-			_target.Top.Set(100f, 0f);
-			_rows.Left.Set(textLeft, 0f);
-			_rows.Top.Set(130f, 0f);
-
-			float barWidth = Math.Max(100f,Geo.W-textLeft-24f);
-            foreach (var text in new[] {_target,_rows,_progressText}) { text.Width.Set(barWidth,0f); text.DynamicallyScaleDownToWidth=true; }
-            _status.Width.Set(Geo.W-48f,0f); _status.DynamicallyScaleDownToWidth=true;
-            _hint.Width.Set(Geo.W-200f,0f); _hint.DynamicallyScaleDownToWidth=true;
-			_progressBack.Left.Set(textLeft, 0f);
-			_progressBack.Top.Set(160f, 0f);
-			_progressBack.Width.Set(barWidth, 0f);
-			_progressBack.Height.Set(14f, 0f);
-
-			float fraction = _assembler?.ProgressFraction ?? 0f;
-			_progressFill.Left.Set(2f, 0f);
-			_progressFill.Top.Set(2f, 0f);
-			_progressFill.Width.Set(Math.Max(0f, (barWidth - 4f) * fraction), 0f);
-			_progressFill.Height.Set(10f, 0f);
-
-			_progressText.Left.Set(textLeft, 0f);
-			_progressText.Top.Set(176f, 0f);
-
-			_clearButton.Left.Set(Geo.W - 160f, 0f);
-			_clearButton.Top.Set(40f, 0f);
-			_clearButton.Width.Set(140f, 0f);
-			_clearButton.Height.Set(30f, 0f);
-
-			_status.Left.Set(Pad + 8f, 0f);
-			_status.Top.Set(inventoryTop - 24f, 0f);
-            _inventory.SetBounds(Pad + 8f, inventoryTop, Geo.W - Pad * 2f - 16f, 208f);
-
-			Window.Recalculate();
-		}
+            if (_hint == null) return;
+            int stationRows = Math.Max(1, (_slots.Count + MEMolecularAssemblerEntity.SlotsPerRow - 1) / MEMolecularAssemblerEntity.SlotsPerRow);
+            float step = Math.Min(40, (Geo.H - 108) / stationRows);
+            for (int i = 0; i < _slots.Count; i++)
+            {
+                _slots[i].Left.Set(Pad + i % 5 * step, 0); _slots[i].Top.Set(66 + i / 5 * step, 0);
+                _slots[i].Width.Set(step - 4, 0); _slots[i].Height.Set(step - 4, 0);
+            }
+            float textLeft = Pad + step * 5 + 8, textWidth = Geo.W - textLeft - Pad;
+            _hint.Left.Set(Pad, 0); _hint.Top.Set(34, 0); _hint.Width.Set(Geo.W - 150, 0);
+            _hint.DynamicallyScaleDownToWidth = true;
+            var lines = new[] { _target, _rows, _progressText };
+            for (int i = 0; i < lines.Length; i++)
+            {
+                lines[i].Left.Set(textLeft, 0); lines[i].Top.Set(68 + i * 30, 0);
+                lines[i].Width.Set(textWidth, 0); lines[i].DynamicallyScaleDownToWidth = true;
+            }
+            _progressBack.Left.Set(textLeft, 0); _progressBack.Top.Set(162, 0);
+            _progressBack.Width.Set(textWidth, 0); _progressBack.Height.Set(12, 0);
+            _progressFill.Left.Set(2, 0); _progressFill.Top.Set(2, 0);
+            _progressFill.Width.Set(Math.Max(0, (textWidth - 4) * (_assembler?.ProgressFraction ?? 0)), 0);
+            _progressFill.Height.Set(8, 0);
+            _clearButton.Left.Set(Geo.W - Pad - 118, 0); _clearButton.Top.Set(32, 0);
+            _clearButton.Width.Set(118, 0); _clearButton.Height.Set(22, 0);
+            _status.Left.Set(Pad, 0); _status.Top.Set(Geo.H - 30, 0);
+            _status.Width.Set(Geo.W - Pad * 2, 0); _status.DynamicallyScaleDownToWidth = true;
+            Window.Recalculate();
+        }
 
 		/// <summary>按当前需要显示的行数重建槽位元素,并调整窗口高度。</summary>
 		private void EnsureSlots()
@@ -212,7 +187,7 @@ namespace AE2ForTerraria.UI
 
 			_visibleSlots = wanted;
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		/// <summary>工作站槽位改动:本地刷新 + 多人下把整份槽位发给服务器。</summary>

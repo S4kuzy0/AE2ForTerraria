@@ -194,6 +194,7 @@ namespace AE2ForTerraria.UI
 			_header.Top.Set(0f, 0f);
 			_header.Width.Set(width, 0f);
 			_header.Height.Set(20f, 0f);
+            _header.DynamicallyScaleDownToWidth = true;
 
 			_search.Left.Set(0f, 0f);
 			_search.Top.Set(24f, 0f);

@@ -11,7 +11,7 @@ namespace AE2ForTerraria.UI;
 /// <summary>Channel management uses current-network permission; recovery only disconnects the original local bridge.</summary>
 public sealed class BridgeUIState : MovableWindowState
 {
-    private static readonly WindowGeometry Geometry = new(520, 294, 400, 274);
+    private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
     private UIText _channel, _network, _original, _feedback;
     private UIButton _inspect, _cycle, _disconnect;
     private bool _enabled, _manage, _recover, _waiting;
@@ -31,7 +31,7 @@ public sealed class BridgeUIState : MovableWindowState
         _cycle.OnLeftClick += (_, _) => ChangeChannel();
         _disconnect.OnLeftClick += (_, _) => Disconnect();
         Window.Append(_inspect); Window.Append(_cycle); Window.Append(_disconnect);
-        ApplyLayout(); UpdateLabels();
+        RequestLayout(); UpdateLabels();
     }
 
     private UIText Text(float scale = .8f)

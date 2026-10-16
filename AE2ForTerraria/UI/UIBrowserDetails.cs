@@ -51,7 +51,7 @@ internal sealed class UIBrowserDetails : UIElement
     private Rectangle _stationBounds;
     private readonly List<string> _stationLines = new();
     private float _stationLineWidth = -1;
-    private int ContentTop => _npc == 0 && _width >= 520 ? 121 : 153;
+    private int ContentTop => _width < 520 ? 105 : _npc == 0 ? 121 : 153;
     public Action<ItemKey> Selected;
     public bool IsOpen { get; private set; }
     public float BottomReserve;
@@ -175,7 +175,16 @@ internal sealed class UIBrowserDetails : UIElement
     {
         float offset = 16 * (1 - _entrance) * (1 - _entrance);
         Place(this, _x + offset, _y, Math.Max(100, _width - offset), _height);
-        Place(_back, 10, 8, 52, 26); Place(_forward, 66, 8, 52, 26); Place(_favorite, _width - offset - 158, 8, 52, 26); Place(_close, _width - offset - 102, 8, 92, 26);
+        Place(_back, 10, 4, 46, 22); Place(_forward, 60, 4, 46, 22); Place(_favorite, _width - offset - 150, 4, 46, 22); Place(_close, _width - offset - 100, 4, 90, 22);
+        if (_width < 520)
+        {
+            float compactTab = (_width - offset - 142) / 4;
+            for (int i = 0; i < 4; i++) Place(_tabs[i], 10 + i * (compactTab + 2), 76, compactTab, 22);
+            Place(_previous, _width - offset - 122, 76, 52, 22);
+            Place(_next, _width - offset - 66, 76, 52, 22);
+            if (_plan != null) Place(_plan, 8, ContentTop, _width - offset - 16, Math.Max(40, _height - ContentTop - 8 - BottomReserve));
+            Recalculate(); return;
+        }
         float tabWidth = _width >= 520 && _npc == 0 ? Math.Min(90, (_width - offset - 224) / 4) : (_width - offset - 26) / 4;
         for (int i = 0; i < 4; i++) Place(_tabs[i], 10 + i * (tabWidth + 2), 87, tabWidth, 28);
         if (ContentTop == 121) { Place(_previous, _width - offset - 202, 87, 70, 26); Place(_next, _width - offset - 80, 87, 70, 26); }
@@ -509,10 +518,10 @@ internal sealed class UIBrowserDetails : UIElement
     {
         var d = GetDimensions(); var box = d.ToRectangle();
         UITheme.Fill(batch, box, new Color(32, 42, 68)); UITheme.Outline(batch, box, UITheme.BorderHot);
-        Utils.DrawBorderString(batch, Fit(_title, .9f, d.Width - 24), new Vector2(d.X + 12, d.Y + 43), UITheme.Text, .9f);
-        Utils.DrawBorderString(batch, Fit(_subtitle, .65f, d.Width - 24), new Vector2(d.X + 12, d.Y + 67), UITheme.Muted, .65f);
+        Utils.DrawBorderString(batch, Fit(_title, .85f, d.Width - 24), new Vector2(d.X + 12, d.Y + (_width < 520 ? 32 : 43)), UITheme.Text, .85f);
+        Utils.DrawBorderString(batch, Fit(_subtitle, .65f, d.Width - 96), new Vector2(d.X + 12, d.Y + (_width < 520 ? 55 : 67)), UITheme.Muted, .65f);
         if (_recipeCount > 0) Utils.DrawBorderString(batch, (_recipe + 1) + " / " + _recipeCount,
-            new Vector2(ContentTop == 121 ? d.X + d.Width - 107 : d.X + d.Width / 2, d.Y + (ContentTop == 121 ? 94 : 126)), UITheme.TextDim, .65f, .5f);
+            new Vector2(_width < 520 ? d.X + d.Width - 40 : ContentTop == 121 ? d.X + d.Width - 107 : d.X + d.Width / 2, d.Y + (_width < 520 ? 55 : ContentTop == 121 ? 94 : 126)), UITheme.TextDim, .65f, .5f);
         _hits.Clear();
         if (_shownRecipe != null) { DrawRecipe(batch, d); return; }
         _ingredientHits.Clear();
@@ -520,7 +529,7 @@ internal sealed class UIBrowserDetails : UIElement
         int rowTop = ContentTop;
         if (_npc > 0)
         {
-            var portrait = new Rectangle(box.X + 12, box.Y + 121, box.Width - 24, (int)Math.Clamp(d.Height * .25f, 72f, 138f));
+            var portrait = new Rectangle(box.X + 12, box.Y + ContentTop, box.Width - 24, (int)Math.Clamp(d.Height * .25f, 56f, 138f));
             UITheme.FillRounded(batch, portrait, UITheme.Slot, 3);
             NpcVisuals.Draw(batch, _npc, portrait, 2f);
             rowTop = portrait.Bottom - box.Y + 10;

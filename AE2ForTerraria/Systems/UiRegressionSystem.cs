@@ -36,6 +36,22 @@ public sealed class UiRegressionSystem : ModSystem
             && ++_menuFrames>120)
             RenderChecks();
     }
+    private static void SetViewport(int width,int height,float scale)
+    {
+        Main.screenWidth=width;Main.screenHeight=height;
+        Terraria.GameInput.PlayerInput.CacheOriginalScreenDimensions();Main.UIScale=scale;
+    }
+    private static Action CaptureViewport()
+    {
+        int width=Main.screenWidth,height=Main.screenHeight;
+        float scale=Main.UIScaleWanted;
+        var original=Terraria.GameInput.PlayerInput.OriginalScreenSize;
+        return () =>
+        {
+            SetViewport((int)original.X,(int)original.Y,scale);
+            Main.screenWidth=width;Main.screenHeight=height;
+        };
+    }
     private static void Click(MovableWindowState state,string name)
     {
         var button=(UIElement)state.GetType().GetField(name,System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(state);
@@ -251,11 +267,12 @@ public sealed class UiRegressionSystem : ModSystem
         try
         {
             terminal.Stations=Enumerable.Range(0,41).Select(i=>i==40 ? new Item() : new Item(ItemID.WorkBench)).ToArray();
-            reopened.ShowDetails(ItemID.Torch);
+            reopened.CloseDetails();
             reopened.Update(new GameTime());reopened.Recalculate();
             var grid=Field<UIStationGrid>(reopened,"_stationGrid");var rows=Field<UIList>(grid,"_rows");
             Assert(rows.Count>=2 && rows.Children.SelectMany(e=>e.Children).SelectMany(e=>e.Children).OfType<UIItemSlotElement>().Any()
                 && grid.RequiredHeight<=104,"compact workstations use multiple columns and bounded scroll height");
+            reopened.ShowDetails(ItemID.Torch); reopened.Update(new GameTime());
             RenderProbe(reopened,"Terminal-dense-stations");
             var details=Field<UIBrowserDetails>(reopened,"_info");var conditions=Field<Rectangle>(details,"_stationBounds");
             Assert(Field<IList>(details,"_ingredientHits").Cast<object>().All(hit=>!TupleField<Rectangle>(hit,"Item1").Intersects(conditions)),
@@ -376,12 +393,13 @@ public sealed class UiRegressionSystem : ModSystem
     }
     private void ValidateRecipeReader()
     {
+        var restoreViewport=CaptureViewport();
         int width=Main.screenWidth,height=Main.screenHeight,mx=Main.mouseX,my=Main.mouseY,wheel=Terraria.GameInput.PlayerInput.ScrollWheelDelta;
         float scale=Main.UIScaleWanted;
         bool mouseLeft=Main.mouseLeft;
         try
         {
-            Main.screenWidth=1280;Main.screenHeight=720;Main.UIScale=1f;
+            SetViewport(1280,720,1f);
             Main.mouseX=0;Main.mouseY=0;Main.mouseLeft=false;Terraria.GameInput.PlayerInput.ScrollWheelDelta=0;
             var search=NewSearch();search.Layout.X=60;search.Layout.Y=50;search.Layout.W=920;search.Layout.H=620;
             // FitToScreen alone only resizes the window. Activate its child layout and
@@ -457,7 +475,7 @@ public sealed class UiRegressionSystem : ModSystem
 
             ValidateCompletePlanReader();
         }
-        finally {Main.screenWidth=width;Main.screenHeight=height;Main.UIScale=scale;Main.mouseX=mx;Main.mouseY=my;Main.mouseLeft=mouseLeft;Terraria.GameInput.PlayerInput.ScrollWheelDelta=wheel;}
+        finally {restoreViewport();Main.mouseX=mx;Main.mouseY=my;Main.mouseLeft=mouseLeft;Terraria.GameInput.PlayerInput.ScrollWheelDelta=wheel;}
     }
     private void ValidateCompletePlanReader()
     {
@@ -527,6 +545,7 @@ public sealed class UiRegressionSystem : ModSystem
     }
     private void ValidateCompactControls()
     {
+        var restoreViewport=CaptureViewport();
         int width=Main.screenWidth,height=Main.screenHeight;
         float scale=Main.UIScaleWanted;
         var geometry=(WindowGeometry)typeof(SearchUIState).GetField("Geometry",
@@ -536,12 +555,12 @@ public sealed class UiRegressionSystem : ModSystem
         {
             // Test control behavior in logical pixels with room for every drag. The
             // separate render sweep below still exercises each requested resolution.
-            Main.screenWidth=1920; Main.screenHeight=1080; Main.UIScale=1f;
+            SetViewport(1920,1080,1f);
             ValidateCompactControlsInViewport();
         }
         finally
         {
-            Main.screenWidth=width; Main.screenHeight=height; Main.UIScale=scale;
+            restoreViewport();
             geometry.X=x; geometry.Y=y; geometry.W=w; geometry.H=h;
         }
     }
@@ -629,7 +648,7 @@ public sealed class UiRegressionSystem : ModSystem
             var resize=WindowField<UIResizeGrip>(search,"_grip"); var resizePoint=resize.GetDimensions().Center();
             Assert(WindowField<UIFrameGrip>(search,"_frameCorner").Parent==null && window.GetElementAt(resizePoint)==resize,"visible corner grip is sole resize hit target");
             Mouse(resizePoint,true); resize.LeftMouseDown(new UIMouseEvent(resize,Main.MouseScreen));
-            Mouse(new Vector2(window.Left.Pixels+w+12,window.Top.Pixels+h+10),true); resize.Update(tick);
+            Mouse(resizePoint + new Vector2(12,10),true); resize.Update(tick);
             Mod.Logger.Info($"AE2 CORNER DRAG: before={w},{h}; after={search.Layout.W},{search.Layout.H}");
             // Mouse coordinates are integral; a saved/scaled window origin may be fractional.
             Assert(Math.Abs(search.Layout.W-(w+12))<1 && Math.Abs(search.Layout.H-(h+10))<1,"corner drag changes width and height");
@@ -652,11 +671,83 @@ public sealed class UiRegressionSystem : ModSystem
             search.Layout.X=x;search.Layout.Y=y;search.Layout.W=w;search.Layout.H=h;search.FitToScreen();
         }
     }
+    private void ValidateCompactCategories(SearchUIState search)
+    {
+        var categories=Field<UIBrowserCategoryBar>(search,"_categories");
+        var trigger=Field<UIButton>(categories,"_categoryChoice");
+        Assert(categories.GetDimensions().Height==22 && trigger.Parent==categories,
+            "compact category selector reserves one toolbar row");
+        trigger.LeftClick(new UIMouseEvent(trigger,trigger.GetDimensions().Center()));
+        var menu=ActiveChoice();
+        Assert(Field<string[]>(menu,"_choices").Length==BrowserCategories.Items.Length,
+            "compact category selector retains every existing item category");
+        var point=new Vector2(menu.GetDimensions().X+12,menu.GetDimensions().Y+4+30+12);
+        menu.LeftClick(new UIMouseEvent(menu,point));
+        search.Update(new GameTime());
+        Assert(categories.Category==1 && Field<List<int>>(search,"_filtered").All(categories.Matches),
+            "compact category selection applies the original item filter");
+        trigger.LeftClick(new UIMouseEvent(trigger,trigger.GetDimensions().Center()));
+        menu=ActiveChoice(); point=new Vector2(menu.GetDimensions().X+12,menu.GetDimensions().Y+16);
+        menu.LeftClick(new UIMouseEvent(menu,point)); search.Update(new GameTime());
+        int mouseX=Main.mouseX,mouseY=Main.mouseY; bool down=Main.mouseLeft;
+        try
+        {
+            Main.mouseLeft=false;
+            trigger.LeftClick(new UIMouseEvent(trigger,trigger.GetDimensions().Center()));
+            menu=ActiveChoice(); Main.mouseX=Main.mouseY=0;Main.mouseLeft=true;
+            search.Update(new GameTime());
+            Assert(!UIChoiceMenu.IsOpen && menu.Parent==null,
+                "outside click dismisses compact selector after full window child enumeration");
+        }
+        finally { Main.mouseX=mouseX;Main.mouseY=mouseY;Main.mouseLeft=down;UIChoiceMenu.Close(); }
+    }
+
+    private void ValidateLiveResize(MovableWindowState state)
+    {
+        var window = WindowField<UIWindowPanel>(state,"<Window>k__BackingField");
+        var grip = WindowField<UIResizeGrip>(state,"_grip");
+        var tick = new GameTime(TimeSpan.FromSeconds(1),TimeSpan.FromSeconds(.016));
+        float x=state.Layout.X,y=state.Layout.Y,w=state.Layout.W,h=state.Layout.H;
+        int mouseX=Main.mouseX,mouseY=Main.mouseY; bool down=Main.mouseLeft;
+        try
+        {
+            Assert(state.Layout.DefaultW==475 && state.Layout.DefaultH==350 && state.Layout.Key.EndsWith(".compact1"),
+                state.GetType().Name + " shares Recipe Browser defaults and resets old layout keys once");
+            Vector2 start=grip.GetDimensions().Center();
+            Main.mouseX=(int)start.X;Main.mouseY=(int)start.Y;Main.mouseLeft=true;
+            grip.LeftMouseDown(new UIMouseEvent(grip,start));
+            state.Update(tick);
+            Assert(Math.Abs(state.Layout.W-w)<1 && Math.Abs(state.Layout.H-h)<1,
+                state.GetType().Name + " does not jump when grabbing the resize handle");
+            var elapsed=System.Diagnostics.Stopwatch.StartNew();
+            for(int frame=0;frame<16;frame++)
+            {
+                Main.mouseX=(int)start.X+(frame%2==0 ? 24 : 8);
+                Main.mouseY=(int)start.Y+(frame%2==0 ? 18 : 6);
+                // Updating only the grip missed the original Window.Children mutation.
+                state.Update(tick);
+            }
+            elapsed.Stop();
+            Assert(state.Layout.W>w && state.Layout.H>h && window.Children.Contains(grip),
+                state.GetType().Name + " resizes through complete child enumeration without collection errors");
+            Mod.Logger.Info("AE2 WINDOW RESIZE: "+state.GetType().Name+"; updates=16; totalMs="+elapsed.Elapsed.TotalMilliseconds.ToString("F3"));
+        }
+        finally
+        {
+            grip.LeftMouseUp(new UIMouseEvent(grip,Main.MouseScreen));
+            Main.mouseLeft=false;state.Update(tick);
+            state.Layout.X=x;state.Layout.Y=y;state.Layout.W=w;state.Layout.H=h;
+            state.FitToScreen();Invoke(state,"ApplyLayout");
+            Main.mouseX=mouseX;Main.mouseY=mouseY;Main.mouseLeft=down;
+        }
+    }
+
     private void RenderChecks()
     {
         if (_done || Main.dedServ || !Main.gameMenu || !StorageSystem.Ready
             || Environment.GetEnvironmentVariable("AE2_UI_REGRESSION")!="1") return;
         _done=true;
+        var restoreViewport=CaptureViewport();
         int width=Main.screenWidth,height=Main.screenHeight; float scale=Main.UIScaleWanted;
         var device=Main.instance.GraphicsDevice;
         var oldTargets=device.GetRenderTargets();
@@ -705,7 +796,7 @@ public sealed class UiRegressionSystem : ModSystem
             ValidateBrowser();
             foreach (var size in new[] { new Point(800,600), new Point(1280,720), new Point(1920,1080) })
             {
-                Main.screenWidth=size.X; Main.screenHeight=size.Y; Main.UIScale=size.X==1920 ? 1.25f : 1f;
+                SetViewport(size.X,size.Y,size.X==1920 ? 1.25f : 1f);
                 var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
                 var terminal=NewTerminal(TerminalViewMode.Craft);
                 typeof(TerminalUIState).GetField("_orderQuantity",flags).SetValue(terminal,25L);
@@ -739,13 +830,18 @@ public sealed class UiRegressionSystem : ModSystem
                 var npcSearch = NewSearch(); Click(npcSearch,"_npcTab");
                 var npcDetail = NewSearch(); Click(npcDetail,"_npcTab"); npcDetail.ShowNpcDetails(NPCID.Guide);
                 var filterSearch=NewSearch(); var modSearch=NewSearch(); var minimumSearch=NewSearch();
-                foreach (var state in new MovableWindowState[] {terminal,driveUi,assemblerUi,cpuUi,search,unitUi,partitionUi,keepUi,closedTerminal,detailSearch,treeSearch,npcSearch,npcDetail,filterSearch,modSearch,minimumSearch,terminalTasks,terminalStations,terminalKeep,longSearch,accessTerminal})
+                var auxiliary = new MovableWindowState[] { new BridgeUIState(), new StorageBusUIState(), new DropCollectorUIState(),
+                    new NetworkOverviewUIState(), new HelpUIState(), new RecipeOverlayUIState(), new NpcOverlayUIState() };
+                foreach (var page in auxiliary) page.Activate();
+                foreach (var state in new MovableWindowState[] {terminal,driveUi,assemblerUi,cpuUi,search,unitUi,partitionUi,keepUi,closedTerminal,detailSearch,treeSearch,npcSearch,npcDetail,filterSearch,modSearch,minimumSearch,terminalTasks,terminalStations,terminalKeep,longSearch,accessTerminal}.Concat(auxiliary))
                 {
                     UIChoiceMenu.Close();
                     state.Layout.X=state.Layout.Y=-1; state.Layout.W=state.Layout.DefaultW; state.Layout.H=state.Layout.DefaultH;
                     if (ReferenceEquals(state,minimumSearch)) { state.Layout.W=state.Layout.MinW;state.Layout.H=state.Layout.MinH; }
                     state.FitToScreen(); state.Recalculate();
                     for (int frame=0;frame<12;frame++) state.Update(new GameTime(TimeSpan.FromSeconds(1+frame/60.0),TimeSpan.FromSeconds(1.0/60)));
+                    ValidateLiveResize(state);
+                    if (ReferenceEquals(state,search)) ValidateCompactCategories(search);
                     if (ReferenceEquals(state,filterSearch)) Click(filterSearch,"_filterButton");
                     if (ReferenceEquals(state,modSearch)) Click(modSearch,"_modButton");
                     string label=state.GetType().Name+(ReferenceEquals(state,accessTerminal)?"-access":ReferenceEquals(state,closedTerminal)?"-catalogue":ReferenceEquals(state,detailSearch)?"-details":ReferenceEquals(state,treeSearch)?"-tree":ReferenceEquals(state,npcSearch)?"-npcs":ReferenceEquals(state,npcDetail)?"-npc-detail":ReferenceEquals(state,filterSearch)?"-filter":ReferenceEquals(state,modSearch)?"-mods":ReferenceEquals(state,minimumSearch)?"-minimum":ReferenceEquals(state,terminalTasks)?"-tasks":ReferenceEquals(state,terminalStations)?"-stations":ReferenceEquals(state,terminalKeep)?"-keep":ReferenceEquals(state,longSearch)?"-long-materials":"")+(ReferenceEquals(state,partitionUi)?"-partition":ReferenceEquals(state,keepUi)?"-keep-page2":"");
@@ -789,14 +885,11 @@ public sealed class UiRegressionSystem : ModSystem
                     }
                     if (ReferenceEquals(state,assemblerUi))
                     {
-                        string bagField = state is TerminalUIState ? "_playerInventory" : "_inventory";
-                        var bag = Field<UIPlayerInventoryPanel>(state,bagField);
-                        var bagBounds = bag.GetDimensions().ToRectangle();
                         var window = WindowField<UIWindowPanel>(state,"<Window>k__BackingField").GetDimensions().ToRectangle();
-                        Assert(bag.Parent != null && window.Contains(bagBounds)
-                            && bag.Children.OfType<UIItemSlotElement>().Count() == 50
-                            && bag.Children.OfType<UIItemSlotElement>().All(slot=>bagBounds.Contains(slot.GetDimensions().ToRectangle())),
-                            label + " keeps fifty interactive backpack slots inside its window at " + size.X);
+                        Assert(window.Contains(Field<UIElement>(state,"_progressText").GetDimensions().ToRectangle()),
+                            "legacy assembler progress text fits its compact window at " + size.X);
+                        Assert(!WindowField<UIWindowPanel>(state,"<Window>k__BackingField").Children.OfType<UIPlayerInventoryPanel>().Any(),
+                            label + " uses the native backpack and reserves its compact body for stations at " + size.X);
                     }
                     if (ReferenceEquals(state,terminalTasks) || ReferenceEquals(state,terminalKeep))
                     {
@@ -818,7 +911,7 @@ public sealed class UiRegressionSystem : ModSystem
         finally
         {
             UIChoiceMenu.Close();
-            device.SetRenderTargets(oldTargets); Main.screenWidth=width; Main.screenHeight=height; Main.UIScale=scale;
+            device.SetRenderTargets(oldTargets); restoreViewport();
             world?.Dispose();
             Main.myPlayer=playerIndex;Main.player[playerIndex]=previousPlayer;
             foreach(var binding in bindings) binding.Property.SetValue(null,binding.Value);
@@ -892,7 +985,7 @@ public sealed class UiRegressionSystem : ModSystem
                 "native tooltip fixture has initialized bindings for every registered mod in all input modes");
             Mod.Logger.Info("AE2 TOOLTIP INPUT FIXTURE: original menu profile missing registered bindings=" + missingKeys
                 + "; private initialized profile supplied; original profile and assignments preserved.");
-            Main.screenWidth=1280; Main.screenHeight=720; Main.UIScale=1f;
+            SetViewport(1280,720,1f);
             var state = new DriveUIState(); state.Activate(); state.SetDrive(drive);
             state.Layout.X=120; state.Layout.Y=50; state.Layout.W=800; state.Layout.H=600; state.OnActivate();
             state.Update(new GameTime());

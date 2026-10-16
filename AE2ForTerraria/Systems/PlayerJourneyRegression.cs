@@ -66,6 +66,8 @@ public sealed class PlayerJourneyRegression : ModSystem
     private Vector2? _copiedAnchor;
     private UIElement _clickTarget;
     private int _clickGridType;
+    private int _resizeFrames;
+    private Vector2 _resizeOrigin, _sizeBeforeResize;
 
     private delegate void InputHook(Action original);
     private delegate void PlayerHook(Action<Player> original, Player player);
@@ -285,6 +287,13 @@ public sealed class PlayerJourneyRegression : ModSystem
             }
         }
         bool left = _clickFrames == 3 || _clickFrames == 2;
+        if (_resizeFrames > 0)
+        {
+            int phase = 28 - _resizeFrames;
+            _pointer = _resizeOrigin + (phase < 2 ? Vector2.Zero : new Vector2(phase % 2 == 0 ? 24 : 12, phase % 2 == 0 ? 18 : 8));
+            left = _resizeFrames > 1;
+            _resizeFrames--;
+        }
         // Native SetState/ResetState reserves 200 ms for opening-click suppression. Wait for
         // that actual timer to expire; never clear it or mistake the suppressed click for a bug.
         if (_clickFrames == 4 && (ClickGuardMilliseconds() > 0 || !Main.hasFocus))
@@ -346,7 +355,7 @@ public sealed class PlayerJourneyRegression : ModSystem
                 if (_copiedWorld) BuildCopiedWorldSteps();
                 else if (_reload) BuildReloadSteps(); else { PrepareArena(); BuildSteps(); }
             }
-            if (--_delay > 0 || _capture != null || _clickFrames > 0 || _worldRightFrames > 0 || _steps.Count == 0) return;
+            if (--_delay > 0 || _capture != null || _clickFrames > 0 || _resizeFrames > 0 || _worldRightFrames > 0 || _steps.Count == 0) return;
             var step = _steps.Dequeue();
             long start = Stopwatch.GetTimestamp();
             step.Run();
@@ -576,6 +585,26 @@ public sealed class PlayerJourneyRegression : ModSystem
             _capture = "05-access-native-inventory";
             _pointer = new Vector2(20, 680); _movementStart = Main.LocalPlayer.position; _moveRight = true;
         }, 35);
+        Step("resize access terminal through actual held input", () =>
+        {
+            _moveRight = false;
+            var state = UISystem.TerminalState;
+            var grip = (UIResizeGrip)typeof(MovableWindowState).GetField("_grip",PrivateInstance).GetValue(state);
+            _resizeOrigin = grip.GetDimensions().Center();
+            _sizeBeforeResize = new Vector2(state.Layout.W,state.Layout.H);
+            grip.OnLeftMouseDown += (_, _) => Mod.Logger.Info("AE2 JOURNEY RESIZE DOWN: " + JsonSerializer.Serialize(DiagnosticState()));
+            grip.OnLeftMouseUp += (_, _) => Mod.Logger.Info("AE2 JOURNEY RESIZE UP: " + JsonSerializer.Serialize(DiagnosticState()));
+            Mod.Logger.Info("AE2 JOURNEY RESIZE START: " + JsonSerializer.Serialize(DiagnosticState()));
+            _resizeFrames = 28;
+        });
+        Step("check live resize and preserve its contents", () =>
+        {
+            Require(UISystem.TerminalState.Layout.W > _sizeBeforeResize.X && UISystem.TerminalState.Layout.H > _sizeBeforeResize.Y,
+                "actual corner drag resizes the access terminal while world updates continue");
+            Require(_drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood))==90 && InventoryAmount(ItemID.Wood)==10,
+                "corner drag preserves inventory and network quantities");
+            _capture = "05b-access-corner-resize";
+        });
         Step("check terminal movement and open crafting", () =>
         {
             _moveRight = false;
@@ -635,7 +664,7 @@ public sealed class PlayerJourneyRegression : ModSystem
         {
             UISystem.CloseAll(); RightClick(_accessPosition);
             var terminal = UISystem.TerminalState;
-            terminal.Layout.W = Math.Min(1100, Main.screenWidth / Main.UIScale - 24);
+            terminal.Layout.W = Math.Min(1100, MovableWindowState.ViewportSize.X - 24);
             terminal.Layout.H = 560; terminal.Layout.X = 0; terminal.Layout.Y = 0;
             terminal.OnActivate(); terminal.Recalculate();
             Require(Field<UIItemGrid>(terminal, "_grid").Parent != null, "background terminal catalogue is attached for the overlap test");
@@ -804,7 +833,7 @@ public sealed class PlayerJourneyRegression : ModSystem
         var drive = UISystem.DriveState;
         var slot = Field<List<UIItemSlotElement>>(drive, "_slots")[0];
         Vector2 offset = slot.GetDimensions().Center() - new Vector2(drive.Layout.X, drive.Layout.Y);
-        float width = Main.screenWidth / Main.UIScale, height = Main.screenHeight / Main.UIScale;
+        float width = MovableWindowState.ViewportSize.X, height = MovableWindowState.ViewportSize.Y;
         foreach (var pair in _nativeSlotBounds.OrderBy(pair => pair.Key == 44 ? -1 : pair.Key))
         {
             if (pair.Key != 44 && !Main.LocalPlayer.inventory[pair.Key].IsAir) continue;
@@ -845,9 +874,9 @@ public sealed class PlayerJourneyRegression : ModSystem
 
     private static void PositionWindow(MovableWindowState window)
     {
-        window.Layout.W = Math.Max(window.Layout.MinW, 800); window.Layout.H = Math.Max(window.Layout.MinH, 560);
-        window.Layout.X = Math.Max(0, Main.screenWidth / Main.UIScale - window.Layout.W - 12);
-        window.Layout.Y = Math.Max(0, Main.screenHeight / Main.UIScale - window.Layout.H - 12);
+        window.Layout.W = window.Layout.DefaultW; window.Layout.H = window.Layout.DefaultH;
+        window.Layout.X = Math.Max(0, MovableWindowState.ViewportSize.X - window.Layout.W - 12);
+        window.Layout.Y = Math.Max(0, MovableWindowState.ViewportSize.Y - window.Layout.H - 12);
         window.OnActivate(); window.Recalculate();
     }
 
@@ -936,6 +965,11 @@ public sealed class PlayerJourneyRegression : ModSystem
             overlapInventorySlot = _overlapInventorySlot,
             inputAllowed = AEUiSession.InputAllowed, lockedInventory = Main.LocalPlayer?.HasLockedInventory(),
             cursorPending = MENet.CursorPending, transactionPending = MENet.InventoryTransactionPending, driveClicks = _driveClicks,
+            terminalLayout = UISystem.TerminalState == null ? null : new { UISystem.TerminalState.Layout.X, UISystem.TerminalState.Layout.Y, UISystem.TerminalState.Layout.W, UISystem.TerminalState.Layout.H },
+            terminalBounds = UISystem.TerminalState?.InteractionBounds.ToString(),
+            resizeOrigin = new { _resizeOrigin.X, _resizeOrigin.Y }, resizeFrames = _resizeFrames,
+            nativePointer = new { PlayerInput.MouseInfo.X, PlayerInput.MouseInfo.Y },
+            targetAtResizeStart = UISystem.TerminalState?.GetElementAt(_resizeOrigin)?.GetType().Name,
             cursor = ItemState(Main.mouseItem), inventory20 = ItemState(Main.LocalPlayer?.inventory[20]),
             inventory58 = ItemState(Main.LocalPlayer?.inventory[58]), disk0 = ItemState(_drive?.Disks[0])
         };

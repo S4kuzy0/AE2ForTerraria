@@ -37,14 +37,14 @@ namespace AE2ForTerraria.UI
 		}
 
 		private static readonly WindowGeometry Geometry =
-			new WindowGeometry(900f, 680f, 560f, 430f);
+			WindowGeometry.Compact();
 
 		// —— 版式 ——
 		/// <summary>第一行(分类标签 / 排序 / 收藏 / 重置 / 关闭)。</summary>
 		private const float HeaderTop = Pad;
-		private const float HeaderHeight = 26f;
+		private const float HeaderHeight = 22f;
 		private const float SearchTop = HeaderTop + HeaderHeight + 6f;
-		private const float SearchHeight = 28f;
+		private const float SearchHeight = 24f;
 		private const float GridTop = SearchTop + SearchHeight + 5f;
 
 		private UIUnderlineTab _itemTab;
@@ -112,7 +112,7 @@ namespace AE2ForTerraria.UI
 		public override bool SearchBoxFocused => _typing;
 		protected override bool CornerResizeOnly => true;
 		protected override bool HighlightFrame => false;
-		protected override float ResetButtonWidth => 48f;
+		protected override float ResetButtonWidth => 42f;
 		protected override float ChromeGap => 4f;
 		protected override float FramelessChromeHeight => HeaderHeight;
 
@@ -124,20 +124,20 @@ namespace AE2ForTerraria.UI
 			// 没有标题栏:**任意空位**按住左键就能拖(见 UIWindowPanel)
 			InitWindow(Geometry, ModText.Get("TitleItemBrowser", "物品浏览器"), frameless: true);
 
-			_itemTab = new UIUnderlineTab(ModText.Get("TabItems", "物品"), 0.85f);
+			_itemTab = new UIUnderlineTab(ModText.Get("TabItems", "物品"), 0.75f);
 			_itemTab.OnLeftClick += (evt, element) => SwitchCategory(Category.Item);
 			Window.Append(_itemTab);
 
-			_npcTab = new UIUnderlineTab(ModText.Get("TabNpcs", "怪物"), 0.85f);
+			_npcTab = new UIUnderlineTab(ModText.Get("TabNpcs", "怪物"), 0.75f);
 			_npcTab.OnLeftClick += (evt, element) => SwitchCategory(Category.Npc);
 			Window.Append(_npcTab);
             _npcTab.SetText("怪物 / NPC");
-            _recipeTab = new UIUnderlineTab("配方", .85f);
+            _recipeTab = new UIUnderlineTab("配方", .75f);
             _recipeTab.OnLeftClick += (_, _) => SwitchCategory(Category.Recipes);
             Window.Append(_recipeTab);
             Window.BackgroundColor = new Color(42, 54, 87);
             _categories = new UIBrowserCategoryBar { Compact = true };
-            _categories.Changed = () => { ApplyLayout(); Refresh(); };
+            _categories.Changed = () => { RequestLayout(); Refresh(); };
             Window.Append(_categories);
             _details = new UIBrowserDetails(Window);
             _details.FavoriteChanged = Refresh;
@@ -193,7 +193,7 @@ namespace AE2ForTerraria.UI
 			};
 			Window.Append(_sortButton);
 
-			_grid = new UIItemGrid { CellSize = 43, InputBlocked = () => _details.BlocksPointer || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null };
+			_grid = new UIItemGrid { CellSize = 32, InputBlocked = () => _details.BlocksPointer || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null };
 			// 回车 = 打开这一项的来源(和左键同一个动作)
 			_grid.OnActivated = key =>
 			{
@@ -213,7 +213,7 @@ namespace AE2ForTerraria.UI
 					int type = _grid.HoveredType;
                     if (_category != Category.Npc && type == _rightType && UIStatus.Now - _rightAt < .35)
                     {
-                        SwitchCategory(Category.Npc); _dropQuery = type; Window.Append(_clearDrop); ApplyLayout(); Refresh(); _rightType = 0;
+                        SwitchCategory(Category.Npc); _dropQuery = type; Window.Append(_clearDrop); RequestLayout(); Refresh(); _rightType = 0;
                     }
                     else { Activate(type, true); _rightType = type; _rightAt = UIStatus.Now; }
 				}
@@ -247,14 +247,14 @@ namespace AE2ForTerraria.UI
 			AddDragTarget(_status);
 			AddDragTarget(_statusHint);
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		public void ResetForOpen()
 		{
 			_category = Category.Item;
             _dropQuery = 0; _clearDrop.Remove();
-            _categories.SetMode(false); _details.Close(); ApplyLayout(); Refresh();
+            _categories.SetMode(false); _details.Close(); RequestLayout(); Refresh();
 			_grid.NpcMode = false;
 			// Search takes keyboard focus only after an explicit click.
 			_typing = false;
@@ -301,7 +301,7 @@ namespace AE2ForTerraria.UI
             _filter = 0; _filterButton.Selected = false;
             _categories.SetMode(category == Category.Npc);
             _details.Close();
-            ApplyLayout();
+            RequestLayout();
 			_grid.NpcMode = category == Category.Npc;
 			ApplyTabVisuals();
 			Refresh();
@@ -376,7 +376,7 @@ namespace AE2ForTerraria.UI
 			}
 
 			_wrenchAttached = want;
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		private void OnGridLeftClick()
@@ -465,12 +465,13 @@ namespace AE2ForTerraria.UI
             base.ApplyLayout();
             if (_categories == null || _grid == null) return;
             float w = Geo.W, h = Geo.H, inner = w - Pad * 2;
-            Place(_itemTab, Pad, Pad, 52, 26); Place(_recipeTab, Pad + 56, Pad, 52, 26);
-            Place(_npcTab, Pad + 112, Pad, 108, 26);
             float favoriteX = w - Pad - 26 - ChromeGap - ResetButtonWidth - ChromeGap - ResetButtonWidth;
+            float tabWidth = Math.Min(80, (favoriteX - 84 - Pad - 12) / 3);
+            Place(_itemTab, Pad, Pad, tabWidth, 22); Place(_recipeTab, Pad + tabWidth + 4, Pad, tabWidth, 22);
+            Place(_npcTab, Pad + 2 * (tabWidth + 4), Pad, tabWidth, 22);
             Place(_starButton, favoriteX, Pad, ResetButtonWidth, HeaderHeight);
-            Place(_helpButton, favoriteX - 52, Pad, 48, HeaderHeight);
-            Place(_filterButton, favoriteX - 104, Pad, 48, HeaderHeight);
+            Place(_helpButton, favoriteX - 42, Pad, 38, HeaderHeight);
+            Place(_filterButton, favoriteX - 84, Pad, 38, HeaderHeight);
             Place(_searchPanel, Pad, SearchTop, inner - 156, SearchHeight);
             Place(_searchText, 26, 4, inner - 200, 24);
             Place(_modButton, w - Pad - 150, SearchTop, 150, SearchHeight);

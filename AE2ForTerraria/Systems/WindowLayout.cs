@@ -101,7 +101,7 @@ namespace AE2ForTerraria.Systems
 		private static bool TryParse(string text, out float value)
 		{
 			return float.TryParse(text.Trim(), NumberStyles.Float,
-				CultureInfo.InvariantCulture, out value);
+				CultureInfo.InvariantCulture, out value) && float.IsFinite(value);
 		}
 
 		/// <summary>把存下来的几何套到某个窗口上(没有记录就保持默认)。</summary>

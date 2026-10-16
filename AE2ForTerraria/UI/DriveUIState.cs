@@ -15,7 +15,7 @@ namespace AE2ForTerraria.UI
 	/// <summary>磁盘驱动器界面:排列磁盘槽位、显示容量占用,并列出已存了什么。</summary>
 	public sealed class DriveUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(800f, 500f, 680f, 320f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 
 		private readonly List<UIItemSlotElement> _slots = new List<UIItemSlotElement>();
 		private UIText _capacity;
@@ -97,52 +97,36 @@ namespace AE2ForTerraria.UI
 				_slots.Add(slot);
 			}
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		protected override void ApplyLayout()
 		{
-			base.ApplyLayout();
+            base.ApplyLayout();
 
-			for (int i = 0; i < _slots.Count; i++)
-			{
-				_slots[i].Left.Set(Pad + 10f + (i % 5) * 52f, 0f);
-				_slots[i].Top.Set(84f + (i / 5) * 52f, 0f);
-			}
-
-			_hint.Left.Set(Pad + 8f, 0f);
-			_hint.Top.Set(66f, 0f);
-
-			_capacity.Left.Set(Pad + 8f, 0f);
-			_capacity.Top.Set(202f, 0f);
-            _capacity.Width.Set(260f,0f); _capacity.Height.Set(44f,0f);
-            _capacity.DynamicallyScaleDownToWidth=true;
-
-			_capacityBar.Left.Set(Pad + 8f, 0f);
-			_capacityBar.Top.Set(256f, 0f);
-			_capacityBar.Width.Set(260f, 0f);
-			_capacityBar.Height.Set(10f, 0f);
-
-			// 已存内容面板放右侧
-			float listLeft = Pad + 10f + 5f * 52f + 16f;
-			_panelX = listLeft - 4f;
-
-			_contents.Place(listLeft - 4f, 46f,
-				Math.Max(80f, Geo.W - listLeft - Pad),
-				Math.Max(120f, Geo.H - 94f));
-
-			_partition.Place(listLeft - 4f, 46f,
-				Math.Max(80f, Geo.W - listLeft - Pad),
-				Math.Max(120f, Geo.H - 94f));
-
-			_tabButton.Left.Set(listLeft - 4f, 0f);
-			_tabButton.Top.Set(Geo.H - 42f, 0f);
-			_tabButton.Width.Set(120f, 0f);
-			_tabButton.Height.Set(26f, 0f);
-
-			Window.Recalculate();
-			ApplyPanelVisibility();
-		}
+            float diskStep = Geo.W < 600 ? 34 : 52;
+            float leftWidth = diskStep * 5;
+            for (int i = 0; i < _slots.Count; i++)
+            {
+                _slots[i].Left.Set(Pad + i % 5 * diskStep, 0);
+                _slots[i].Top.Set(62 + i / 5 * diskStep, 0);
+                _slots[i].Width.Set(diskStep - 4, 0); _slots[i].Height.Set(diskStep - 4, 0);
+            }
+            _hint.Left.Set(Pad, 0); _hint.Top.Set(36, 0);
+            _hint.Width.Set(leftWidth, 0); _hint.DynamicallyScaleDownToWidth = true;
+            _capacity.Left.Set(Pad, 0); _capacity.Top.Set(70 + diskStep * 2, 0);
+            _capacity.Width.Set(leftWidth, 0); _capacity.Height.Set(44, 0);
+            _capacity.DynamicallyScaleDownToWidth = true;
+            _capacityBar.Left.Set(Pad, 0); _capacityBar.Top.Set(122 + diskStep * 2, 0);
+            _capacityBar.Width.Set(leftWidth, 0); _capacityBar.Height.Set(8, 0);
+            _panelX = Pad + leftWidth + 10;
+            float width = Geo.W - _panelX - Pad;
+            _contents.Place(_panelX, 32, width, Geo.H - 72);
+            _partition.Place(_panelX, 32, width, Geo.H - 72);
+            _tabButton.Left.Set(_panelX, 0); _tabButton.Top.Set(Geo.H - 32, 0);
+            _tabButton.Width.Set(100, 0); _tabButton.Height.Set(22, 0);
+            Window.Recalculate(); ApplyPanelVisibility();
+        }
 
 		/// <summary>内容面板和分区编辑同一时间只显示一个。</summary>
 		private void ApplyPanelVisibility()

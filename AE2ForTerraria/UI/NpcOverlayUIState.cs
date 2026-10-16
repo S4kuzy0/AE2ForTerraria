@@ -16,7 +16,7 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public sealed class NpcOverlayUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(820f, 560f, 580f, 400f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 
 		private const int IconSize = 38;
 		private const int IconStep = 44;
@@ -57,7 +57,7 @@ namespace AE2ForTerraria.UI
 			_next.OnLeftClick += (evt, element) => Turn(1);
 			Window.Append(_next);
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		public void Show(int npcType)

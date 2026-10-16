@@ -18,7 +18,7 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public sealed class StorageUnitUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(640f, 460f, 520f, 360f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 
 		private MEStorageUnitEntity _unit;
 
@@ -79,7 +79,7 @@ namespace AE2ForTerraria.UI
 			};
 			Window.Append(_tabButton);
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		public void SetUnit(MEStorageUnitEntity unit)

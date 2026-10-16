@@ -21,7 +21,7 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public sealed class NetworkOverviewUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(760f, 520f, 560f, 380f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 
 		private sealed class Row
 		{
@@ -297,7 +297,7 @@ namespace AE2ForTerraria.UI
 			};
 			Window.Append(_lockTabButton);
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		private UIText _hint;
@@ -865,6 +865,17 @@ namespace AE2ForTerraria.UI
 			_lockEditor.Left.Set(_showLocks ? Pad + 4f : -10000f, 0f);
 			_lockEditor.IgnoresMouseInteraction = !_showLocks;
 
+            UIElement[] connectionActions = { _openTerminalButton, _bindButton, _sourceButton, _transferButton };
+            float actionWidth = (w - Pad * 2 - 18) / 4;
+            for (int i = 0; i < connectionActions.Length; i++)
+            { connectionActions[i].Left.Set(Pad + i * (actionWidth + 6), 0); connectionActions[i].Width.Set(actionWidth, 0); connectionActions[i].Height.Set(22, 0); }
+            UIElement[] footer = { _prevButton, _nextButton, _pageLabel, _lockTabButton, _tabButton };
+            float[] weights = { .12f, .12f, .16f, .29f, .31f };
+            float footerX = Pad, available = w - Pad * 2 - 16;
+            for (int i = 0; i < footer.Length; i++)
+            { footer[i].Left.Set(footerX, 0); footer[i].Width.Set(available * weights[i], 0); footer[i].Height.Set(22, 0); footerX += available * weights[i] + 4; }
+            _hint.Width.Set(w - Pad * 2, 0); _hint.DynamicallyScaleDownToWidth = true;
+            _status.Width.Set(w - Pad * 2, 0); _status.DynamicallyScaleDownToWidth = true;
 			Window.Recalculate();
 			Refresh();
 		}

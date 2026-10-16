@@ -13,7 +13,7 @@ namespace AE2ForTerraria.UI
 	/// <summary>独立合成 CPU 的队列界面:看排队情况、看进度、取消任务。</summary>
 	public sealed class CraftingCpuUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(660f, 480f, 520f, 340f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 
 		private const int IconSize = 34;
 		private const float RowHeight = 40f;
@@ -162,7 +162,7 @@ namespace AE2ForTerraria.UI
             _viewButton.OnLeftClick+=(_,_)=> { _showKeep=!_showKeep; _page=0; Refresh(); };
             Window.Append(_viewButton);
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		public void SetCpu(MECraftingCpuEntity cpu)

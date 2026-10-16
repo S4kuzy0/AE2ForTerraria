@@ -21,7 +21,7 @@ namespace AE2ForTerraria.UI
 	/// </summary>
 	public sealed class DropCollectorUIState : MovableWindowState
 	{
-		private static readonly WindowGeometry Geometry = new WindowGeometry(620f, 520f, 500f, 400f);
+		private static readonly WindowGeometry Geometry = WindowGeometry.Compact();
 		// 注意:窗口高度按新的排布改过一次(内容网格往下挪了 38px),
 		// 所以最小高度也跟着提一点,避免网格被压扁。
 
@@ -247,7 +247,7 @@ namespace AE2ForTerraria.UI
 			_filterGrid.OnLeftClick += (evt, element) => ToggleHovered();
 			Window.Append(_filterGrid);
 
-			ApplyLayout();
+			RequestLayout();
 		}
 
 		private UITextPanel<string> MakeButton(string text, System.Action onClick)
@@ -423,53 +423,27 @@ namespace AE2ForTerraria.UI
 
 		protected override void ApplyLayout()
 		{
-			base.ApplyLayout();
+            base.ApplyLayout();
 
-			_status.Left.Set(Pad + 8f, 0f);
-			_status.Top.Set(36f, 0f);
-
-			float y = 74f;
-			float x = Pad + 8f;
-			float bw = 132f;
-
-			Place(_enableButton, ref x, y, bw);
-			Place(_modeButton, ref x, y, bw);
-			Place(_radiusDownButton, ref x, y, bw);
-			Place(_radiusUpButton, ref x, y, bw);
-
-			x = Pad + 8f;
-			y += 36f;
-			Place(_addHeldButton, ref x, y, 172f);
-			Place(_removeLastButton, ref x, y, 190f);
-
-			x = Pad + 8f;
-			y += 36f;
-			Place(_clearButton, ref x, y, 132f);
-			Place(_copyGlobalButton, ref x, y, 150f);
-			Place(_pageButton, ref x, y, 110f);
-
-			x = Pad + 8f;
-			y += 36f;
-			Place(_copyToAllButton, ref x, y, 170f);
-			Place(_exportListButton, ref x, y, 110f);
-			Place(_importListButton, ref x, y, 110f);
-
-			_list.Left.Set(Pad + 8f, 0f);
-			_list.Top.Set(228f, 0f);
-
-			// 搜索框 + 勾选网格占住下半部分
-			_filterSearch.Left.Set(Pad + 8f, 0f);
-			_filterSearch.Top.Set(290f, 0f);
-			_filterSearch.Width.Set(Math.Max(160f, Geo.W - Pad * 2f - 16f), 0f);
-			_filterSearch.Height.Set(24f, 0f);
-
-			_filterGrid.Left.Set(Pad + 4f, 0f);
-			_filterGrid.Top.Set(322f, 0f);
-			_filterGrid.Width.Set(Math.Max(120f, Geo.W - Pad * 2f - 8f), 0f);
-			_filterGrid.Height.Set(Math.Max(80f, Geo.H - 322f - 16f), 0f);
-
-			Window.Recalculate();
-		}
+            float width = Geo.W - Pad * 2;
+            _status.Left.Set(Pad, 0); _status.Top.Set(32, 0); _status.Width.Set(width, 0);
+            _status.DynamicallyScaleDownToWidth = true;
+            UIElement[][] rows = { new UIElement[] { _enableButton, _modeButton, _radiusDownButton, _radiusUpButton },
+                new UIElement[] { _addHeldButton, _removeLastButton },
+                new UIElement[] { _clearButton, _copyGlobalButton, _pageButton },
+                new UIElement[] { _copyToAllButton, _exportListButton, _importListButton } };
+            for (int row = 0; row < rows.Length; row++)
+            {
+                float cell = (width - (rows[row].Length - 1) * 6) / rows[row].Length;
+                float x = Pad;
+                foreach (var button in rows[row]) { Place(button, ref x, 58 + row * 26, cell); button.Height.Set(22, 0); }
+            }
+            _list.Left.Set(Pad, 0); _list.Top.Set(164, 0); _list.Width.Set(width, 0); _list.Height.Set(24, 0);
+            _list.DynamicallyScaleDownToWidth = true;
+            _filterSearch.Left.Set(Pad, 0); _filterSearch.Top.Set(194, 0); _filterSearch.Width.Set(width, 0); _filterSearch.Height.Set(22, 0);
+            _filterGrid.Left.Set(Pad, 0); _filterGrid.Top.Set(222, 0); _filterGrid.Width.Set(width, 0); _filterGrid.Height.Set(Math.Max(40, Geo.H - 230), 0);
+            Window.Recalculate();
+        }
 
 		private static void Place(UIElement element, ref float x, float y, float width)
 		{
@@ -519,7 +493,7 @@ namespace AE2ForTerraria.UI
 			lines.Add(ModText.Get("HintCollector",
 				"手持物品后点「加入手上物品」,可以把它加进 / 移出这块收集器自己的清单。"));
 
-			_list.SetText(string.Join("\n", lines));
+			_list.SetText(lines[0] + (_lastSearch?.Length > 0 ? " · 命中 " + _candidates.Count + " 项" : ""));
 		}
 	}
 }
