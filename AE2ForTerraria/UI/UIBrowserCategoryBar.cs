@@ -2,31 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
-using Terraria.GameContent;
+using Microsoft.Xna.Framework.Graphics;
+using Terraria;
+using Terraria.ID;
 using Terraria.UI;
 
 namespace AE2ForTerraria.UI;
 
-/// <summary>Wraps at the available width; an absent child category consumes no space.</summary>
+/// <summary>Representative game sprites with native hover labels; no extra categories.</summary>
 internal sealed class UIBrowserCategoryBar : UIElement
 {
-    private readonly List<UIButton> _main = new(), _children = new();
-    private readonly UIButton _categoryChoice, _childChoice;
+    private readonly List<CategoryIcon> _main = new(), _children = new();
     public int Category { get; private set; }
     public int Child { get; private set; }
     public bool NpcMode { get; private set; }
     public bool Compact { get; init; }
     public Action Changed;
-    public UIBrowserCategoryBar()
-    {
-        _categoryChoice = new UIButton("分类：全部", .72f);
-        _childChoice = new UIButton("全部", .72f);
-        _categoryChoice.OnLeftClick += (_, _) => UIChoiceMenu.Show(Parent, _categoryChoice,
-            _main.Select(b => b.Text).ToArray(), (index, _) => SelectCategory(index));
-        _childChoice.OnLeftClick += (_, _) => UIChoiceMenu.Show(Parent, _childChoice,
-            _children.Select(b => b.Text).ToArray(), (index, _) => SelectChild(index));
-        SetMode(false);
-    }
+    private UIElement _hovered;
+    public UIBrowserCategoryBar() => SetMode(false);
     private void SelectCategory(int index)
     {
         Category = index; Child = 0; RebuildChildren(); Changed?.Invoke();
@@ -34,68 +27,79 @@ internal sealed class UIBrowserCategoryBar : UIElement
     private void SelectChild(int index)
     {
         Child = index;
-        for (int j = 0; j < _children.Count; j++) _children[j].Selected = j == Child;
+        for (int i = 0; i < _children.Count; i++) _children[i].Selected = i == Child;
         Changed?.Invoke();
     }
     public void SetMode(bool npc)
     {
         NpcMode = npc; Category = Child = 0; RemoveAllChildren(); _main.Clear(); _children.Clear();
         string[] labels = npc ? BrowserCategories.NpcKinds : BrowserCategories.Items.Select(c => c.Name).ToArray();
+        int[] portraits = { NPCID.Guide, NPCID.BlueSlime, NPCID.EyeofCthulhu, NPCID.Guide, NPCID.Bunny, NPCID.OldMan };
         for (int i = 0; i < labels.Length; i++)
         {
             int index = i;
-            var b = new UIButton(labels[i], .85f) { Selected = i == 0 };
-            b.OnLeftClick += (_, _) => SelectCategory(index);
-            _main.Add(b); Append(b);
+            var button = new CategoryIcon(labels[i], npc ? 0 : BrowserCategories.Icon(BrowserCategories.Items[i]), npc ? portraits[i] : 0) { Selected = i == 0 };
+            button.OnLeftClick += (_, _) => SelectCategory(index);
+            _main.Add(button); Append(button);
         }
-        Append(_categoryChoice); Append(_childChoice);
     }
     private void RebuildChildren()
     {
-        foreach (var b in _children) b.Remove(); _children.Clear();
+        foreach (var button in _children) button.Remove(); _children.Clear();
         for (int i = 0; i < _main.Count; i++) _main[i].Selected = Category == i;
         var children = NpcMode ? null : BrowserCategories.Items[Category].Children;
         if (children == null || children.Length == 0) return;
-        var labels = new[] { "全部" }.Concat(children.Select(c => c.Name)).ToArray();
-        for (int i = 0; i < labels.Length; i++)
+        for (int i = 0; i <= children.Length; i++)
         {
-            int index = i; var b = new UIButton(labels[i], .75f) { Selected = i == 0 };
-            b.OnLeftClick += (_, _) => SelectChild(index);
-            _children.Add(b); Append(b);
+            int index = i;
+            var child = i == 0 ? BrowserCategories.Items[Category] : children[i - 1];
+            var button = new CategoryIcon(i == 0 ? "全部" : child.Name, BrowserCategories.Icon(child), 0) { Selected = i == 0 };
+            button.OnLeftClick += (_, _) => SelectChild(index);
+            _children.Add(button); Append(button);
         }
     }
     public float Arrange(float width)
     {
-        bool narrow = width < 560;
-        foreach (var button in _main.Concat(_children)) button.IgnoresMouseInteraction = narrow;
-        _categoryChoice.IgnoresMouseInteraction = _childChoice.IgnoresMouseInteraction = !narrow;
-        _categoryChoice.Left.Set(narrow ? 0 : -10000, 0);
-        _childChoice.Left.Set(narrow && _children.Count > 0 ? width * .52f : -10000, 0);
-        if (narrow)
-        {
-            foreach (var button in _main.Concat(_children)) button.Left.Set(-10000, 0);
-            _categoryChoice.SetText("分类：" + _main[Category].Text);
-            _categoryChoice.Width.Set(_children.Count > 0 ? width * .52f - 4 : width, 0);
-            _categoryChoice.Height.Set(22, 0);
-            _childChoice.SetText(_children.Count > 0 ? _children[Child].Text : "全部");
-            _childChoice.Width.Set(width * .48f, 0); _childChoice.Height.Set(22, 0);
-            Width.Set(width, 0); Height.Set(22, 0); return 22;
-        }
-        Width.Set(width, 0); float y = Wrap(_main, width, 0, Compact ? .7f : .85f, Compact ? 24 : 32);
-        if (_children.Count > 0) y = Wrap(_children, width, y + (Compact ? 2 : 3), Compact ? .65f : .75f, Compact ? 22 : 29);
-        Height.Set(y, 0); return y;
+        Width.Set(width, 0);
+        float height = Wrap(_main, width, 0);
+        if (_children.Count > 0) height = Wrap(_children, width, height + 2);
+        Height.Set(height, 0); return height;
     }
-    private float Wrap(List<UIButton> buttons, float width, float top, float scale, float height)
+    private static float Wrap(List<CategoryIcon> buttons, float width, float top)
     {
-        float x = 0, y = top;
-        foreach (var b in buttons)
+        const int pitch = 26;
+        int columns = Math.Max(1, (int)(width / pitch));
+        for (int i = 0; i < buttons.Count; i++)
         {
-            float w = Math.Min(width, Math.Max(Compact ? 32 : 46, FontAssets.MouseText.Value.MeasureString(b.Text).X * scale + (Compact ? 12 : 22)));
-            if (x > 0 && x + w > width) { x = 0; y += height + (Compact ? 2 : 3); }
-            b.SetText(b.Text, scale, false); b.Flat = Compact;
-            b.Left.Set(x, 0); b.Top.Set(y, 0); b.Width.Set(w, 0); b.Height.Set(height, 0); x += w + (Compact ? 2 : 4);
+            buttons[i].Left.Set(i % columns * pitch, 0); buttons[i].Top.Set(top + i / columns * pitch, 0);
+            buttons[i].Width.Set(24, 0); buttons[i].Height.Set(24, 0);
         }
-        return y + height;
+        return top + (buttons.Count + columns - 1) / columns * pitch;
     }
     public bool Matches(int type) => NpcMode ? Category == 0 || BrowserCategories.NpcKind(type) == Category : BrowserCategories.Matches(type, Category, Child);
+    protected override void DrawSelf(SpriteBatch batch) => _hovered = Parent?.GetElementAt(Main.MouseScreen);
+    private sealed class CategoryIcon : UIElement
+    {
+        internal int ItemType { get; }
+        internal int NpcType { get; }
+        internal bool Selected;
+        internal string Text { get; }
+        private static readonly Item EmptyHover = new();
+        internal CategoryIcon(string label, int item, int npc)
+        {
+            Text = label; ItemType = item; NpcType = npc;
+        }
+        protected override void DrawSelf(SpriteBatch batch)
+        {
+            var box = GetDimensions().ToRectangle();
+            bool hover = Parent is UIBrowserCategoryBar owner && ReferenceEquals(owner._hovered, this);
+            if (Selected || hover) UITheme.Fill(batch, box, Selected ? UITheme.BtnHot : UITheme.Btn);
+            UIBrowserDetails.DrawIcon(batch, ItemType, NpcType, box);
+            if (Selected) UITheme.Fill(batch, new Rectangle(box.X + 2, box.Bottom - 2, box.Width - 4, 2), UITheme.Select);
+            if (hover)
+            {
+                Main.HoverItem = EmptyHover; Main.hoverItemName = Text;
+            }
+        }
+    }
 }

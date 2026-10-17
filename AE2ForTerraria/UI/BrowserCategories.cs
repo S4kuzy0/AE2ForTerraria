@@ -17,7 +17,24 @@ internal static class BrowserCategories
     private static Category[] _items;
     private static HashSet<int> _stations;
     private static readonly Dictionary<(int, int, int), bool> Results = new();
-    public static void Reset() { _items = null; _stations = null; Results.Clear(); }
+    private static readonly Dictionary<Category, int> Icons = new();
+    public static void Reset() { _items = null; _stations = null; Results.Clear(); Icons.Clear(); }
+    internal static int Icon(Category category)
+    {
+        if (Icons.TryGetValue(category, out int icon)) return icon;
+        icon = category.Name switch
+        {
+            "全部" => ItemID.Book, "武器" => ItemID.IronBroadsword, "工具" => ItemID.IronPickaxe,
+            "套装" or "盔甲" => ItemID.IronHelmet, "物块" => ItemID.Wood, "墙壁" => ItemID.StoneWall,
+            "药水" => ItemID.LesserHealingPotion, "饰品" => ItemID.CloudinaBottle,
+            "专家" => ItemID.DemonHeart, "钓鱼" => ItemID.WoodFishingPole,
+            "工作站" => ItemID.WorkBench, "其他" => ItemID.Chest,
+            _ => ContentSamples.ItemsByType.Values.Where(i => i.type > 0 && i.type < ItemID.Count)
+                .OrderBy(i => i.type).FirstOrDefault(category.Matches)?.type
+                ?? ContentSamples.ItemsByType.Values.FirstOrDefault(category.Matches)?.type ?? ItemID.Book
+        };
+        Icons[category] = icon; return icon;
+    }
     public static Category[] Items
     {
         get

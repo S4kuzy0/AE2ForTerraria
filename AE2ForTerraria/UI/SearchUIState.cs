@@ -66,10 +66,9 @@ namespace AE2ForTerraria.UI
 		private string _query = string.Empty;
 		private UIButton _sortButton;
 		private UIIconButton _wrench;
-		private UIButton _starButton;
+		private UIButton _historyButton;
 		private bool _favoritesOnly;
 		
-		private readonly List<int> _recent = new List<int>();
 		private UIButton _helpButton;
 		private UIText _status;
 		private UIText _statusHint;
@@ -146,8 +145,8 @@ namespace AE2ForTerraria.UI
             Window.Append(_modButton);
             _filterButton = new UIButton("筛选");
             _filterButton.OnLeftClick += (_, _) => UIChoiceMenu.Show(Window, _filterButton,
-                _category == Category.Npc ? new[] { "全部", "有掉落物" } : new[] { "全部", "材料", "有配方", "有掉落来源", "时装", "非时装" },
-                (index, label) => { _filter = index; _filterButton.Selected = index != 0; Refresh(); });
+                _category == Category.Npc ? new[] { "全部", "有掉落物", "已收藏" } : new[] { "全部", "材料", "有配方", "有掉落来源", "时装", "非时装", "已收藏" },
+                (index, label) => { _favoritesOnly = index == (_category == Category.Npc ? 2 : 6); _filter = _favoritesOnly ? 0 : index; _filterButton.Selected = index != 0; Refresh(); });
             Window.Append(_filterButton);
             _clearDrop = new UIButton("清除反查");
             _clearDrop.OnLeftClick += (_, _) => { _dropQuery = 0; _clearDrop.Remove(); Refresh(); };
@@ -175,15 +174,15 @@ namespace AE2ForTerraria.UI
 			};
 			Window.Append(_helpButton);
 
-			// 收藏:★ 只显示收藏,Ctrl+左键点格子切换收藏
-			_starButton = new UIButton("收藏");
-			_starButton.OnLeftClick += (evt, element) =>
-			{
-				_favoritesOnly = !_favoritesOnly;
-				_starButton.Selected = _favoritesOnly;
-				Refresh();
-			};
-			Window.Append(_starButton);
+			_historyButton = new UIButton("历史");
+            _historyButton.OnLeftClick += (_, _) =>
+            {
+                var visits = BrowserHistory.Entries.ToArray();
+                if (visits.Length == 0) { UIStatus.Toast("暂无浏览记录"); return; }
+                UIChoiceMenu.Show(Window, _historyButton, visits.Select(visit => visit.Label).ToArray(),
+                    (index, _) => _details.ShowVisit(visits[index]));
+            };
+			Window.Append(_historyButton);
 
 			_sortButton = new UIButton(SortLabel(), 0.78f, false);
 			_sortButton.OnLeftClick += (evt, element) =>
@@ -193,7 +192,7 @@ namespace AE2ForTerraria.UI
 			};
 			Window.Append(_sortButton);
 
-			_grid = new UIItemGrid { CellSize = 32, InputBlocked = () => _details.BlocksPointer || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null };
+			_grid = new UIItemGrid { CellSize = 44, IsFavorite = key => IsFavorite(key.Type), InputBlocked = () => _details.BlocksPointer || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null };
 			// 回车 = 打开这一项的来源(和左键同一个动作)
 			_grid.OnActivated = key =>
 			{
@@ -270,6 +269,7 @@ namespace AE2ForTerraria.UI
 		public override void OnDeactivate()
 		{
 			base.OnDeactivate();
+            _details?.Close();
             UIChoiceMenu.Close();
 			ReleaseIme();
 		}
@@ -298,7 +298,7 @@ namespace AE2ForTerraria.UI
 			_category = category;
             if (category == Category.Npc && _sort != SortMode.Name) { _sort = SortMode.Default; _sortButton.SetText(SortLabel()); }
             _dropQuery = 0; _clearDrop.Remove();
-            _filter = 0; _filterButton.Selected = false;
+            _filter = 0; _favoritesOnly = false; _filterButton.Selected = false;
             _categories.SetMode(category == Category.Npc);
             _details.Close();
             RequestLayout();
@@ -389,13 +389,11 @@ namespace AE2ForTerraria.UI
 				return;
 			}
 
-			// Ctrl + 左键 = 收藏 / 取消收藏
-			if (IsCtrlDown() || Main.keyState.IsKeyDown(Keys.LeftAlt) || Main.keyState.IsKeyDown(Keys.RightAlt))
+			if (FavoriteInput.IsDown)
 			{
 				int type = _grid.HoveredType;
 
-                BrowserFavorites.Toggle(type, _category == Category.Npc);
-                UIStatus.Toast(IsFavorite(type) ? "已收藏" : "已取消收藏");
+                FavoriteInput.Toggle(type, _category == Category.Npc);
 				Refresh();
 				return;
 			}
@@ -443,8 +441,6 @@ namespace AE2ForTerraria.UI
 				return;
 			}
 
-			RememberRecent(type);
-
 			if (_category == Category.Npc)
 			{
 				_details.ShowNpc(type);
@@ -469,7 +465,7 @@ namespace AE2ForTerraria.UI
             float tabWidth = Math.Min(80, (favoriteX - 84 - Pad - 12) / 3);
             Place(_itemTab, Pad, Pad, tabWidth, 22); Place(_recipeTab, Pad + tabWidth + 4, Pad, tabWidth, 22);
             Place(_npcTab, Pad + 2 * (tabWidth + 4), Pad, tabWidth, 22);
-            Place(_starButton, favoriteX, Pad, ResetButtonWidth, HeaderHeight);
+            Place(_historyButton, favoriteX, Pad, ResetButtonWidth, HeaderHeight);
             Place(_helpButton, favoriteX - 42, Pad, 38, HeaderHeight);
             Place(_filterButton, favoriteX - 84, Pad, 38, HeaderHeight);
             Place(_searchPanel, Pad, SearchTop, inner - 156, SearchHeight);
@@ -483,12 +479,13 @@ namespace AE2ForTerraria.UI
             Place(_sortButton, sortX, top, 104, 26);
             Place(_wrench, w - Pad - 104, top, 104, 26);
             top += 32;
-            float gridHeight = Math.Max(43, h - 24 - top);
+            float gridHeight = Math.Max(43, h - Pad - top);
             Place(_grid, Pad, top, inner - 12, gridHeight);
             Place(_scrollBar, w - Pad - 9, top, 9, gridHeight);
             _statusHint.Remove();
             // Cover the catalogue without rebuilding it, so returning keeps search and scroll.
-            _details.SetBounds(Pad, SearchTop, inner, Math.Max(120, h - 24 - SearchTop));
+            _details.SetBounds(Pad, SearchTop, inner, Math.Max(120, h - Pad - SearchTop));
+            KeepResizeGripInFront();
             Window.Recalculate();
         }
 
@@ -884,10 +881,14 @@ namespace AE2ForTerraria.UI
             // 收藏永远置顶(和终端一致);最近查看按打开顺序倒序
 			if (_sort == SortMode.Recent)
 			{
+                var recent = new Dictionary<int, int>();
+                foreach (var visit in BrowserHistory.Entries)
+                    if (BrowserContent.Resolve(visit.Content, out int type, out bool npc) && npc == (_category == Category.Npc))
+                        recent.TryAdd(type, recent.Count);
 				_filtered.Sort((a, b) =>
 				{
-					int rankA = _recent.IndexOf(a);
-					int rankB = _recent.IndexOf(b);
+					int rankA = recent.TryGetValue(a, out int first) ? first : -1;
+					int rankB = recent.TryGetValue(b, out int second) ? second : -1;
 
 					if (rankA < 0 && rankB < 0)
 					{
@@ -955,23 +956,6 @@ namespace AE2ForTerraria.UI
 
 			starred.Reverse();
 			_filtered.InsertRange(0, starred);
-		}
-
-		/// <summary>记一笔「最近查看」(去重 + 只留最近 40 个)。</summary>
-		private void RememberRecent(int type)
-		{
-			if (type <= 0)
-			{
-				return;
-			}
-
-			_recent.Remove(type);
-			_recent.Insert(0, type);
-
-			while (_recent.Count > 40)
-			{
-				_recent.RemoveAt(_recent.Count - 1);
-			}
 		}
 
 		private static int TierOf(int type)

@@ -97,6 +97,13 @@ public sealed class UiRegressionSystem : ModSystem
             float scroll = grid.ScrollRatio;
             reader.Show(ItemKey.Crafted(ItemID.WoodenSword), 7);
             state.Update(new GameTime());
+            if (!terminal)
+            {
+                for (int frame = 0; frame < 12; frame++) state.Update(new GameTime());
+                var detailBounds = reader.GetDimensions(); var gridBounds = grid.GetDimensions();
+                Assert(Math.Abs(detailBounds.Y + detailBounds.Height - gridBounds.Y - gridBounds.Height) < 1,
+                    "JEI detail covers the extended catalogue through its bottom edge");
+            }
             var back = Field<UIButton>(reader, "_back");
             var forward = Field<UIButton>(reader, "_forward");
             void Back() => back.LeftClick(new UIMouseEvent(back, back.GetDimensions().Center()));
@@ -120,6 +127,189 @@ public sealed class UiRegressionSystem : ModSystem
             Assert(!reader.IsOpen && grid.Revision == revision && grid.ScrollRatio == scroll,
                 "exhausting detail history returns to the catalogue without rebuilding or scrolling it");
         }
+    }
+    private void ValidateBrowserPreferences()
+    {
+        using var preferences = BrowserPreferences.Isolate(Path.Combine(Main.SavePath, "AE2-Validation", "preferences-" + Guid.NewGuid().ToString("N")));
+        BrowserPreferences.Write("AE2-BrowserFavorites.json", new[] { BrowserContent.Name(ItemID.Wood), "item:UnavailableMod/PreservedItem" });
+        BrowserFavorites.Reset();
+        Assert(BrowserFavorites.AlwaysVisible, "new and legacy favorite profiles display a pinned tree immediately by default");
+        Assert(BrowserFavorites.Contains(ItemID.Wood) && BrowserFavorites.Entries.Count == 2, "legacy favorites and temporarily disabled mod references load without loss");
+        var torchRecipes = StorageSystem.Recipes.GetRecipesFor(ItemKey.Crafted(ItemID.Torch));
+        int selectedRecipe = torchRecipes[^1];
+        BrowserFavorites.Toggle(ItemID.Torch, recipeIndex: selectedRecipe, quantity: 12);
+        BrowserFavorites.AlwaysVisible = true;
+        BrowserFavorites.Reset();
+        var bookmark = BrowserFavorites.Entries.First(entry => entry.Content == BrowserContent.Name(ItemID.Torch));
+        Assert(BrowserFavorites.Contains(ItemID.Torch) && BrowserFavorites.Contains(ItemID.Wood) && BrowserFavorites.AlwaysVisible
+            && bookmark.Quantity == 12 && bookmark.Recipe == BrowserContent.RecipeKey(Main.recipe[selectedRecipe]),
+            "bookmark recipe quantity and eye visibility survive preference reload");
+        Assert(BrowserFavorites.Remove("item:UnavailableMod/PreservedItem") && BrowserFavorites.Entries.All(entry => entry.Content != "item:UnavailableMod/PreservedItem"),
+            "disabled-mod favorites remain removable by their stable content name");
+        var originalRecipes = Main.recipe; int count = Recipe.numRecipes;
+        var originalIndex = StorageSystem.Recipes;
+        var recipeObject = Main.recipe[selectedRecipe];
+        try
+        {
+            Main.recipe = originalRecipes.Take(count).Reverse().ToArray();
+            var reversed = new RecipeIndex(); reversed.Build();
+            typeof(StorageSystem).GetProperty(nameof(StorageSystem.Recipes))!.SetValue(null, reversed);
+            int resolved = BrowserContent.ResolveRecipe(ItemID.Torch, bookmark.Recipe);
+            Assert(resolved >= 0 && ReferenceEquals(Main.recipe[resolved], recipeObject), "saved recipe identities survive recipe array reordering");
+        }
+        finally
+        {
+            Main.recipe = originalRecipes; Recipe.numRecipes = count;
+            typeof(StorageSystem).GetProperty(nameof(StorageSystem.Recipes))!.SetValue(null, originalIndex);
+        }
+        for (int i = 0; i < 12; i++)
+            BrowserHistory.Record(new BrowserVisit(BrowserContent.Name(ItemID.Wood + i), 0, null, 0, "", i, 0, i + 1));
+        BrowserHistory.Reset();
+        Assert(BrowserHistory.Entries.Count == 10 && BrowserHistory.Entries[0].Quantity == 12 && BrowserHistory.Entries[^1].Quantity == 3,
+            "exactly the last ten visits survive a browser preference reload");
+        var missing = new BrowserVisit("item:UnavailableMod/PreservedItem", 0, null, 0, "", 0, 0, 1);
+        BrowserHistory.Record(missing); BrowserHistory.Reset();
+        Assert(BrowserHistory.Entries[0] == missing && !missing.TryResolve(out _, out _), "disabled content history is preserved without remapping to another runtime item");
+        var invalid = new BrowserVisit(BrowserContent.Name(ItemID.Wood), 0, "invalid item payload", 0, "", 0, 0, 1);
+        Assert(!invalid.TryResolve(out _, out _), "malformed history item data is rejected without crashing a browser");
+        Assert(!BrowserContent.Resolve("item:UnqualifiedContentName", out _, out _), "malformed content names are rejected before mod registry lookup");
+        string historyPath = BrowserPreferences.FilePath("AE2-BrowserHistory.json");
+        File.WriteAllText(historyPath, "{"); BrowserHistory.Reset(); BrowserHistory.Record(missing);
+        Assert(File.ReadAllText(historyPath) == "{", "invalid preference content is preserved instead of silently overwritten");
+        string favoritesPath = BrowserPreferences.FilePath("AE2-BrowserFavorites.json");
+        File.WriteAllText(favoritesPath, "{"); BrowserFavorites.Reset();
+        Assert(!BrowserFavorites.Toggle(ItemID.Wood) && File.ReadAllText(favoritesPath) == "{",
+            "invalid favorite settings remain recoverable and report that changes could not be persisted");
+        string altar = RecipeStation.DescribeStation(TileID.DemonAltar);
+        Assert(!string.IsNullOrWhiteSpace(altar) && !altar.Contains("#") && !altar.Contains("26"), "unplaceable altar station uses its real localized map name");
+    }
+    private void ValidateAltFavorites()
+    {
+        using var preferences = BrowserPreferences.Isolate(Path.Combine(Main.SavePath, "AE2-Validation", "alt-" + Guid.NewGuid().ToString("N")));
+        var oldKeys = Main.keyState; int oldX = Main.mouseX, oldY = Main.mouseY, oldCursor = Main.cursorOverride;
+        try
+        {
+            foreach (bool terminal in new[] { false, true })
+            {
+                MovableWindowState state = terminal ? NewTerminal(TerminalViewMode.Access) : NewSearch();
+                var grid = Field<UIItemGrid>(state, "_grid");
+                state.Update(new GameTime()); var d = grid.GetDimensions();
+                Main.mouseX = (int)d.X + 12; Main.mouseY = (int)d.Y + 12;
+                Main.keyState = new Microsoft.Xna.Framework.Input.KeyboardState(Microsoft.Xna.Framework.Input.Keys.LeftAlt);
+                grid.Update(new GameTime()); var key = grid.HoveredKey;
+                long before = UISystem.GetStoredAmount(key); var mouseItem = Main.mouseItem;
+                grid.LeftClick(new UIMouseEvent(grid, Main.MouseScreen));
+                Assert(BrowserFavorites.Contains(key.Type) && Main.cursorOverride == Terraria.ID.CursorOverrideID.FavoriteStar,
+                    "Alt click bookmarks the hovered item with the native star cursor");
+                grid.Update(new GameTime());
+                Main.mouseX = (int)d.X + 12; Main.mouseY = (int)d.Y + 12;
+                // In JEI the newly favored item sorts to the first position; the terminal key remains stable.
+                grid.LeftClick(new UIMouseEvent(grid, Main.MouseScreen));
+                Assert(UISystem.GetStoredAmount(key) == before && ReferenceEquals(Main.mouseItem, mouseItem),
+                    "repeated Alt clicks never withdraw items or change the held stack");
+                if (BrowserFavorites.Contains(key.Type)) BrowserFavorites.Toggle(key.Type);
+                Assert(terminal || !Field<UIBrowserDetails>(state, "_details").IsOpen,
+                    "Alt favorite does not navigate away from the item catalogue");
+            }
+        }
+        finally { Main.keyState = oldKeys; Main.mouseX = oldX; Main.mouseY = oldY; Main.cursorOverride = oldCursor; }
+    }
+    private void ValidateSelectedRecipeFavorite()
+    {
+        using var preferences = BrowserPreferences.Isolate(Path.Combine(Main.SavePath, "AE2-Validation", "variant-" + Guid.NewGuid().ToString("N")));
+        int type = StorageSystem.Recipes.OutputTypes.First(output => StorageSystem.Recipes.GetRecipesFor(ItemKey.Crafted(output))
+            .Select(index => BrowserContent.RecipeKey(Main.recipe[index])).Distinct().Count() > 1);
+        var recipes = StorageSystem.Recipes.GetRecipesFor(ItemKey.Crafted(type));
+        string first = BrowserContent.RecipeKey(Main.recipe[recipes[0]]);
+        int page = Enumerable.Range(1, recipes.Count - 1).First(index => BrowserContent.RecipeKey(Main.recipe[recipes[index]]) != first);
+        var search = NewSearch(); var reader = Field<UIBrowserDetails>(search, "_details");
+        reader.Show(ItemKey.Crafted(type), 7); SetField(reader, "_recipe", page); Invoke(reader, "Rebuild");
+        var recipe = Main.recipe[recipes[page]];
+        long batches = 7 / Math.Max(1, recipe.createItem.stack) + (7 % Math.Max(1, recipe.createItem.stack) > 0 ? 1 : 0);
+        var required = Field<IList>(reader, "_ingredients").Cast<object>().Select(card => (long)card.GetType().GetProperty("Required").GetValue(card)).ToArray();
+        Assert(required.SequenceEqual(recipe.requiredItem.Where(item => !item.IsAir).Select(item => batches * item.stack)),
+            "single-line ingredient requirements match the selected target quantity and actual batch output");
+        RenderProbe(search, "Recipe-reader-selected-favorite");
+        var d = reader.GetDimensions(); var point = new Vector2(d.X + 15, d.Y + 40);
+        var keys = Main.keyState;
+        try
+        {
+            Main.keyState = new Microsoft.Xna.Framework.Input.KeyboardState(Microsoft.Xna.Framework.Input.Keys.LeftAlt);
+            reader.LeftClick(new UIMouseEvent(reader, point));
+            var saved = BrowserFavorites.Entries.Single();
+            Assert(saved.Recipe == BrowserContent.RecipeKey(Main.recipe[recipes[page]]) && saved.Quantity == 7,
+                "Alt favorite on a detail title preserves the selected alternate recipe and quantity");
+            Main.keyState = new Microsoft.Xna.Framework.Input.KeyboardState();
+            reader.LeftClick(new UIMouseEvent(reader, point));
+            Assert(reader.Quantity == 7 && Field<int>(reader, "_recipe") == page,
+                "normal detail title click never resets the order quantity or selected recipe");
+        }
+        finally { Main.keyState = keys; }
+    }
+    private sealed class PinnedTreeProbe : UIElement
+    {
+        protected override void DrawSelf(SpriteBatch batch) => FavoriteTreeHud.Draw(batch);
+    }
+    private void ValidatePinnedTreeHud()
+    {
+        using var preferences = BrowserPreferences.Isolate(Path.Combine(Main.SavePath, "AE2-Validation", "pins-" + Guid.NewGuid().ToString("N")));
+        bool menu = Main.gameMenu, inventory = Main.playerInventory;
+        var restoreViewport = CaptureViewport();
+        try
+        {
+            SetViewport(1280, 720, 1f);
+            BrowserFavorites.Toggle(ItemID.NightsEdge); BrowserFavorites.Toggle(ItemID.Torch);
+            BrowserFavorites.AlwaysVisible = false;
+            Main.gameMenu = false; Main.playerInventory = false;
+            Assert(!FavoriteTreeHud.Visible, "inventory-only pinned trees remain hidden while the inventory is closed");
+            BrowserFavorites.AlwaysVisible = true;
+            for (int tick = 0; tick < 150; tick++) FavoriteTreeHud.Update(new GameTime());
+            var trees = (List<BookmarkTree>)typeof(FavoriteTreeHud).GetField("Trees", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic).GetValue(null);
+            Assert(FavoriteTreeHud.Visible && trees.Count == 2 && trees.All(tree => tree.Complete), "multiple real pinned recipes finish incremental expansion and remain visible without an inventory");
+            Assert(trees.All(tree => tree.Nodes.Count > 1), "each pinned recipe includes its material children");
+            var box = FavoriteTreeHud.Bounds;
+            Assert(box.X >= 0 && box.Right <= MovableWindowState.ViewportSize.X && box.Bottom <= MovableWindowState.ViewportSize.Y,
+                "pinned recipe trees remain within the logical UI viewport");
+            RenderProbe(new PinnedTreeProbe(), "Pinned-trees-head");
+            typeof(FavoriteTreeHud).GetField("_scroll", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic).SetValue(null, int.MaxValue);
+            FavoriteTreeHud.Update(new GameTime()); RenderProbe(new PinnedTreeProbe(), "Pinned-trees-tail");
+            BrowserFavorites.AlwaysVisible = false;
+            Assert(!FavoriteTreeHud.Visible, "eye setting switches the pinned tree back to inventory-only visibility");
+            Main.playerInventory = true;
+            Assert(FavoriteTreeHud.Visible, "opening the native inventory reveals inventory-only pinned trees");
+            var terminalProperty = typeof(UISystem).GetProperty(nameof(UISystem.TerminalState));
+            var oldTerminal = UISystem.TerminalState; var oldState = UISystem.Interface.CurrentState;
+            try
+            {
+                var terminal = NewTerminal(TerminalViewMode.Access);
+                terminalProperty.SetValue(null, terminal); UISystem.Interface.SetState(terminal);
+                FavoriteTreeHud.Update(new GameTime());
+                var owned = (Dictionary<int, long>)typeof(FavoriteTreeHud).GetField("Owned", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic).GetValue(null);
+                long networkWood = UISystem.ActiveNetworkContents.Where(item => item.Key.Type == ItemID.Wood).Sum(item => item.Value);
+                Assert(owned.GetValueOrDefault(ItemID.Wood) == networkWood, "open readable terminal supplies the live network source for pinned material counts");
+                UISystem.Interface.SetState(null); FavoriteTreeHud.Update(new GameTime());
+                long bagWood = Main.LocalPlayer.inventory.Where(item => item != null && item.type == ItemID.Wood).Sum(item => (long)item.stack);
+                Assert(owned.GetValueOrDefault(ItemID.Wood) == bagWood, "closing the terminal immediately invalidates network counts and restores backpack counts");
+            }
+            finally { UISystem.Interface.SetState(oldState); terminalProperty.SetValue(null, oldTerminal); }
+        }
+        finally { Main.gameMenu = menu; Main.playerInventory = inventory; FavoriteTreeHud.Reset(); restoreViewport(); }
+    }
+    private void ValidatePartialGrid()
+    {
+        var grid = new UIItemGrid { CellSize = 44 };
+        grid.Left.Set(20, 0); grid.Top.Set(20, 0); grid.Width.Set(176, 0); grid.Height.Set(105, 0);
+        grid.Activate(); grid.SetItems(Enumerable.Range(1, 40).ToList()); grid.Recalculate();
+        int oldX = Main.mouseX, oldY = Main.mouseY;
+        try
+        {
+            Main.mouseX = 20 + 44 + 12; Main.mouseY = 20 + 88 + 8; grid.Update(new GameTime());
+            Assert(grid.HoveredType == 10 && grid.HasEntryAt(Main.MouseScreen), "visible fragment of the next grid row is interactive at its actual item index");
+            Main.mouseY = 126; grid.Update(new GameTime());
+            Assert(grid.HoveredType == -1 && !grid.HasEntryAt(Main.MouseScreen), "clipped grid fragments cannot receive input below the grid");
+            RenderProbe(grid, "Grid-partial-rows");
+        }
+        finally { Main.mouseX = oldX; Main.mouseY = oldY; }
     }
     private void ValidateBrowser()
     {
@@ -198,8 +388,10 @@ public sealed class UiRegressionSystem : ModSystem
         var reader = Field<UIBrowserDetails>(craft,"_info");
         reader.Show(ItemKey.Crafted(ItemID.WoodenSword), 10); reader.Close(); reader.Show(ItemKey.Crafted(ItemID.Torch), 1);
         Invoke(reader,"Back");
+        Assert(!reader.IsOpen, "a new terminal catalogue selection returns directly to the catalogue");
+        reader.ShowVisit(BrowserHistory.Entries.First(visit => visit.Content == BrowserContent.Name(ItemID.WoodenSword) && visit.Quantity == 10));
         Assert(reader.Quantity == 10 && Field<long>(craft,"_orderQuantity") == 10,
-            "terminal history restores both preview and actual order quantity together");
+            "saved browser visit restores both preview and actual order quantity together");
         reader.ShowNpc(NPCID.Guide);
         Assert(Field<ItemKey>(craft,"_selected").IsAir && Field<UIElement>(craft,"_orderButton").Parent == null,
             "NPC navigation clears the previous craft target and its order action");
@@ -464,12 +656,13 @@ public sealed class UiRegressionSystem : ModSystem
             Rectangle stationBounds=Field<Rectangle>(details,"_stationBounds");
             Assert(hits.All(rect=>rect.Bottom<=stationBounds.Top) && stationBounds.Bottom<=details.GetDimensions().Y+details.GetDimensions().Height,"ingredients and station conditions occupy separate nonoverlapping areas");
             var stationText=Field<List<string>>(details,"_stationText");
-            for(int i=0;i<15;i++)stationText.Add("条件回归示例 "+i+"：较长中文环境条件必须完整换行，末尾标记可滚动查看。");
+            for(int i=0;i<60;i++)stationText.Add("条件回归示例 "+i+"：较长中文环境条件必须完整换行，末尾标记可滚动查看。");
             SetField(details,"_stationLineWidth",-1f);RenderProbe(search,null);
             int oldIngredientScroll=Field<int>(details,"_scroll");
             Main.mouseX=stationBounds.Center.X;Main.mouseY=stationBounds.Center.Y;Terraria.GameInput.PlayerInput.ScrollWheelDelta=-360;
             details.Update(new GameTime());RenderProbe(search,"RecipeReader-conditions-scrolled");
-            Assert(Field<int>(details,"_stationScroll")>0 && Field<int>(details,"_scroll")==oldIngredientScroll,"long conditions scroll without moving ingredients");
+            Assert(Field<Rectangle>(details,"_stationBounds").IsEmpty && Field<int>(details,"_stationScroll")==0
+                && Field<int>(details,"_scroll")>oldIngredientScroll,"long material and condition lists use one continuous scroll area");
             Assert(Field<List<string>>(details,"_stationLines").Any(line=>line.Contains("可滚动查看")),"condition wrapping retains final text");
             Invoke(details,"Rebuild");SetField(details,"_scroll",int.MaxValue);RenderProbe(search,null);
             int savedScroll=Field<int>(details,"_scroll"),savedStations=Field<int>(details,"_stationScroll"),recipePage=Field<int>(details,"_recipe");
@@ -477,8 +670,10 @@ public sealed class UiRegressionSystem : ModSystem
             Assert(details.SelectedKey.Type==large.createItem.type && Field<int>(details,"_recipe")==recipePage && Field<int>(details,"_scroll")==savedScroll && Field<int>(details,"_stationScroll")==savedStations,"history restores selected recipe and independent scroll positions");
             details.Show(ItemKey.Crafted(ItemID.Wood), 10); details.Close(); details.Show(ItemKey.Crafted(ItemID.Torch), 1);
             Invoke(details,"Back");
-            Assert(details.SelectedKey.Type==ItemID.Wood && Field<long>(details,"_quantity")==10,
-                "catalogue close and new selection retain navigation history and quantity");
+            Assert(!details.IsOpen, "catalogue selection never inserts a previous closed item into its back path");
+            details.ShowVisit(BrowserHistory.Entries.First(visit=>visit.Content==BrowserContent.Name(ItemID.Wood) && visit.Quantity==10));
+            details.Show(ItemKey.Crafted(ItemID.Torch),1); Invoke(details,"Back");
+            Assert(details.SelectedKey.Type==ItemID.Wood && details.Quantity==10,"recent visit restores the original item and quantity");
             Invoke(details,"Forward");
             Assert(details.SelectedKey.Type==ItemID.Torch && Field<long>(details,"_quantity")==1,
                 "forward returns to the later catalogue selection");
@@ -487,7 +682,9 @@ public sealed class UiRegressionSystem : ModSystem
             Invoke(details,"Forward");
             Assert(Field<int>(details,"_tab")==2,"forward restores the uses tab");
             details.ShowNpc(NPCID.Guide); details.Close(); details.Show(ItemKey.Crafted(ItemID.Gel)); Invoke(details,"Back");
-            Assert(Field<int>(details,"_npc")==NPCID.Guide,"item and NPC history survives returning to the catalogue");
+            Assert(!details.IsOpen,"NPC pages from a previous catalogue visit do not intercept return to directory");
+            details.ShowVisit(BrowserHistory.Entries.First(visit=>visit.Content==BrowserContent.Name(NPCID.Guide,true)));
+            Assert(Field<int>(details,"_npc")==NPCID.Guide,"NPC visits remain accessible through saved recent history");
             details.Show(ItemKey.Crafted(ItemID.StoneBlock));
             Assert(!Field<UIButton>(details,"_forward").Enabled,"a new navigation branch clears forward history");
             int groupIndex=Enumerable.Range(0,Recipe.numRecipes).First(i=>!Main.recipe[i].Disabled && Main.recipe[i].acceptedGroups.Any(id=>RecipeGroup.recipeGroups[id].ValidItems.Count>1 && Main.recipe[i].requiredItem.Any(item=>RecipeGroup.recipeGroups[id].ValidItems.Contains(item.type))));
@@ -561,6 +758,24 @@ public sealed class UiRegressionSystem : ModSystem
             Assert(plan.Steps.All(step=>wrapped.Contains(step)),"long plan text wraps without losing any content");
             panel.ScrollOffset = int.MaxValue; RenderProbe(panel,"RecipeReader-complete-plan-tail");
             Assert(panel.ScrollOffset > 0,"complete long plan tail is reachable by scrolling");
+            var deepRecipes = new Recipe[26];
+            for (int i = 0; i < deepRecipes.Length; i++)
+                deepRecipes[i] = Recipe.Create(i == deepRecipes.Length - 1 ? ItemID.Torch : 1500 + i)
+                    .AddIngredient(i == 0 ? ItemID.Wood : 1499 + i);
+            deepRecipes[^1].AddIngredient(1504);
+            Main.recipe = deepRecipes; Recipe.numRecipes = deepRecipes.Length;
+            var deepIndex = new RecipeIndex(); deepIndex.Build();
+            typeof(StorageSystem).GetProperty(nameof(StorageSystem.Recipes))!.SetValue(null, deepIndex);
+            var tree = new BookmarkTree(new BrowserBookmark(BrowserContent.Name(ItemID.Torch), BrowserContent.RecipeKey(deepRecipes[^1])));
+            for (int tick = 0; tick < 1000 && !tree.Complete; tick++) tree.Advance(4);
+            Assert(tree.Complete && tree.MaxDepth > 16 && tree.Nodes.Any(node => node.Item == ItemID.Wood)
+                && Enumerable.Range(1500, 25).All(type => tree.Nodes.Any(node => node.Item == type)),
+                "incremental pinned tree retains every intermediate and final leaf beyond sixteen levels");
+            Assert(tree.Nodes.Any(node => node.Reference >= 0), "shared ingredient subtrees retain a navigable reference instead of repeated expansion");
+            deepRecipes[0].requiredItem[0].SetDefaults(ItemID.Torch);
+            var cycleTree = new BookmarkTree(new BrowserBookmark(BrowserContent.Name(ItemID.Torch)));
+            for (int tick = 0; tick < 1000 && !cycleTree.Complete; tick++) cycleTree.Advance(4);
+            Assert(cycleTree.Complete && cycleTree.Nodes.Any(node => node.Cycle), "cyclic recipe edges terminate explicitly without dropping the rest of the pinned tree");
         }
         finally
         {
@@ -611,14 +826,14 @@ public sealed class UiRegressionSystem : ModSystem
         var grid = Field<UIItemGrid>(search,"_grid");
         var window = (UIWindowPanel)Field<UIButton>(search,"_filterButton").Parent;
         var reset = WindowField<UIElement>(search,"_resetButton").GetDimensions();
-        var star = Field<UIButton>(search,"_starButton").GetDimensions();
+        var star = Field<UIButton>(search,"_historyButton").GetDimensions();
         var mod = Field<UIButton>(search,"_modButton").GetDimensions();
         var sort = Field<UIButton>(search,"_sortButton").GetDimensions();
         var wrench = Field<UIIconButton>(search,"_wrench").GetDimensions();
-        Assert(star.Width == reset.Width && star.Height == reset.Height && star.Y + star.Height < mod.Y,"favorite matches reset bounds and clears mod selector");
+        Assert(star.Width == reset.Width && star.Height == reset.Height && star.Y + star.Height < mod.Y,"history matches reset bounds and clears mod selector");
         Assert(wrench.Width == sort.Width && wrench.Height == sort.Height && wrench.Y == sort.Y,"wrench matches sort bounds without inherited text minimum");
         var filter = Field<UIButton>(search,"_filterButton"); var help = Field<UIButton>(search,"_helpButton").GetDimensions();
-        Assert(filter.GetDimensions().X + filter.GetDimensions().Width < help.X && help.X + help.Width < star.X,"filter help favorite toolbar order and separation");
+        Assert(filter.GetDimensions().X + filter.GetDimensions().Width < help.X && help.X + help.Width < star.X,"filter help history toolbar order and separation");
         Assert(Field<UIElement>(search,"_npcTab").GetDimensions().Y + Field<UIElement>(search,"_npcTab").GetDimensions().Height < mod.Y,"navigation tabs do not overlap search row");
         Assert(Field<UIBrowserCategoryBar>(search,"_categories").GetDimensions().Height <= 76,"compact categories reserve item space");
         var owners = Field<string[]>(search,"_itemMods");
@@ -710,35 +925,41 @@ public sealed class UiRegressionSystem : ModSystem
     }
     private void ValidateCompactCategories(SearchUIState search)
     {
-        var categories=Field<UIBrowserCategoryBar>(search,"_categories");
-        var trigger=Field<UIButton>(categories,"_categoryChoice");
-        Assert(categories.GetDimensions().Height==22 && trigger.Parent==categories,
-            "compact category selector reserves one toolbar row");
-        trigger.LeftClick(new UIMouseEvent(trigger,trigger.GetDimensions().Center()));
-        var menu=ActiveChoice();
-        Assert(Field<string[]>(menu,"_choices").Length==BrowserCategories.Items.Length,
-            "compact category selector retains every existing item category");
-        var point=new Vector2(menu.GetDimensions().X+12,menu.GetDimensions().Y+4+30+12);
-        menu.LeftClick(new UIMouseEvent(menu,point));
+        var categories = Field<UIBrowserCategoryBar>(search, "_categories");
+        var icons = Field<IList>(categories, "_main").Cast<UIElement>().ToArray();
+        Assert(icons.Length == BrowserCategories.Items.Length, "icon category toolbar retains every original item category");
+        Assert(icons.All(icon => (int)icon.GetType().GetProperty("ItemType", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(icon) > 0),
+            "every item category has a real game item sprite");
+        Assert(icons.All(icon => icon.GetDimensions().Width == 24 && icon.GetDimensions().Height == 24)
+            && icons.All(icon => categories.GetDimensions().ToRectangle().Contains(icon.GetDimensions().ToRectangle())),
+            "category icon rows wrap inside the compact toolbar without text minimums");
+        icons[1].LeftClick(new UIMouseEvent(icons[1], icons[1].GetDimensions().Center()));
         search.Update(new GameTime());
-        Assert(categories.Category==1 && Field<List<int>>(search,"_filtered").All(categories.Matches),
-            "compact category selection applies the original item filter");
-        trigger.LeftClick(new UIMouseEvent(trigger,trigger.GetDimensions().Center()));
-        menu=ActiveChoice(); point=new Vector2(menu.GetDimensions().X+12,menu.GetDimensions().Y+16);
-        menu.LeftClick(new UIMouseEvent(menu,point)); search.Update(new GameTime());
-        int mouseX=Main.mouseX,mouseY=Main.mouseY; bool down=Main.mouseLeft;
+        Assert(categories.Category == 1 && Field<List<int>>(search, "_filtered").All(categories.Matches),
+            "icon category selection applies the existing property filter");
+        var children = Field<IList>(categories, "_children").Cast<UIElement>().ToArray();
+        Assert(children.Length > 1 && children.All(child => (int)child.GetType().GetProperty("ItemType", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(child) > 0),
+            "subcategories also use representative item sprites");
+        children[1].LeftClick(new UIMouseEvent(children[1], children[1].GetDimensions().Center()));
+        Assert(categories.Child == 1, "subcategory icons remain independently selectable");
+        icons[0].LeftClick(new UIMouseEvent(icons[0], icons[0].GetDimensions().Center()));
+        search.Update(new GameTime());
+        int oldX = Main.mouseX, oldY = Main.mouseY; string oldName = Main.hoverItemName; Item oldHover = Main.HoverItem;
         try
         {
-            Main.mouseLeft=false;
-            trigger.LeftClick(new UIMouseEvent(trigger,trigger.GetDimensions().Center()));
-            menu=ActiveChoice(); Main.mouseX=Main.mouseY=0;Main.mouseLeft=true;
-            search.Update(new GameTime());
-            Assert(!UIChoiceMenu.IsOpen && menu.Parent==null,
-                "outside click dismisses compact selector after full window child enumeration");
+            search.ShowDetails(ItemID.Torch);
+            for (int frame = 0; frame < 12; frame++) search.Update(new GameTime(TimeSpan.FromSeconds(frame / 60.0), TimeSpan.FromSeconds(1.0 / 60)));
+            var point = icons[Math.Min(17, icons.Length - 1)].GetDimensions().Center();
+            Assert(Field<UIBrowserDetails>(search, "_details").GetDimensions().ToRectangle().Contains(point.ToPoint()),
+                "covered-category hover probe waits for the detail entrance and lies behind the panel");
+            Main.mouseX = (int)point.X; Main.mouseY = (int)point.Y; Main.hoverItemName = ""; Main.HoverItem = new Item();
+            RenderProbe(search, null);
+            Assert(Main.hoverItemName != BrowserCategories.Items[Math.Min(17, icons.Length - 1)].Name,
+                "category icons behind a foreground recipe never supply its hover text");
+            search.CloseDetails();
         }
-        finally { Main.mouseX=mouseX;Main.mouseY=mouseY;Main.mouseLeft=down;UIChoiceMenu.Close(); }
+        finally { Main.mouseX = oldX; Main.mouseY = oldY; Main.hoverItemName = oldName; Main.HoverItem = oldHover; }
     }
-
     private void ValidateLiveResize(MovableWindowState state)
     {
         var window = WindowField<UIWindowPanel>(state,"<Window>k__BackingField");
@@ -784,6 +1005,7 @@ public sealed class UiRegressionSystem : ModSystem
         if (_done || Main.dedServ || !Main.gameMenu || !StorageSystem.Ready
             || Environment.GetEnvironmentVariable("AE2_UI_REGRESSION")!="1") return;
         _done=true;
+        using var browserPreferences = BrowserPreferences.Isolate(Path.Combine(Main.SavePath, "AE2-Validation", "browser-" + Guid.NewGuid().ToString("N")));
         var restoreViewport=CaptureViewport();
         int width=Main.screenWidth,height=Main.screenHeight; float scale=Main.UIScaleWanted;
         var device=Main.instance.GraphicsDevice;
@@ -830,6 +1052,11 @@ public sealed class UiRegressionSystem : ModSystem
             Assert(UISystem.GetStationHosts().Count==2 && UISystem.GetStationHosts().Sum(host=>host.Stations.Count(item=>item!=null && !item.IsAir))==2
                 && ReferenceEquals(UISystem.ActiveCraftingTerminal,craftingTerminal) && UISystem.TerminalCanManage,
                 "integrated station fixture resolves installed stations and editable terminal through actual network membership");
+            ValidateBrowserPreferences();
+            ValidateAltFavorites();
+            ValidateSelectedRecipeFavorite();
+            ValidatePinnedTreeHud();
+            ValidatePartialGrid();
             ValidateUnifiedBackNavigation();
             ValidateBrowser();
             foreach (var size in new[] { new Point(800,600), new Point(1280,720), new Point(1920,1080) })

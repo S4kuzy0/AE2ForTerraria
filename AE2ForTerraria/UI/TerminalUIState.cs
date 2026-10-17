@@ -47,7 +47,7 @@ namespace AE2ForTerraria.UI
         private bool _itemCapacity;
 		private UIBrowserDetails _info;
         private UIBrowserCategoryBar _categories;
-        private UIIconButton _starButton;
+        private UIButton _filterButton;
         private UIButton _inventoryButton, _modButton;
         private readonly UIStationGrid _stationGrid = new();
         private bool _stationLayoutDirty, _stationDataDirty;
@@ -125,9 +125,10 @@ namespace AE2ForTerraria.UI
             _inventoryButton = new UIButton("背包");
             _inventoryButton.OnLeftClick += (_, _) => { _inventoryVisible = !_inventoryVisible; _inventoryButton.Selected = _inventoryVisible; RequestLayout(); };
             Window.Append(_inventoryButton);
-            _starButton = new UIIconButton(UIIconButton.IconKind.Star);
-            _starButton.OnLeftClick += (_, _) => { _favoritesOnly = !_favoritesOnly; _starButton.Filled = _favoritesOnly; RebuildList(); };
-            Window.Append(_starButton);
+            _filterButton = new UIButton("筛选", .72f);
+            _filterButton.OnLeftClick += (_, _) => UIChoiceMenu.Show(Window, _filterButton, new[] { "全部物品", "已收藏" },
+                (index, _) => { _favoritesOnly = index == 1; _filterButton.Selected = _favoritesOnly; RebuildList(); });
+            Window.Append(_filterButton);
             _modButton = new UIButton("全部模组");
             _modButton.OnLeftClick += (_, _) => UIChoiceMenu.Show(Window, _modButton,
                 new[] { "全部模组", "Terraria" }.Concat(ModLoader.Mods.Where(m => m.Name != "ModLoader").Select(m => m.Name)).ToArray(),
@@ -156,7 +157,8 @@ namespace AE2ForTerraria.UI
 
 			_grid = new UIItemGrid
 			{
-				CellSize = 32,
+				CellSize = 44,
+                IsFavorite = key => BrowserFavorites.Contains(key.Type),
                 InputBlocked = () => _info?.BlocksPointer == true || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null,
                 CountProvider = key => IsAccess ? UISystem.GetStoredAmount(key) : 0,
 
@@ -195,6 +197,11 @@ namespace AE2ForTerraria.UI
 			_grid.OnLeftClick += (evt, element) =>
 			{
 				_searchFocused = false;
+                if (FavoriteInput.IsDown)
+                {
+                    if (_grid.HoveredType > 0) { FavoriteInput.Toggle(_grid.HoveredType); RebuildList(false); }
+                    return;
+                }
                 if (IsAccess && !Main.mouseItem.IsAir) { DepositHeldItem(); return; }
 
 				if (_grid.HoveredType <= 0)
@@ -219,15 +226,10 @@ namespace AE2ForTerraria.UI
 					return;
 				}
 
-				// 快捷搬运:Shift = 直接取一叠,Alt = 取半组
+				// Alt is reserved for native-style favorites; Shift still withdraws a stack.
 				if (IsShiftDown())
 				{
 					Withdraw(OverrideStack());
-				}
-				else if (IsAltDown())
-				{
-					int maxStack = MaxStackOf(_grid.HoveredKey.Type);
-					Withdraw(Math.Max(1, maxStack / 2));
 				}
 			};
 			_grid.OnActivated = key => Select(key);
@@ -238,19 +240,6 @@ namespace AE2ForTerraria.UI
 			{
 				Select(key);
 				if (IsAccess) Withdraw(long.MaxValue);
-			};
-			// 右键点物品 = 收藏 / 取消收藏(收藏的排在最前)
-			_grid.OnRightClick += (evt, element) =>
-			{
-				int type = _grid.HoveredKey.Type;
-				if (type <= 0)
-				{
-					return;
-				}
-
-                BrowserFavorites.Toggle(type);
-
-				RebuildList();
 			};
 			Window.Append(_grid);
             _scrollBar = new UIGridScrollBar { Target = _grid }; Window.Append(_scrollBar);
@@ -417,7 +406,7 @@ namespace AE2ForTerraria.UI
             Visible(_inventoryButton, false); Visible(_depositButton, IsAccess);
             Place(_inventoryButton, Pad + 84, Pad, 80, 22); Place(_depositButton, Pad + 84, Pad, 80, 22);
             _inventoryButton.Selected = IsAccess && _inventoryVisible;
-            Place(_starButton, w - Pad - 122, Pad, 42, 22);
+            Place(_filterButton, w - Pad - 122, Pad, 42, 22);
             Place(_searchBox, Pad, 36, inner - 128, 24);
             Place(_modButton, w - Pad - 122, 36, 122, 24);
             Place(_categories, Pad, 64, inner, 22);
@@ -763,7 +752,7 @@ namespace AE2ForTerraria.UI
 			UpdateStatus();
 		}
 
-		public override void OnDeactivate() { base.OnDeactivate(); ImeInput.Blur(); UIChoiceMenu.Close(); _searchFocused = _quantityTyping = false; }
+		public override void OnDeactivate() { base.OnDeactivate(); _info?.Close(); ImeInput.Blur(); UIChoiceMenu.Close(); _searchFocused = _quantityTyping = false; }
         private static int CompareKeys(ItemKey a, ItemKey b)
 		{
 			int byType = a.Type.CompareTo(b.Type);
@@ -1007,7 +996,7 @@ namespace AE2ForTerraria.UI
 			};
 
 			_quantityButton.SetText(QuantityLabel());
-            if (!IsAccess && !_selected.IsAir) _info.Show(_selected, _orderQuantity);
+            if (!IsAccess && !_selected.IsAir) _info.Show(_selected, _orderQuantity, remember: false, preserveTab: true);
 			UpdateQuantityText();
 			UpdateTakeLabel();
 		}
@@ -1073,7 +1062,7 @@ namespace AE2ForTerraria.UI
             else UIStatus.Toast("请输入有效的正整数数量");
 
 			_quantityButton.SetText(QuantityLabel());
-            if (!IsAccess && !_selected.IsAir) _info.Show(_selected, _orderQuantity);
+            if (!IsAccess && !_selected.IsAir) _info.Show(_selected, _orderQuantity, remember: false, preserveTab: true);
 			UpdateQuantityText();
 		}
 

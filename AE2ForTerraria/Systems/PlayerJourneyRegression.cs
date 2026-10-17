@@ -68,8 +68,12 @@ public sealed class PlayerJourneyRegression : ModSystem
     private int _clickGridType;
     private int _resizeFrames;
     private Vector2 _resizeOrigin, _sizeBeforeResize;
+    private IDisposable _browserPreferences;
+    private bool _favoriteModifier;
+    private int _altInputFrames;
 
     private delegate void InputHook(Action original);
+    private delegate void MainInputHook(Action<Main> original, Main self);
     private delegate void PlayerHook(Action<Player> original, Player player);
     private delegate bool LayerHook(Func<GameInterfaceLayer, bool> original, GameInterfaceLayer layer);
     private delegate string TextHook(Func<string, bool, string> original, string text, bool multiline);
@@ -91,6 +95,7 @@ public sealed class PlayerJourneyRegression : ModSystem
         if (!string.Equals(Path.GetDirectoryName(_directory), Path.GetFullPath(Root), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("AE2 player journey path is outside its whitelist.");
         RequireDirectoryIsReal(_directory);
+        _browserPreferences = BrowserPreferences.Isolate(Path.Combine(_directory, "browser-preferences"));
         _worldPath = Path.Combine(_directory, "sandbox.wld");
         _playerPath = Path.Combine(_directory, "actor.plr");
         _copiedWorld = Environment.GetEnvironmentVariable("AE2_JOURNEY_COPIED_WORLD") == "1";
@@ -109,6 +114,17 @@ public sealed class PlayerJourneyRegression : ModSystem
         _enabled = true;
         On_Main.Draw += Draw;
         MonoModHooks.Add(Method(typeof(PlayerInput), "UpdateInput"), new InputHook(UpdateInput));
+        MonoModHooks.Add(Method(typeof(Main), "DoUpdate_HandleInput"), new MainInputHook((original, self) =>
+        {
+            original(self);
+            // Native HandleInput refreshes keyState after PlayerInput.UpdateInput.
+            // Inject modifiers at that actual boundary, only in the isolated world.
+            if (_enabled && !_done && !_saving && IsSandbox() && !Main.gameMenu)
+            {
+                Main.keyState = _favoriteModifier ? new KeyboardState(Keys.LeftAlt) : new KeyboardState();
+                if (_favoriteModifier && ++_altInputFrames == 1) Mod.Logger.Info("AE2 JOURNEY ALT: injected after native HandleInput keyboard refresh");
+            }
+        }));
         MonoModHooks.Add(Method(typeof(GameInterfaceLayer), "Draw"), new LayerHook((original, layer) =>
         {
             bool before = Main.LocalPlayer.mouseInterface;
@@ -169,7 +185,7 @@ public sealed class PlayerJourneyRegression : ModSystem
         _elapsed.Start();
     }
 
-    public override void Unload() { On_Main.Draw -= Draw; _enabled = false; }
+    public override void Unload() { On_Main.Draw -= Draw; _enabled = false; _browserPreferences?.Dispose(); _browserPreferences = null; }
 
     private static MethodInfo Method(Type type, string name, params Type[] parameters) =>
         type.GetMethod(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance,
@@ -329,7 +345,6 @@ public sealed class PlayerJourneyRegression : ModSystem
         PlayerInput.MouseX = PlayerInput.MouseInfo.X; PlayerInput.MouseY = PlayerInput.MouseInfo.Y;
         PlayerInput.UpdateMainMouse();
         Main.mouseLeft = left; Main.mouseRight = right; Main.mouseMiddle = false;
-        Main.keyState = new KeyboardState();
         PlayerInput.CacheZoomableValues();
     }
 
@@ -501,6 +516,54 @@ public sealed class PlayerJourneyRegression : ModSystem
             Require(Field<UIBrowserDetails>(UISystem.SearchState, "_details").IsOpen, "item click opens JEI details during real gameplay");
             Require(!AEUiSession.KeyboardCaptured, "item click leaves text entry");
             _capture = "03-jei-item-details";
+        });
+        Step("return from the first JEI detail", () =>
+        {
+            Click(Field<UIButton>(Field<UIBrowserDetails>(UISystem.SearchState, "_details"), "_back"));
+        });
+        Step("reopen JEI with persistent history and a clean catalogue", () =>
+        {
+            Require(!Field<UIBrowserDetails>(UISystem.SearchState, "_details").IsOpen, "first catalogue selection returns directly without a stale item page");
+            UISystem.CloseAll(); BrowserHistory.Reset(); UISystem.OpenSearch(); PositionWindow(UISystem.SearchState);
+            Require(!Field<UIBrowserDetails>(UISystem.SearchState, "_details").IsOpen
+                && BrowserHistory.Entries.Any(visit => visit.Content == BrowserContent.Name(ItemID.Wood)),
+                "reopening JEI starts at the catalogue and reloads its previous visit from disk");
+            _favoriteModifier = true;
+            BrowserFavorites.AlwaysVisible = false; // Exercise both eye modes explicitly; normal new profiles default to always visible.
+            ClickGrid(Field<UIItemGrid>(UISystem.SearchState, "_grid"), ItemID.Wood);
+        });
+        Step("check native Alt favorite and star marker", () =>
+        {
+            _favoriteModifier = false;
+            Require(BrowserFavorites.Contains(ItemID.Wood) && !Field<UIBrowserDetails>(UISystem.SearchState, "_details").IsOpen,
+                "native Alt click favorites a JEI item without opening its detail");
+            Main.playerInventory = true; _capture = "03b-alt-favorite-mark";
+        });
+        Step("click the pinned tree eye", () =>
+        {
+            UISystem.CloseAll();
+            Require(FavoriteTreeHud.Visible && !BrowserFavorites.AlwaysVisible, "favorited items appear in the inventory-only tree HUD");
+            var eye = (Rectangle)typeof(FavoriteTreeHud).GetField("_eye", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+            ClickPoint(eye.Center.ToVector2());
+        });
+        Step("check always-visible pinned tree outside AE windows", () =>
+        {
+            Require(BrowserFavorites.AlwaysVisible, "native eye click switches pinned trees to always-visible mode");
+            UISystem.CloseAll(); Main.playerInventory = false;
+            Require(FavoriteTreeHud.Visible, "pinned tree remains visible after closing JEI and the native inventory");
+            _capture = "03c-pinned-tree-always";
+        });
+        Step("click eye without any AE window", () =>
+        {
+            var eye = (Rectangle)typeof(FavoriteTreeHud).GetField("_eye", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+            ClickPoint(eye.Center.ToVector2());
+        });
+        Step("reload pinned visibility and favorite state", () =>
+        {
+            Require(!BrowserFavorites.AlwaysVisible && !FavoriteTreeHud.Visible, "eye remains interactive without an AE window and hides inventory-only trees");
+            BrowserFavorites.Reset(); Main.playerInventory = true;
+            Require(BrowserFavorites.Contains(ItemID.Wood) && !BrowserFavorites.AlwaysVisible && FavoriteTreeHud.Visible,
+                "favorite and eye settings survive disk reload in the real world session");
         });
         Step("prepare native world right-click", () =>
         {
@@ -845,7 +908,7 @@ public sealed class PlayerJourneyRegression : ModSystem
         return -1;
     }
 
-    private static double ClickGuardMilliseconds() => AEUiSession.FocusedInterface == null ? 0
+    private static double ClickGuardMilliseconds() => AEUiSession.FocusedInterface?.CurrentState == null ? 0
         : Field<double>(AEUiSession.FocusedInterface, "_clickDisabledTimeRemaining");
 
     private void Click(UIElement element)
@@ -855,6 +918,11 @@ public sealed class PlayerJourneyRegression : ModSystem
         _clickTarget = element; _clickGridType = 0;
         _lastClickBounds = element.GetDimensions().ToRectangle(); _lastClickType = element.GetType().Name;
         Mod.Logger.Info("AE2 JOURNEY CLICK: " + JsonSerializer.Serialize(DiagnosticState()));
+    }
+    private void ClickPoint(Vector2 point)
+    {
+        _pointer = point; _clickFrames = 4; _clickTarget = null; _clickGridType = 0;
+        _lastClickType = "pinned-tree-control";
     }
 
     private void ClickGrid(UIItemGrid grid, int itemType)

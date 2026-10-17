@@ -252,6 +252,7 @@ namespace AE2ForTerraria.Systems
             ActiveCraftingTerminal=null;
             ActiveAssembler=null; ActiveCraftingCpu=null; ActiveTerminalPos=new Point16(-1,-1);
             ActiveTerminalViewMode = TerminalViewMode.Access;
+            FavoriteTreeHud.Reset();
             AEUiSession.Reset(false);
             BlockGameInput(false);
         }
@@ -385,7 +386,7 @@ namespace AE2ForTerraria.Systems
 			WindowLayout.Save();
 			UIStatus.Clear();
 			UITextCache.Clear();
-            BrowserCategories.Reset(); BrowserFavorites.Reset(); BrowserHover.Reset(); UIChoiceMenu.Close();
+            BrowserCategories.Reset(); BrowserFavorites.Reset(); BrowserHistory.Reset(); BrowserContent.Reset(); FavoriteTreeHud.Reset(); BrowserHover.Reset(); UIChoiceMenu.Close();
 
 			Interface = null;
 			OverlayInterface = null;
@@ -986,6 +987,7 @@ namespace AE2ForTerraria.Systems
 
             // 状态提示的 2.5 秒计时靠这里推进(不用游戏时间,免得暂停时不动)
 			UIStatus.Advance(gameTime.ElapsedGameTime.TotalSeconds);
+            FavoriteTreeHud.Update(gameTime);
 
 			using (AEUiSession.EnterOwnedInput())
             {
@@ -1020,6 +1022,7 @@ namespace AE2ForTerraria.Systems
 					EnsureStates();
 
                     if (AEUiSession.CapturesInput) AEUiSession.BeginHover();
+                    FavoriteTreeHud.Draw(Main.spriteBatch);
                     AEUiSession.DrawWindow(Interface, Main._drawInterfaceGameTime);
                     AEUiSession.DrawWindow(SecondaryInterface, Main._drawInterfaceGameTime);
                     AEUiSession.DrawWindow(OverlayInterface, Main._drawInterfaceGameTime);

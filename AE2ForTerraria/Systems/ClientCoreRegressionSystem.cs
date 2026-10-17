@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using AE2ForTerraria.UI;
 using System.Reflection;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -37,6 +39,7 @@ public sealed class ClientCoreRegressionSystem : ModSystem
             || LoadingField == null || (bool)LoadingField.GetValue(null)) return;
         if (++_menuFrames < 10) return;
         _done = true;
+        using var preferences = BrowserPreferences.Isolate(Path.Combine(Main.SavePath, "AE2-Validation", "core-browser-" + Guid.NewGuid().ToString("N")));
 
         // This is synchronous after the current draw returns: no main-thread drawing
         // can observe the temporary player, network or tile state borrowed by a fixture.

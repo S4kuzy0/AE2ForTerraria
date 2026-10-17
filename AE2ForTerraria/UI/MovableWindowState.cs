@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AE2ForTerraria.Systems;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -108,6 +109,11 @@ namespace AE2ForTerraria.UI
         {
             if (_updatingChildren) _layoutPending = true;
             else ApplyLayout();
+        }
+        protected void KeepResizeGripInFront()
+        {
+            if (_grip == null || Window.Children.LastOrDefault() == _grip) return;
+            _grip.Remove(); Window.Append(_grip); _grip.Recalculate();
         }
         internal void AfterChildUpdate(Action change)
         {

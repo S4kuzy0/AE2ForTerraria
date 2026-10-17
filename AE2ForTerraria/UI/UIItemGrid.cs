@@ -25,6 +25,7 @@ namespace AE2ForTerraria.UI
         private int CellWidth => NpcMode && NpcLabels ? 104 : CellSize;
         private int CellHeight => NpcMode && NpcLabels ? 78 : CellSize;
         public Func<bool> InputBlocked;
+        public Func<ItemKey, bool> IsFavorite;
         public int Revision { get; private set; }
 
 		private readonly List<int> _items = new List<int>();
@@ -79,9 +80,13 @@ namespace AE2ForTerraria.UI
 		public override void OnInitialize()
 		{
 			base.OnInitialize();
+            OverflowHidden = true;
+            var slots = new SlotCanvas(this) { IgnoresMouseInteraction = true };
+            slots.Width.Set(0, 1); slots.Height.Set(0, 1); Append(slots);
 
 			OnLeftClick += (evt, element) =>
 			{
+                if (FavoriteInput.IsDown) { _lastClickKey = ItemKey.None; _lastClickTime = -10; return; }
 				ItemKey key = ActiveKey;
 
 				if (key.IsAir)
@@ -362,6 +367,7 @@ namespace AE2ForTerraria.UI
 			{
 				HoveredType = TypeAt(index);
 				HoveredKey = KeyAt(index);
+                if (IsFavorite != null) FavoriteInput.Cursor();
 
 				// 鼠标划过也把光标带过去,键盘接管时不会跳回旧位置
 				CursorIndex = index;
@@ -376,7 +382,7 @@ namespace AE2ForTerraria.UI
 			RecalcLayout();
 			var dims = GetDimensions();
 			int col = (int)((point.X - dims.X) / CellWidth), row = (int)((point.Y - dims.Y) / CellHeight);
-			if (col < 0 || col >= Columns || row < 0 || row >= VisibleRows) return -1;
+			if (col < 0 || col >= Columns || row < 0 || row >= Math.Ceiling(dims.Height / CellHeight)) return -1;
 			int index = (_rowOffset + row) * Columns + col;
 			return index >= 0 && index < EntryCount ? index : -1;
 		}
@@ -503,10 +509,11 @@ namespace AE2ForTerraria.UI
 		}
 
 
-		protected override void DrawSelf(SpriteBatch spriteBatch)
+		private void DrawSlots(SpriteBatch spriteBatch)
 		{
+            RecalcLayout();
 			CalculatedStyle dims = GetDimensions();
-			int perPage = Math.Max(1, VisibleRows * Columns);
+			int perPage = Math.Max(1, (int)Math.Ceiling(dims.Height / CellHeight) * Columns);
 			int start = _rowOffset * Columns;
 
 			for (int i = 0; i < perPage; i++)
@@ -524,10 +531,17 @@ namespace AE2ForTerraria.UI
 			}
 		}
 
+        // UIElement clips children using the native UI transform and restores SpriteBatch state.
+        private sealed class SlotCanvas(UIItemGrid owner) : UIElement
+        {
+            protected override void DrawSelf(SpriteBatch batch) => owner.DrawSlots(batch);
+        }
+
 		private void DrawSlot(SpriteBatch spriteBatch, Vector2 position, int itemType, ItemKey key)
 		{
 			var box = new Rectangle((int)position.X + 2, (int)position.Y + 2, CellWidth - 5, CellHeight - 5);
 			bool hovered = key.Equals(HoveredKey);
+            if (hovered && IsFavorite != null) FavoriteInput.Cursor();
 
 			bool marked = IsMarked != null && IsMarked(key);
 			bool cursored = key.Equals(ActiveKey) && CursorIndex >= 0 && !hovered;
@@ -631,6 +645,7 @@ namespace AE2ForTerraria.UI
 						new Color(235, 240, 250), 0.55f, 0f, 0f);
 				}
 			}
+            if (IsFavorite?.Invoke(key) == true) FavoriteInput.Mark(spriteBatch, box);
 		}
 	}
 }

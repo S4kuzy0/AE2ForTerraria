@@ -37,12 +37,13 @@ public sealed class AEUiSession : ModSystem
     private static readonly InputCoordinate OriginalX=new("_originalMouseX"), OriginalY=new("_originalMouseY"),
         OriginalLastX=new("_originalLastMouseX"), OriginalLastY=new("_originalLastMouseY");
 
-    internal static bool HasWindows => !Main.dedServ && !Main.gameMenu && UISystem.IsOpen;
+    internal static bool HasWindows => !Main.dedServ && !Main.gameMenu && (UISystem.IsOpen || FavoriteTreeHud.Visible);
     internal static bool KeyboardCaptured => HasWindows &&
         ((FocusedInterface?.CurrentState as MovableWindowState)?.SearchBoxFocused == true || ImeInput.CompositionString.Length > 0);
     internal static Vector2 PointerPosition => new Vector2(PlayerInput.MouseInfo.X, PlayerInput.MouseInfo.Y) / Main.UIScale;
-    internal static bool CoversPoint(Vector2 point) => Covers(UISystem.OverlayInterface, point)
+    internal static bool CoversWindowPoint(Vector2 point) => Covers(UISystem.OverlayInterface, point)
         || Covers(UISystem.SecondaryInterface, point) || Covers(UISystem.Interface, point);
+    internal static bool CoversPoint(Vector2 point) => CoversWindowPoint(point) || FavoriteTreeHud.Contains(point);
     private static bool Covers(UserInterface ui, Vector2 point) => ui?.CurrentState is MovableWindowState window
         && window.InteractionBounds.Contains(point.ToPoint());
     public static bool CapturesInput => !Main.dedServ && !Main.gameMenu && (_active || HasWindows && CoversPoint(PointerPosition));

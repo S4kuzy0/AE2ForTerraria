@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AE2ForTerraria.Systems;
 using Terraria;
+using Terraria.Map;
 using Terraria.ModLoader;
 
 namespace AE2ForTerraria.Core
@@ -62,6 +63,22 @@ namespace AE2ForTerraria.Core
 				{
 					StationNames[tileType] = name;
 					return name;
+				}
+			}
+
+			// Some valid stations (notably altars) have no placeable item.
+			// Use the game's localized map entry instead of exposing a tile ID.
+			if (tileType >= 0 && tileType < TileLoader.TileCount && Lang._mapLegendCache != null)
+			{
+				int lookup = MapHelper.TileToLookup((ushort)tileType, 0);
+				if (lookup >= 0 && lookup < Lang._mapLegendCache.Length)
+				{
+					string name = Lang.GetMapObjectName(lookup);
+					if (!string.IsNullOrWhiteSpace(name))
+					{
+						StationNames[tileType] = name;
+						return name;
+					}
 				}
 			}
 

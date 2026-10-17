@@ -25,7 +25,7 @@ internal sealed class UIBrowserDetails : UIElement
     private readonly record struct Page(ItemKey Key, int Npc, int Tab, int Recipe, int Scroll, int Stations, long Quantity);
     private readonly Stack<Page> _history = new();
     private readonly UIButton[] _tabs;
-    private readonly UIButton _back, _previous, _next, _favorite, _forward;
+    private readonly UIButton _back, _previous, _next, _forward;
     private readonly Stack<Page> _future = new();
     public Action FavoriteChanged;
     public Action Closed;
@@ -36,7 +36,7 @@ internal sealed class UIBrowserDetails : UIElement
     private float _x, _y, _width, _height, _entrance = 1;
     private string _title = "", _subtitle = "";
     private long _quantity = 1;
-    private sealed record IngredientCard(int Index, int Type, int Required, long Owned, RecipeGroup Group);
+    private sealed record IngredientCard(int Index, int Type, long Required, long Owned, RecipeGroup Group, bool Overflow);
     private readonly List<IngredientCard> _ingredients = new();
     private readonly Dictionary<int, int> _alternativeSelection = new();
     private readonly List<string> _stationText = new();
@@ -51,7 +51,7 @@ internal sealed class UIBrowserDetails : UIElement
     private Rectangle _stationBounds;
     private readonly List<string> _stationLines = new();
     private float _stationLineWidth = -1;
-    private int ContentTop => _width < 520 ? 105 : _npc == 0 ? 121 : 153;
+    private int ContentTop => 76;
     public Action<ItemKey> Selected;
     public bool IsOpen { get; private set; }
     public float BottomReserve;
@@ -64,7 +64,6 @@ internal sealed class UIBrowserDetails : UIElement
         _host = host;
         _back = Button("返回", Back);
         _forward = Button("前进", Forward);
-        _favorite = Button("收藏", () => { BrowserFavorites.Toggle(_npc > 0 ? _npc : _key.Type, _npc > 0); UpdateFavorite(); FavoriteChanged?.Invoke(); });
         _previous = Button("上一配方", () => CycleRecipe(-1));
         _next = Button("下一配方", () => CycleRecipe(1));
         _tabs = new UIButton[4];
@@ -74,6 +73,18 @@ internal sealed class UIBrowserDetails : UIElement
         OnLeftClick += (e, _) =>
         {
             if (e.Target != this) return;
+            if (FavoriteInput.IsDown)
+            {
+                foreach (var hit in _ingredientHits)
+                    if (hit.Bounds.Contains(e.MousePosition.ToPoint())) { FavoriteInput.Toggle(hit.Card.Type); FavoriteChanged?.Invoke(); return; }
+                foreach (var hit in _hits)
+                    if (hit.Bounds.Contains(e.MousePosition.ToPoint()) && (hit.Row.Item > 0 || hit.Row.Npc > 0))
+                    {
+                        int recipe = hit.Row.Item == _key.Type || hit.Row.Item == _shownRecipe?.createItem.type ? CurrentRecipeIndex : -1;
+                        FavoriteInput.Toggle(hit.Row.Npc > 0 ? hit.Row.Npc : hit.Row.Item, hit.Row.Npc > 0, recipe, _quantity);
+                        FavoriteChanged?.Invoke(); return;
+                    }
+            }
             foreach (var hit in _ingredientHits)
                 if (hit.Bounds.Contains(e.MousePosition.ToPoint()))
                 {
@@ -100,7 +111,13 @@ internal sealed class UIBrowserDetails : UIElement
         if (IsOpen) return;
         IsOpen = true; _entrance = 0; _host.Append(this); Arrange();
     }
-    public void Close() { IsOpen = false; _alternatives?.Remove(); _alternatives = null; Remove(); _hits.Clear(); _ingredientHits.Clear(); IngredientVisuals.Clear(); Closed?.Invoke(); }
+    public void Close()
+    {
+        if (IsOpen) BrowserHistory.Record(CurrentVisit);
+        IsOpen = false; _alternatives?.Remove(); _alternatives = null; Remove();
+        _history.Clear(); _future.Clear(); _key = ItemKey.None; _npc = 0;
+        _hits.Clear(); _ingredientHits.Clear(); IngredientVisuals.Clear(); Closed?.Invoke();
+    }
     public void Show(ItemKey key, long quantity = 1, bool uses = false, bool remember = true, bool preserveTab = false)
     {
         if (key.IsAir) return;
@@ -113,25 +130,53 @@ internal sealed class UIBrowserDetails : UIElement
         Open(); Rebuild();
         if (!changed && preserveTab) { _scroll = previousScroll; if (_plan?.Parent == this) _plan.ScrollOffset = previousScroll; _stationScroll = previousStations; }
         Selected?.Invoke(key);
+        if (remember) BrowserHistory.Record(CurrentVisit);
     }
     public void ShowNpc(int type, bool remember = true)
     {
         if (remember && (_npc != type || !_key.IsAir)) Remember();
         _npc = type; _key = ItemKey.None; _tab = 1; Open(); Rebuild(); Selected?.Invoke(ItemKey.None);
+        if (remember) BrowserHistory.Record(CurrentVisit);
     }
     private Page CurrentPage => new(_key, _npc, _tab, _recipe, ReaderScroll, _stationScroll, _quantity);
+    private int CurrentRecipeIndex
+    {
+        get
+        {
+            if (_key.IsAir) return -1;
+            var recipes = _tab == 2 ? StorageSystem.Recipes.GetRecipesUsing(_key.Type) : StorageSystem.Recipes.GetRecipesFor(_key);
+            return recipes.Count == 0 ? -1 : recipes[Math.Clamp(_recipe, 0, recipes.Count - 1)];
+        }
+    }
+    private BrowserVisit CurrentVisit => new(BrowserContent.Name(_npc > 0 ? _npc : _key.Type, _npc > 0),
+        _key.Prefix, _key.Data, _tab, CurrentRecipeIndex < 0 ? "" : BrowserContent.RecipeKey(Main.recipe[CurrentRecipeIndex]),
+        ReaderScroll, _stationScroll, Math.Max(1, _quantity));
+    public void ShowVisit(BrowserVisit visit)
+    {
+        if (!visit.TryResolve(out var key, out int npc)) { UIStatus.Toast("这条浏览记录的内容当前未加载"); return; }
+        Remember();
+        if (npc > 0) ShowNpc(npc, false);
+        else Show(key, visit.Quantity, remember: false);
+        _tab = Math.Clamp(visit.Tab, 0, 3);
+        var recipes = npc > 0 ? Array.Empty<int>() : (_tab == 2 ? StorageSystem.Recipes.GetRecipesUsing(key.Type) : StorageSystem.Recipes.GetRecipesFor(key)).ToArray();
+        _recipe = Math.Max(0, Array.FindIndex(recipes, i => BrowserContent.RecipeKey(Main.recipe[i]) == visit.Recipe));
+        Rebuild(); _scroll = Math.Max(0, visit.Scroll); _stationScroll = Math.Max(0, visit.Stations);
+        if (_plan?.Parent == this) _plan.ScrollOffset = _scroll;
+        BrowserHistory.Record(CurrentVisit);
+    }
     private static void Push(Stack<Page> stack, Page page)
     {
-        if (stack.Count >= 64)
+        if (stack.Count >= BrowserHistory.Capacity)
         {
-            var recent = stack.Take(63).Reverse().ToArray();
+            var recent = stack.Take(BrowserHistory.Capacity - 1).Reverse().ToArray();
             stack.Clear(); foreach (var entry in recent) stack.Push(entry);
         }
         stack.Push(page);
     }
     private void Remember()
     {
-        if (_key.IsAir && _npc <= 0) return;
+        if (!IsOpen || _key.IsAir && _npc <= 0) return;
+        BrowserHistory.Record(CurrentVisit);
         Push(_history, CurrentPage); _future.Clear();
     }
     private void Restore(Page page)
@@ -142,6 +187,7 @@ internal sealed class UIBrowserDetails : UIElement
         _tab = page.Tab; _recipe = page.Recipe; _quantity = page.Quantity;
         Rebuild(); _scroll = page.Scroll; if (_plan?.Parent == this) _plan.ScrollOffset = page.Scroll;
         _stationScroll = page.Stations;
+        BrowserHistory.Record(CurrentVisit);
     }
     private void Back()
     {
@@ -153,16 +199,15 @@ internal sealed class UIBrowserDetails : UIElement
         if (_future.Count == 0) return;
         Push(_history, CurrentPage); Restore(_future.Pop());
     }
-    private void UpdateFavorite() => _favorite.Selected = BrowserFavorites.Contains(_npc > 0 ? _npc : _key.Type, _npc > 0);
     public void SetTab(int tab)
     {
         if (_npc > 0 || tab < 0 || tab >= _tabs.Length || tab == _tab) return;
-        Remember(); _tab = tab; _recipe = 0; Rebuild();
+        Remember(); _tab = tab; _recipe = 0; Rebuild(); BrowserHistory.Record(CurrentVisit);
     }
     private void CycleRecipe(int delta)
     {
         if (_recipeCount <= 1) return;
-        Remember(); _recipe = (_recipe + delta + _recipeCount) % _recipeCount; _alternativeSelection.Clear(); Rebuild();
+        Remember(); _recipe = (_recipe + delta + _recipeCount) % _recipeCount; _alternativeSelection.Clear(); Rebuild(); BrowserHistory.Record(CurrentVisit);
     }
     public void SetBounds(float x, float y, float width, float height)
     {
@@ -174,20 +219,11 @@ internal sealed class UIBrowserDetails : UIElement
     {
         float offset = 16 * (1 - _entrance) * (1 - _entrance);
         Place(this, _x + offset, _y, Math.Max(100, _width - offset), _height);
-        Place(_back, 10, 4, 46, 22); Place(_forward, 60, 4, 46, 22); Place(_favorite, _width - offset - 56, 4, 46, 22);
-        if (_width < 520)
-        {
-            float compactTab = (_width - offset - 142) / 4;
-            for (int i = 0; i < 4; i++) Place(_tabs[i], 10 + i * (compactTab + 2), 76, compactTab, 22);
-            Place(_previous, _width - offset - 122, 76, 52, 22);
-            Place(_next, _width - offset - 66, 76, 52, 22);
-            if (_plan != null) Place(_plan, 8, ContentTop, _width - offset - 16, Math.Max(40, _height - ContentTop - 8 - BottomReserve));
-            Recalculate(); return;
-        }
-        float tabWidth = _width >= 520 && _npc == 0 ? Math.Min(90, (_width - offset - 224) / 4) : (_width - offset - 26) / 4;
-        for (int i = 0; i < 4; i++) Place(_tabs[i], 10 + i * (tabWidth + 2), 87, tabWidth, 28);
-        if (ContentTop == 121) { Place(_previous, _width - offset - 202, 87, 70, 26); Place(_next, _width - offset - 80, 87, 70, 26); }
-        else { Place(_previous, 10, 120, 86, 26); Place(_next, _width - offset - 96, 120, 86, 26); }
+        Place(_back, 8, 4, 38, 22); Place(_forward, 50, 4, 38, 22);
+        float tabWidth = Math.Min(90, (_width - offset - 104) / 4);
+        for (int i = 0; i < 4; i++) Place(_tabs[i], 94 + i * (tabWidth + 2), 4, tabWidth, 22);
+        Place(_previous, _width - offset - 116, 32, 52, 22);
+        Place(_next, _width - offset - 60, 32, 52, 22);
         if (_plan != null) Place(_plan, 8, ContentTop, _width - offset - 16, Math.Max(40, _height - ContentTop - 8 - BottomReserve));
         Recalculate();
     }
@@ -201,8 +237,7 @@ internal sealed class UIBrowserDetails : UIElement
         int wheel = Terraria.GameInput.PlayerInput.ScrollWheelDelta / 120;
         if (wheel != 0)
         {
-            if (_shownRecipe != null && _stationBounds.Contains(Main.MouseScreen.ToPoint())) _stationScroll = Math.Max(0, _stationScroll - wheel * 2);
-            else _scroll = Math.Max(0, _scroll - wheel * (_shownRecipe != null ? 1 : 3));
+            _scroll = Math.Max(0, _scroll - wheel * (_shownRecipe != null ? 1 : 3));
             Terraria.GameInput.PlayerInput.ScrollWheelDelta = 0;
         }
     }
@@ -220,7 +255,7 @@ internal sealed class UIBrowserDetails : UIElement
             foreach (var item in Main.LocalPlayer.inventory) if (item != null && !item.IsAir) AccumulateOwned(item.type, item.stack);
         _plan?.Remove();
         GameDataIndex.EnsureBuilt();
-        _forward.Enabled = _future.Count > 0; UpdateFavorite();
+        _forward.Enabled = _future.Count > 0;
         for (int i = 0; i < 4; i++) { _tabs[i].Selected = i == _tab; _tabs[i].Enabled = _npc == 0; }
         if (_npc > 0) BuildNpc();
         else
@@ -249,6 +284,8 @@ internal sealed class UIBrowserDetails : UIElement
         }
         _recipe = Math.Clamp(_recipe, 0, _recipeCount - 1);
         var r = _shownRecipe = Main.recipe[recipes[_recipe]];
+        long output = Math.Max(1, r.createItem.stack);
+        long batches = _tab == 2 ? 1 : _quantity / output + (_quantity % output > 0 ? 1 : 0);
         int index = 0;
         foreach (var ingredient in r.requiredItem)
         {
@@ -257,7 +294,8 @@ internal sealed class UIBrowserDetails : UIElement
             long owned = Owned(ingredient.type);
             if (group != null) { owned = 0; foreach (int type in group.ValidItems) owned = SaturatingAdd(owned, Owned(type)); }
             int displayed = group != null && _alternativeSelection.TryGetValue(index, out int selected) && group.ValidItems.Contains(selected) ? selected : ingredient.type;
-            _ingredients.Add(new IngredientCard(index++, displayed, ingredient.stack, owned, group));
+            bool overflow = batches > long.MaxValue / ingredient.stack;
+            _ingredients.Add(new IngredientCard(index++, displayed, overflow ? long.MaxValue : batches * ingredient.stack, owned, group, overflow));
         }
         foreach (int tile in r.requiredTile)
             if (tile >= 0) _stationText.Add("工作站：" + RecipeStation.DescribeStation(tile));
@@ -355,86 +393,76 @@ internal sealed class UIBrowserDetails : UIElement
     }
     private void DrawRecipe(SpriteBatch batch, CalculatedStyle d)
     {
-        _ingredientHits.Clear();
-        IngredientVisuals.Clear();
+        _ingredientHits.Clear(); IngredientVisuals.Clear();
         int top = (int)d.Y + ContentTop;
-        DrawIcon(batch, _shownRecipe.createItem.type, 0, new Rectangle((int)d.X + 12, top, 26, 26));
+        var output = new Rectangle((int)d.X + 10, top, 24, 24);
+        DrawIcon(batch, _shownRecipe.createItem.type, 0, output);
+        if (BrowserFavorites.Contains(_shownRecipe.createItem.type)) FavoriteInput.Mark(batch, output);
+        _hits.Add((new Rectangle((int)d.X + 8, top, (int)d.Width - 16, 25), new Row("", _shownRecipe.createItem.type, Click: static () => { })));
         Utils.DrawBorderString(batch, Fit("产出  " + _shownRecipe.createItem.Name + " ×" + _shownRecipe.createItem.stack,
-            .75f, d.Width - 55), new Vector2(d.X + 43, top + 6), UITheme.Info, .75f);
-        int bottom = (int)(d.Y + d.Height - BottomReserve - 8);
-        int metadataHeight = Math.Clamp((int)(d.Height * .23f), 48, 100);
-        metadataHeight=Math.Min(metadataHeight,Math.Max(24,bottom-top-82));
-        _stationBounds = new Rectangle((int)d.X + 10, Math.Max(top + 82, bottom - metadataHeight), (int)d.Width - 20, metadataHeight);
-        UITheme.Fill(batch, _stationBounds, UITheme.Panel);
-        float lineWidth = _stationBounds.Width - 18;
+            .65f, d.Width - 48), new Vector2(d.X + 38, top + 5), UITheme.Info, .65f);
+        int bottom = (int)(d.Y + d.Height - BottomReserve - 6), rowsTop = top + 27;
+        float lineWidth = d.Width - 34;
         if (_stationLineWidth != lineWidth)
         {
             _stationLineWidth = lineWidth; _stationLines.Clear();
-            foreach (string text in _stationText) _stationLines.AddRange(Wrap(text, lineWidth, .72f));
+            _stationLines.AddRange(Wrap(string.Join("；", _stationText), lineWidth, .6f));
         }
-        int visibleStations = Math.Max(1, (_stationBounds.Height - 10) / 21);
-        _stationScroll = Math.Clamp(_stationScroll, 0, Math.Max(0, _stationLines.Count - visibleStations));
-        for (int i = 0; i < visibleStations && i + _stationScroll < _stationLines.Count; i++)
-            Utils.DrawBorderString(batch, _stationLines[i + _stationScroll], new Vector2(_stationBounds.X + 7, _stationBounds.Y + 6 + i * 21), UITheme.TextDim, .72f);
-        DrawScroll(batch, _stationBounds, _stationScroll, visibleStations, _stationLines.Count);
-        int cardsTop = top + 31, available = Math.Max(44, _stationBounds.Top - cardsTop - 7);
-        int columns = Math.Max(1, (int)((d.Width - 20) / 188));
-        int cardWidth = ((int)d.Width - 20 - (columns - 1) * 6) / columns;
-        int cardHeight = Math.Min(82, available);
-        int visibleRows = Math.Max(1, (available + 6) / (cardHeight + 6));
-        int totalRows = (_ingredients.Count + columns - 1) / columns;
-        _scroll = Math.Clamp(_scroll, 0, Math.Max(0, totalRows - visibleRows));
-        for (int row = 0; row < visibleRows; row++)
+        const int rowHeight = 27;
+        int columns = Math.Max(1, (int)((d.Width - 20) / 390));
+        int cardWidth = ((int)d.Width - 20 - (columns - 1) * 5) / columns;
+        int materialRows = (_ingredients.Count + columns - 1) / columns;
+        int metadataHeight = _stationLines.Count * 16 + 8;
+        bool pinned = metadataHeight <= Math.Max(24, bottom - rowsTop - rowHeight - 5);
+        _stationBounds = pinned
+            ? new Rectangle((int)d.X + 10, bottom - metadataHeight, (int)d.Width - 20, metadataHeight)
+            : Rectangle.Empty;
+        int available = Math.Max(rowHeight, (pinned ? _stationBounds.Top - 4 : bottom) - rowsTop);
+        int visible = Math.Max(1, available / rowHeight), total = materialRows + (pinned ? 0 : _stationLines.Count);
+        _scroll = Math.Clamp(_scroll, 0, Math.Max(0, total - visible)); _stationScroll = 0;
+        for (int row = 0; row < visible && row + _scroll < total; row++)
+        {
+            int contentRow = row + _scroll, y = rowsTop + row * rowHeight;
+            if (contentRow >= materialRows)
+            {
+                Utils.DrawBorderString(batch, _stationLines[contentRow - materialRows], new Vector2(d.X + 14, y + 4), UITheme.TextDim, .6f);
+                continue;
+            }
             for (int col = 0; col < columns; col++)
             {
-                int index = (row + _scroll) * columns + col;
+                int index = contentRow * columns + col;
                 if (index >= _ingredients.Count) break;
                 var card = _ingredients[index];
-                var rect = new Rectangle((int)d.X + 10 + col * (cardWidth + 6), cardsTop + row * (cardHeight + 6), cardWidth, cardHeight);
-                UITheme.FillOutline(batch, rect, rect.Contains(Main.MouseScreen.ToPoint()) ? UITheme.BtnHot : UITheme.Slot, UITheme.Border);
-                string count="持有 "+UIFormat.Count(card.Owned)+" / "+card.Required
-                    +(card.Owned>=card.Required ? " · 齐全" : " · 缺 "+(card.Required-card.Owned));
-                count=Fit(count,.65f,rect.Width-10);
-                int countHeight=TextBounds(count,Vector2.Zero,.65f).Height;
-                bool compact=cardHeight<Math.Max(76,63+countHeight);
-                var countPosition=new Vector2(rect.X+5,rect.Bottom-countHeight-(card.Group==null || compact ? 2 : 27));
-                int iconSize=Math.Min(compact ? 20 : 30,(int)countPosition.Y-rect.Y-6);
-                var icon=new Rectangle(rect.X+4,rect.Y+4,iconSize,iconSize);
-                var choice=card.Group==null ? Rectangle.Empty : compact
-                    ? new Rectangle(rect.Right-72,rect.Y+3,68,Math.Min(20,(int)countPosition.Y-rect.Y-4))
-                    : new Rectangle(rect.X+4,rect.Bottom-25,rect.Width-8,21);
-                var namePosition=new Vector2(icon.Right+4,rect.Y+(compact ? 3 : 5));
-                float nameWidth=(compact && card.Group!=null ? choice.X-4 : rect.Right-5)-namePosition.X;
-                string name=Lang.GetItemNameValue(card.Type);
-                float nameScale=Math.Min(.7f,(countPosition.Y-namePosition.Y-2)
-                    / Math.Max(1,FontAssets.MouseText.Value.MeasureString(name).Y));
-                int nameHeight=(int)Math.Ceiling(FontAssets.MouseText.Value.MeasureString(name).Y*nameScale);
-                int nameLineCount=Math.Clamp((int)(countPosition.Y-namePosition.Y-2-nameHeight)/17+1,1,compact ? 1 : 2);
-                var nameLines=nameLineCount==1 ? new[]{Fit(name,nameScale,nameWidth)}
-                    : Wrap(name,nameWidth,nameScale).Take(nameLineCount).ToArray();
-                Rectangle nameBounds=Rectangle.Empty;
-                DrawIcon(batch,card.Type,0,icon);
-                for(int i=0;i<nameLines.Length;i++)
-                {
-                    var textPosition=namePosition+new Vector2(0,i*17);
-                    string text=nameLines[i];
-                    Rectangle lineBounds=TextBounds(text,textPosition,nameScale);
-                    Utils.DrawBorderString(batch,text,textPosition,UITheme.Text,nameScale);
-                    nameBounds=nameBounds.IsEmpty ? lineBounds : Rectangle.Union(nameBounds,lineBounds);
-                }
+                var rect = new Rectangle((int)d.X + 10 + col * (cardWidth + 5), y, cardWidth, rowHeight - 2);
+                UITheme.Fill(batch, rect, rect.Contains(Main.MouseScreen.ToPoint()) ? UITheme.BtnHot : UITheme.Slot);
+                var icon = new Rectangle(rect.X + 2, rect.Y + 1, 23, 23);
+                DrawIcon(batch, card.Type, 0, icon);
+                if (BrowserFavorites.Contains(card.Type)) FavoriteInput.Mark(batch, icon);
+                string count = card.Overflow ? "需求超出数量范围" : "需求 " + UIFormat.Count(card.Required) + "  缺少 " + UIFormat.Count(Math.Max(0, card.Required - card.Owned));
+                int countWidth = TextBounds(count, Vector2.Zero, .6f).Width;
+                var choice = card.Group == null ? Rectangle.Empty : new Rectangle(rect.Right - 31, rect.Y + 2, 29, 21);
+                var countPosition = new Vector2((card.Group == null ? rect.Right - 4 : choice.X - 5) - countWidth, rect.Y + 4);
+                var namePosition = new Vector2(icon.Right + 4, rect.Y + 4);
+                string name = Fit(Lang.GetItemNameValue(card.Type), .6f, Math.Max(4, countPosition.X - namePosition.X - 7));
+                Utils.DrawBorderString(batch, name, namePosition, UITheme.Text, .6f);
+                Utils.DrawBorderString(batch, count, countPosition, card.Owned >= card.Required ? UITheme.Ok : UITheme.Danger, .6f);
                 _ingredientHits.Add((rect, card, false));
-                Utils.DrawBorderString(batch,count,countPosition,card.Owned>=card.Required ? UITheme.Ok : UITheme.Danger,.65f);
                 if (card.Group != null)
                 {
                     UITheme.Fill(batch, choice, UITheme.Btn);
-                    string label=(compact ? "替代（" : "替代材料（")+card.Group.ValidItems.Count+"）";
-                    float labelScale=Math.Min(.65f,(choice.Height-2)/Math.Max(1,FontAssets.MouseText.Value.MeasureString(label).Y));
-                    Utils.DrawBorderString(batch,Fit(label,labelScale,choice.Width-8),new Vector2(choice.X+4,choice.Y+1),UITheme.Info,labelScale);
+                    Utils.DrawBorderString(batch, "替代", new Vector2(choice.X + 3, choice.Y + 4), UITheme.Info, .55f);
                     _ingredientHits.Insert(0, (choice, card, true));
                 }
-                IngredientVisuals.Add(new(card.Index,rect,icon,nameBounds,TextBounds(count,countPosition,.65f),choice));
+                IngredientVisuals.Add(new(card.Index, rect, icon, TextBounds(name, namePosition, .6f), TextBounds(count, countPosition, .6f), choice));
             }
-        DrawScroll(batch, new Rectangle((int)d.X + 7, cardsTop, (int)d.Width - 14, available), _scroll, visibleRows, totalRows);
+        }
+        if (pinned)
+        {
+            UITheme.Fill(batch, _stationBounds, UITheme.Panel);
+            for (int i = 0; i < _stationLines.Count; i++)
+                Utils.DrawBorderString(batch, _stationLines[i], new Vector2(_stationBounds.X + 5, _stationBounds.Y + 4 + i * 16), UITheme.TextDim, .6f);
+        }
+        DrawScroll(batch, new Rectangle((int)d.X + 7, rowsTop, (int)d.Width - 14, available), _scroll, visible, total);
     }
     private static Rectangle TextBounds(string text,Vector2 position,float scale)
     {
@@ -516,12 +544,18 @@ internal sealed class UIBrowserDetails : UIElement
     protected override void DrawSelf(SpriteBatch batch)
     {
         var d = GetDimensions(); var box = d.ToRectangle();
-        UITheme.Fill(batch, box, new Color(32, 42, 68)); UITheme.Outline(batch, box, UITheme.BorderHot);
-        Utils.DrawBorderString(batch, Fit(_title, .85f, d.Width - 24), new Vector2(d.X + 12, d.Y + (_width < 520 ? 32 : 43)), UITheme.Text, .85f);
-        Utils.DrawBorderString(batch, Fit(_subtitle, .65f, d.Width - 96), new Vector2(d.X + 12, d.Y + (_width < 520 ? 55 : 67)), UITheme.Muted, .65f);
+        UITheme.Fill(batch, box, new Color(32, 42, 68)); UITheme.Outline(batch, box, UITheme.ItemBorder);
+        var titleIcon = new Rectangle(box.X + 10, box.Y + 32, 22, 22);
+        DrawIcon(batch, _key.Type, _npc, titleIcon);
+        if (BrowserFavorites.Contains(_npc > 0 ? _npc : _key.Type, _npc > 0)) FavoriteInput.Mark(batch, titleIcon);
+        Utils.DrawBorderString(batch, Fit(_title, .7f, d.Width - 166), new Vector2(d.X + 36, d.Y + 34), UITheme.Text, .7f);
+        Utils.DrawBorderString(batch, Fit(_subtitle, .6f, d.Width - 76), new Vector2(d.X + 12, d.Y + 56), UITheme.Muted, .6f);
         if (_recipeCount > 0) Utils.DrawBorderString(batch, (_recipe + 1) + " / " + _recipeCount,
-            new Vector2(_width < 520 ? d.X + d.Width - 40 : ContentTop == 121 ? d.X + d.Width - 107 : d.X + d.Width / 2, d.Y + (_width < 520 ? 55 : ContentTop == 121 ? 94 : 126)), UITheme.TextDim, .65f, .5f);
+            new Vector2(d.X + d.Width - 36, d.Y + 56), UITheme.TextDim, .6f, .5f);
         _hits.Clear();
+        _hits.Add((new Rectangle(titleIcon.X, titleIcon.Y, Math.Max(22, box.Width - 140), 22),
+            new Row("", _key.Type, _npc, Click: static () => { })));
+        if (titleIcon.Contains(Main.MouseScreen.ToPoint())) FavoriteInput.Cursor();
         if (_shownRecipe != null) { DrawRecipe(batch, d); return; }
         _ingredientHits.Clear();
         IngredientVisuals.Clear();
@@ -583,9 +617,10 @@ internal sealed class UIBrowserDetails : UIElement
     public void DrawTooltip(SpriteBatch batch)
     {
         if (!BlocksPointer || _alternatives?.Parent == this || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null) return;
-        foreach (var hit in _ingredientHits) if (hit.Bounds.Contains(Main.MouseScreen.ToPoint())) { BrowserHover.Item(ItemKey.Crafted(hit.Card.Type)); return; }
+        foreach (var hit in _ingredientHits) if (hit.Bounds.Contains(Main.MouseScreen.ToPoint())) { FavoriteInput.Cursor(); BrowserHover.Item(ItemKey.Crafted(hit.Card.Type)); return; }
         foreach (var hit in _hits) if (hit.Bounds.Contains(Main.MouseScreen.ToPoint()))
         {
+            FavoriteInput.Cursor();
             if (hit.Row.Item > 0) BrowserHover.Item(ItemKey.Crafted(hit.Row.Item));
             else if (hit.Row.Npc > 0) UITooltip.Draw(batch, NpcIndex.GetName(hit.Row.Npc), BrowserCategories.NpcKinds[BrowserCategories.NpcKind(hit.Row.Npc)]);
             return;
