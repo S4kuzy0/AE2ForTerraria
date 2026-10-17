@@ -46,6 +46,8 @@ internal sealed class UIBrowserDetails : UIElement
     internal readonly List<IngredientVisual> IngredientVisuals = new();
     private readonly Dictionary<int, long> _owned = new();
     private Recipe _shownRecipe;
+    private BookmarkTree _tree;
+    private int _treeRevision = -1;
     private AlternativePopup _alternatives;
     private int _stationScroll;
     private Rectangle _stationBounds;
@@ -231,6 +233,7 @@ internal sealed class UIBrowserDetails : UIElement
     {
         if (_entrance < 1) { _entrance = Math.Min(1, _entrance + (float)time.ElapsedGameTime.TotalSeconds / .16f); Arrange(); }
         base.Update(time);
+        if (_tree != null && !_tree.Complete) { _tree.Advance(); RefreshTreeRows(); }
         if (!BlocksPointer) return;
         Main.LocalPlayer.mouseInterface = true;
         if (_plan?.Parent == this || _alternatives?.Parent == this) return;
@@ -247,6 +250,7 @@ internal sealed class UIBrowserDetails : UIElement
         _rows.Clear(); _hits.Clear(); _wrappedWidth = -1; _scroll = 0; _recipeCount = 0;
         _ingredients.Clear(); _ingredientHits.Clear(); IngredientVisuals.Clear(); _stationText.Clear(); _shownRecipe = null; _stationScroll = 0;
         _stationLineWidth = -1;
+        _tree = null; _treeRevision = -1;
         _alternatives?.Remove(); _alternatives = null;
         _owned.Clear();
         if (_plan != null && UISystem.ActiveNetworkContents != null)
@@ -265,7 +269,7 @@ internal sealed class UIBrowserDetails : UIElement
             if (_plan != null) _subtitle += "  ·  已储存 " + UIFormat.Count(UISystem.GetStoredAmount(_key));
             if (_tab == 1) BuildSources();
             else if (_tab == 3 && _plan != null) { Append(_plan); _plan.Show(_key, _quantity); }
-            else if (_tab == 3) BuildTree(_key.Type, _quantity, 0, new HashSet<int>());
+            else if (_tab == 3) BeginTree();
             else BuildRecipe();
         }
         _previous.Enabled = _next.Enabled = _recipeCount > 1;
@@ -315,32 +319,43 @@ internal sealed class UIBrowserDetails : UIElement
             if (tile < 0) continue;
             any = true;
             int item = ContentSamples.ItemsByType.Values.FirstOrDefault(i => i.createTile == tile)?.type ?? 0;
-            Add(item > 0 ? Lang.GetItemNameValue(item) : "工作站 #" + tile, item);
+            Add(RecipeStation.DescribeStation(tile), item);
         }
         if (!any) Add("徒手");
         foreach (var condition in recipe.Conditions) Add(condition.Description.Value, color: UITheme.Warn);
     }
-    private void BuildTree(int type, long amount, int depth, HashSet<int> path)
+    private void BeginTree()
     {
-        if (_rows.Count >= 350) return;
-        if (depth == 0) Add("配方展开 · 下级点击可切换其配方", color: UITheme.Muted);
-        Add(Lang.GetItemNameValue(type) + "  ×" + amount, type, indent: Math.Min(depth, 5));
-        if (!path.Add(type)) { Add("循环配方，停止展开", color: UITheme.Warn, indent: Math.Min(depth + 1, 5)); return; }
-        var recipes = StorageSystem.Recipes.GetRecipesFor(ItemKey.Crafted(type));
-        if (depth == 0) _recipeCount = recipes.Count;
-        if (recipes.Count == 0 || depth >= 16) { path.Remove(type); return; }
-        var recipe = Main.recipe[recipes[depth == 0 ? Math.Clamp(_recipe, 0, recipes.Count - 1) : 0]];
-        long output = Math.Max(1, recipe.createItem.stack);
-        long batches = amount / output + (amount % output == 0 ? 0 : 1);
-        foreach (var ingredient in recipe.requiredItem)
-            if (!ingredient.IsAir)
+        var recipes = StorageSystem.Recipes.GetRecipesFor(_key);
+        _recipeCount = recipes.Count; _recipe = Math.Clamp(_recipe, 0, Math.Max(0, recipes.Count - 1));
+        string signature = recipes.Count > 0 ? BrowserContent.RecipeKey(Main.recipe[recipes[_recipe]]) : "";
+        _tree = new BookmarkTree(new BrowserBookmark(BrowserContent.Name(_key.Type), signature, _quantity));
+        _tree.Advance(); RefreshTreeRows();
+    }
+    private void RefreshTreeRows()
+    {
+        if (_treeRevision == _tree.Revision) return;
+        _treeRevision = _tree.Revision; _rows.Clear(); _wrappedWidth = -1;
+        foreach (var node in _tree.Nodes)
+        {
+            string label = (node.Group ?? Lang.GetItemNameValue(node.Item)) + "  ×" + UIFormat.Count(node.Amount);
+            if (node.Overflow) label += "（数量溢出）";
+            if (node.Reference >= 0) label += "（重复分支）";
+            if (node.Reference >= 0)
             {
-                if (batches > long.MaxValue / ingredient.stack)
-                    Add(ingredient.Name + "：需求数量超出可显示范围", ingredient.type, color: UITheme.Warn, indent: Math.Min(depth + 1, 5));
-                else BuildTree(ingredient.type, batches * ingredient.stack, depth + 1, path);
+                int reference = node.Reference;
+                _rows.Add(new Row(label, node.Item, Indent: Math.Min(node.Depth, 5), Click: () =>
+                    _scroll = Math.Max(0, _wrapped.FindIndex(line => ReferenceEquals(line.Row, _rows[reference])))));
             }
-        path.Remove(type);
-        if (depth == 0) Stations(recipe);
+            else Add(label, node.Item, indent: Math.Min(node.Depth, 5));
+        }
+        if (!_tree.Complete) Add("正在展开…", color: UITheme.Muted);
+        if (_tree.RootRecipe >= 0)
+        {
+            var recipes = StorageSystem.Recipes.GetRecipesFor(_key);
+            _recipe = Math.Max(0, recipes.ToList().IndexOf(_tree.RootRecipe));
+            Stations(Main.recipe[_tree.RootRecipe]);
+        }
     }
     private void AddDrop(DropRecord drop, bool source)
     {
@@ -443,7 +458,7 @@ internal sealed class UIBrowserDetails : UIElement
                 var choice = card.Group == null ? Rectangle.Empty : new Rectangle(rect.Right - 31, rect.Y + 2, 29, 21);
                 var countPosition = new Vector2((card.Group == null ? rect.Right - 4 : choice.X - 5) - countWidth, rect.Y + 4);
                 var namePosition = new Vector2(icon.Right + 4, rect.Y + 4);
-                string name = Fit(Lang.GetItemNameValue(card.Type), .6f, Math.Max(4, countPosition.X - namePosition.X - 7));
+                string name = Fit(card.Group?.GetText() ?? Lang.GetItemNameValue(card.Type), .6f, Math.Max(4, countPosition.X - namePosition.X - 7));
                 Utils.DrawBorderString(batch, name, namePosition, UITheme.Text, .6f);
                 Utils.DrawBorderString(batch, count, countPosition, card.Owned >= card.Required ? UITheme.Ok : UITheme.Danger, .6f);
                 _ingredientHits.Add((rect, card, false));

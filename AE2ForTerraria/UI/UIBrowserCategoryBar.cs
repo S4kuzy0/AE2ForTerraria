@@ -27,7 +27,7 @@ internal sealed class UIBrowserCategoryBar : UIElement
     private void SelectChild(int index)
     {
         Child = index;
-        for (int i = 0; i < _children.Count; i++) _children[i].Selected = i == Child;
+        for (int i = 0; i < _children.Count; i++) _children[i].Selected = i + 1 == Child;
         Changed?.Invoke();
     }
     public void SetMode(bool npc)
@@ -35,7 +35,7 @@ internal sealed class UIBrowserCategoryBar : UIElement
         NpcMode = npc; Category = Child = 0; RemoveAllChildren(); _main.Clear(); _children.Clear();
         string[] labels = npc ? BrowserCategories.NpcKinds : BrowserCategories.Items.Select(c => c.Name).ToArray();
         int[] portraits = { NPCID.Guide, NPCID.BlueSlime, NPCID.EyeofCthulhu, NPCID.Guide, NPCID.Bunny, NPCID.OldMan };
-        for (int i = 0; i < labels.Length; i++)
+        for (int i = 1; i < labels.Length; i++)
         {
             int index = i;
             var button = new CategoryIcon(labels[i], npc ? 0 : BrowserCategories.Icon(BrowserCategories.Items[i]), npc ? portraits[i] : 0) { Selected = i == 0 };
@@ -46,14 +46,14 @@ internal sealed class UIBrowserCategoryBar : UIElement
     private void RebuildChildren()
     {
         foreach (var button in _children) button.Remove(); _children.Clear();
-        for (int i = 0; i < _main.Count; i++) _main[i].Selected = Category == i;
+        for (int i = 0; i < _main.Count; i++) _main[i].Selected = Category == i + 1;
         var children = NpcMode ? null : BrowserCategories.Items[Category].Children;
         if (children == null || children.Length == 0) return;
-        for (int i = 0; i <= children.Length; i++)
+        for (int i = 0; i < children.Length; i++)
         {
-            int index = i;
-            var child = i == 0 ? BrowserCategories.Items[Category] : children[i - 1];
-            var button = new CategoryIcon(i == 0 ? "全部" : child.Name, BrowserCategories.Icon(child), 0) { Selected = i == 0 };
+            int index = i + 1;
+            var child = children[i];
+            var button = new CategoryIcon(child.Name, BrowserCategories.Icon(child), 0);
             button.OnLeftClick += (_, _) => SelectChild(index);
             _children.Add(button); Append(button);
         }

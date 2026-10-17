@@ -18,66 +18,73 @@ internal static class FavoriteTreeHud
 {
     private static readonly List<BookmarkTree> Trees = new();
     private static readonly Dictionary<int, long> Owned = new();
+    private static readonly Dictionary<int, long> NextOwned = new();
     private static Frame _panel;
     private static UIElement _body;
     private static int _revision = -1, _scroll, _horizontal, _totalRows;
     private static int _buildCursor, _pendingTrees;
-    private static bool _wasDown;
+    private static bool _wasDown, _dragging, _hadTerminal;
+    private static Vector2? _position;
+    private static Vector2 _dragOffset;
+    private static string _sourceLabel = "背包";
+    private static int _readRevision;
     private static Rectangle _eye;
     private static ulong _stockAt;
     private static object _stockSource;
-    private static bool HasNetworkStock => UISystem.TerminalState != null
-        && ReferenceEquals(UISystem.Interface?.CurrentState, UISystem.TerminalState)
-        && UISystem.TerminalReadable && UISystem.ActiveNetworkContents != null;
     internal static bool Visible => !Main.dedServ && !Main.gameMenu && !Main.LocalPlayer.dead
         && (Main.playerInventory || BrowserFavorites.AlwaysVisible) && BrowserFavorites.Entries.Count > 0;
     internal static Rectangle Bounds => Visible && _panel != null ? _panel.GetDimensions().ToRectangle() : Rectangle.Empty;
-    internal static bool Contains(Vector2 point) => Bounds.Contains(point.ToPoint());
+    internal static bool Contains(Vector2 point) => _dragging || Bounds.Contains(point.ToPoint());
     private static bool MayInteract => !AEUiSession.CoversWindowPoint(AEUiSession.PointerPosition);
     private static int VisibleRows => Math.Max(1, ((int)(_body?.GetDimensions().Height ?? 22)) / 22);
     internal static void Update(GameTime time)
     {
-        if (!Visible) { _wasDown = Main.mouseLeft; return; }
-        EnsurePanel();
-        if (_revision != BrowserFavorites.Revision)
+        if (!Visible)
         {
+            if (_dragging) { _dragging = false; if (_position.HasValue) BrowserFavorites.Move(_position.Value); }
+            _wasDown = Main.mouseLeft; return;
+        }
+        EnsurePanel();
+        bool stockChanged = RefreshStock();
+        if (_revision != BrowserFavorites.Revision || stockChanged)
+        {
+            if (_revision != BrowserFavorites.Revision) _scroll = _horizontal = 0;
             _revision = BrowserFavorites.Revision; Trees.Clear();
-            foreach (var bookmark in BrowserFavorites.Entries) Trees.Add(new BookmarkTree(bookmark));
-            _scroll = _horizontal = 0;
+            var stock = new RecipeTreeStock(Owned);
+            foreach (var bookmark in BrowserFavorites.Entries) Trees.Add(new BookmarkTree(bookmark, stock));
             _buildCursor = 0; _pendingTrees = Trees.Count(tree => !tree.Complete);
             _totalRows = Trees.Sum(tree => Math.Max(1, tree.Nodes.Count));
         }
         long started = Stopwatch.GetTimestamp();
-        for (int visited = 0; _pendingTrees > 0 && visited < Trees.Count && Stopwatch.GetElapsedTime(started).TotalMilliseconds < 2; visited++)
+        while (_pendingTrees > 0 && _buildCursor < Trees.Count && Stopwatch.GetElapsedTime(started).TotalMilliseconds < 2)
         {
-            var tree = Trees[_buildCursor++ % Trees.Count];
-            if (_buildCursor >= Trees.Count) _buildCursor = 0;
-            if (tree.Complete) continue;
+            var tree = Trees[_buildCursor];
+            if (tree.Complete) { _buildCursor++; continue; }
             int before = Math.Max(1, tree.Nodes.Count); tree.Advance(32);
             _totalRows += Math.Max(1, tree.Nodes.Count) - before;
-            if (tree.Complete) _pendingTrees--;
+            if (tree.Complete) { _pendingTrees--; _buildCursor++; }
         }
         float width = Math.Min(300, Math.Max(200, MovableWindowState.ViewportSize.X * .31f));
         float height = Math.Min(Math.Max(76, _totalRows * 22 + 32), Math.Max(90, MovableWindowState.ViewportSize.Y * .6f));
-        _panel.Left.Set(Math.Max(0, MovableWindowState.ViewportSize.X - width - 12), 0);
-        _panel.Top.Set(Math.Min(100, Math.Max(0, MovableWindowState.ViewportSize.Y - height - 12)), 0);
+        _horizontal = Math.Clamp(_horizontal, 0, Math.Max(0, Trees.Max(tree => tree.MaxDepth) * 12 - (int)width / 2));
+        Vector2 pointer = AEUiSession.PointerPosition;
+        if (_dragging && Main.mouseLeft) _position = pointer - _dragOffset;
+        var position = _position ?? BrowserFavorites.Position ?? new Vector2(MovableWindowState.ViewportSize.X - width - 12, 100);
+        position = Vector2.Clamp(position, Vector2.Zero, Vector2.Max(Vector2.Zero, MovableWindowState.ViewportSize - new Vector2(width, height)));
+        if (_position.HasValue) _position = position;
+        _panel.Left.Set(position.X, 0); _panel.Top.Set(position.Y, 0);
         _panel.Width.Set(width, 0); _panel.Height.Set(height, 0);
         _body.Left.Set(5, 0); _body.Top.Set(28, 0); _body.Width.Set(width - 10, 0); _body.Height.Set(height - 33, 0);
         _panel.Recalculate();
         var bounds = _panel.GetDimensions().ToRectangle();
         _eye = new Rectangle(bounds.Right - 27, bounds.Y + 4, 22, 20);
         _scroll = Math.Clamp(_scroll, 0, Math.Max(0, _totalRows - VisibleRows));
-        object source = HasNetworkStock ? UISystem.ActiveNetworkContents : Main.LocalPlayer.inventory;
-        if (!ReferenceEquals(source, _stockSource) || _stockAt == 0 || Main.GameUpdateCount - _stockAt >= 15)
+        if (_dragging && !Main.mouseLeft)
         {
-            _stockSource = source; _stockAt = Main.GameUpdateCount; Owned.Clear();
-            void Add(int type, long count) { Owned.TryGetValue(type, out long previous); Owned[type] = StorageAmounts.Add(previous, count); }
-            if (HasNetworkStock)
-                foreach (var item in UISystem.ActiveNetworkContents) Add(item.Key.Type, item.Value);
-            else foreach (var item in Main.LocalPlayer.inventory) if (item != null && !item.IsAir) Add(item.type, item.stack);
+            _dragging = false; BrowserFavorites.Move(position);
         }
-        Vector2 pointer = AEUiSession.PointerPosition;
-        if (MayInteract && Contains(pointer))
+        if (_dragging) Main.LocalPlayer.mouseInterface = true;
+        if (MayInteract && Contains(pointer) && !_dragging)
         {
             int wheel = Terraria.GameInput.PlayerInput.ScrollWheelDelta / 120;
             if (Main.keyState.IsKeyDown(Keys.LeftShift) || Main.keyState.IsKeyDown(Keys.RightShift))
@@ -88,10 +95,28 @@ internal static class FavoriteTreeHud
             if (Main.mouseLeft && !_wasDown)
             {
                 if (_eye.Contains(pointer.ToPoint())) BrowserFavorites.AlwaysVisible = !BrowserFavorites.AlwaysVisible;
+                else if (pointer.Y < bounds.Top + 27)
+                { _dragging = true; _position = position; _dragOffset = pointer - position; }
                 else if (_body.ContainsPoint(pointer)) ActivateRow((int)((pointer.Y - _body.GetDimensions().Y) / 22) + _scroll);
             }
         }
         _wasDown = Main.mouseLeft;
+    }
+    private static bool RefreshStock()
+    {
+        bool open = PinnedInventory.HasOpenTerminal;
+        object source = open ? UISystem.ActiveNetworkContents : Main.LocalPlayer.inventory;
+        if (_stockAt != 0 && Main.GameUpdateCount - _stockAt < 15 && _hadTerminal == open
+            && ReferenceEquals(source, _stockSource) && _readRevision == PinnedInventory.Revision) return false;
+        _stockAt = Main.GameUpdateCount; _stockSource = source; _hadTerminal = open;
+        var snapshot = PinnedInventory.Snapshot(); _readRevision = PinnedInventory.Revision;
+        _sourceLabel = PinnedInventory.Status; NextOwned.Clear();
+        void Add(int type, long amount) { NextOwned.TryGetValue(type, out long count); NextOwned[type] = StorageAmounts.Add(count, amount); }
+        if (snapshot != null) foreach (var entry in snapshot) Add(entry.Key.Type, entry.Value);
+        else foreach (var item in Main.LocalPlayer.inventory) if (item != null && !item.IsAir) Add(item.type, item.stack);
+        if (Owned.Count == NextOwned.Count && Owned.All(entry => NextOwned.TryGetValue(entry.Key, out long amount) && amount == entry.Value)) return false;
+        Owned.Clear(); foreach (var entry in NextOwned) Owned.Add(entry.Key, entry.Value);
+        return true;
     }
     private static void EnsurePanel()
     {
@@ -130,8 +155,9 @@ internal static class FavoriteTreeHud
     internal static void Draw(SpriteBatch batch) { if (Visible && _panel != null) _panel.Draw(batch); }
     internal static void Reset()
     {
-        Trees.Clear(); Owned.Clear(); _panel = null; _body = null; _revision = -1;
+        Trees.Clear(); Owned.Clear(); NextOwned.Clear(); _panel = null; _body = null; _revision = -1;
         _scroll = _horizontal = _totalRows = _buildCursor = _pendingTrees = 0; _wasDown = false; _stockAt = 0; _stockSource = null;
+        _dragging = _hadTerminal = false; _position = null; _sourceLabel = "背包"; _readRevision = -1; PinnedInventory.Reset();
     }
     private sealed class Frame : UIElement
     {
@@ -139,7 +165,7 @@ internal static class FavoriteTreeHud
         {
             var box = GetDimensions().ToRectangle();
             UITheme.Fill(batch, box, new Color(22, 30, 49) * .94f); UITheme.Outline(batch, box, UITheme.ItemBorder);
-            Utils.DrawBorderString(batch, "收藏合成树 · " + (HasNetworkStock ? "网络" : "背包")
+            Utils.DrawBorderString(batch, "收藏合成树 · " + _sourceLabel
                 + (_pendingTrees > 0 ? " · 展开中" : ""), new Vector2(box.X + 7, box.Y + 7), UITheme.Text, .65f);
             Color eyeColor = BrowserFavorites.AlwaysVisible ? Main.OurFavoriteColor : UITheme.TextDim;
             int cx = _eye.Center.X, cy = _eye.Center.Y;
@@ -196,10 +222,9 @@ internal static class FavoriteTreeHud
                 var icon = new Rectangle(x + 2, y, 21, 21);
                 UIBrowserDetails.DrawIcon(batch, node.Item, node.Npc, icon);
                 if (BrowserFavorites.Contains(node.Npc > 0 ? node.Npc : node.Item, node.Npc > 0)) FavoriteInput.Mark(batch, icon);
-                Owned.TryGetValue(node.Item, out long have);
-                string name = node.Npc > 0 ? NpcIndex.GetName(node.Npc) : Lang.GetItemNameValue(node.Item);
-                string suffix = node.Npc > 0 ? "" : " ×" + UIFormat.Count(node.Amount) + " 缺" + UIFormat.Count(Math.Max(0, node.Amount - have));
-                if (node.Cycle) suffix += "（循环）";
+                string name = node.Group ?? (node.Npc > 0 ? NpcIndex.GetName(node.Npc) : Lang.GetItemNameValue(node.Item));
+                string suffix = node.Npc > 0 ? "" : node.Parent < 0 && tree.MaterialsReady ? " · 材料已齐"
+                    : " ×" + UIFormat.Count(node.Amount) + " 缺" + UIFormat.Count(node.Missing);
                 if (node.Reference >= 0) suffix += "（重复分支，点击定位）";
                 if (node.Overflow) suffix = "（数量溢出）";
                 string label = name + suffix;

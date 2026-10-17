@@ -68,7 +68,7 @@ public static partial class MENet
             || (count == 0 && total != 0) || maxTypes < 0 || maxBytes < 0 || maxAmountPerType < 0)
             throw new InvalidDataException("Invalid inventory page bounds");
         var key = (position, aggregate);
-        if (aggregate && epoch > 0 && !UISystem.AcceptTerminalSnapshot(position, epoch)) return;
+        if (aggregate && epoch > 0 && !UISystem.AcceptTerminalInventorySnapshot(position, epoch)) return;
         if (offset == 0)
         {
             if (InventoryPages.TryGetValue(key, out var previous) && previous.Id > id) return;

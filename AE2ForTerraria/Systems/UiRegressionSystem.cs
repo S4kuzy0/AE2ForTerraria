@@ -134,6 +134,8 @@ public sealed class UiRegressionSystem : ModSystem
         BrowserPreferences.Write("AE2-BrowserFavorites.json", new[] { BrowserContent.Name(ItemID.Wood), "item:UnavailableMod/PreservedItem" });
         BrowserFavorites.Reset();
         Assert(BrowserFavorites.AlwaysVisible, "new and legacy favorite profiles display a pinned tree immediately by default");
+        BrowserFavorites.Move(new Vector2(140.5f, 90.5f)); BrowserFavorites.Reset();
+        Assert(BrowserFavorites.Position == new Vector2(140.5f, 90.5f), "pinned tree position survives preference reload without changing bookmark identities");
         Assert(BrowserFavorites.Contains(ItemID.Wood) && BrowserFavorites.Entries.Count == 2, "legacy favorites and temporarily disabled mod references load without loss");
         var torchRecipes = StorageSystem.Recipes.GetRecipesFor(ItemKey.Crafted(ItemID.Torch));
         int selectedRecipe = torchRecipes[^1];
@@ -288,8 +290,8 @@ public sealed class UiRegressionSystem : ModSystem
                 long networkWood = UISystem.ActiveNetworkContents.Where(item => item.Key.Type == ItemID.Wood).Sum(item => item.Value);
                 Assert(owned.GetValueOrDefault(ItemID.Wood) == networkWood, "open readable terminal supplies the live network source for pinned material counts");
                 UISystem.Interface.SetState(null); FavoriteTreeHud.Update(new GameTime());
-                long bagWood = Main.LocalPlayer.inventory.Where(item => item != null && item.type == ItemID.Wood).Sum(item => (long)item.stack);
-                Assert(owned.GetValueOrDefault(ItemID.Wood) == bagWood, "closing the terminal immediately invalidates network counts and restores backpack counts");
+                Assert(owned.GetValueOrDefault(ItemID.Wood) == networkWood,
+                    "closing the terminal retains an authorized live network source for pinned material counts");
             }
             finally { UISystem.Interface.SetState(oldState); terminalProperty.SetValue(null, oldTerminal); }
         }
@@ -355,7 +357,8 @@ public sealed class UiRegressionSystem : ModSystem
         }
         finally { Main.mouseX=mouseX; Main.mouseY=mouseY; }
         Assert(BrowserCategories.NpcKind(NPCID.Guide)==3 && BrowserCategories.NpcKind(NPCID.Bunny)==4,"NPC property filters classify town NPC and critter");
-        Assert(BrowserCategories.Items.Length==22 && BrowserCategories.Items.All(c=>c.Name!="材料"),"Recipe Browser categories, material remains a filter");
+        Assert(BrowserCategories.Items.Length==21 && BrowserCategories.Items.All(c=>c.Name!="材料" && c.Name!="套装"),
+            "Recipe Browser categories merge armor while material remains a filter");
         var weapons=Array.FindIndex(BrowserCategories.Items,c=>c.Name=="武器");
         Assert(BrowserCategories.Matches(ItemID.CopperShortsword,weapons,0) && !BrowserCategories.Matches(ItemID.Wood,weapons,0),"weapon category uses item properties");
         var terminal=NewTerminal(TerminalViewMode.Access);
@@ -775,7 +778,9 @@ public sealed class UiRegressionSystem : ModSystem
             deepRecipes[0].requiredItem[0].SetDefaults(ItemID.Torch);
             var cycleTree = new BookmarkTree(new BrowserBookmark(BrowserContent.Name(ItemID.Torch)));
             for (int tick = 0; tick < 1000 && !cycleTree.Complete; tick++) cycleTree.Advance(4);
-            Assert(cycleTree.Complete && cycleTree.Nodes.Any(node => node.Cycle), "cyclic recipe edges terminate explicitly without dropping the rest of the pinned tree");
+            Assert(cycleTree.Complete && cycleTree.Nodes.Count == 1 && cycleTree.Nodes[0].Item == ItemID.Torch
+                && !cycleTree.Nodes.Any(node => node.Cycle), "cyclic conversion is removed from its first material without a repeated item or cycle notice");
+            BrowserRefinementRegression.Trees(Assert);
         }
         finally
         {
@@ -830,6 +835,10 @@ public sealed class UiRegressionSystem : ModSystem
         var mod = Field<UIButton>(search,"_modButton").GetDimensions();
         var sort = Field<UIButton>(search,"_sortButton").GetDimensions();
         var wrench = Field<UIIconButton>(search,"_wrench").GetDimensions();
+        var scrollbar = Field<UIGridScrollBar>(search, "_scrollBar").GetDimensions();
+        var resizeBounds = WindowField<UIResizeGrip>(search, "_grip").GetDimensions();
+        Assert(scrollbar.Y + scrollbar.Height <= resizeBounds.Y - 6,
+            "scrollbar ends above the lower resize grip with a separate pointer gap");
         Assert(star.Width == reset.Width && star.Height == reset.Height && star.Y + star.Height < mod.Y,"history matches reset bounds and clears mod selector");
         Assert(wrench.Width == sort.Width && wrench.Height == sort.Height && wrench.Y == sort.Y,"wrench matches sort bounds without inherited text minimum");
         var filter = Field<UIButton>(search,"_filterButton"); var help = Field<UIButton>(search,"_helpButton").GetDimensions();
@@ -927,23 +936,29 @@ public sealed class UiRegressionSystem : ModSystem
     {
         var categories = Field<UIBrowserCategoryBar>(search, "_categories");
         var icons = Field<IList>(categories, "_main").Cast<UIElement>().ToArray();
-        Assert(icons.Length == BrowserCategories.Items.Length, "icon category toolbar retains every original item category");
+        Assert(icons.Length == BrowserCategories.Items.Length - 1 && BrowserCategories.Items.All(category => category.Name != "套装"),
+            "category toolbar merges armor and removes the redundant all icon");
         Assert(icons.All(icon => (int)icon.GetType().GetProperty("ItemType", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(icon) > 0),
             "every item category has a real game item sprite");
         Assert(icons.All(icon => icon.GetDimensions().Width == 24 && icon.GetDimensions().Height == 24)
             && icons.All(icon => categories.GetDimensions().ToRectangle().Contains(icon.GetDimensions().ToRectangle())),
             "category icon rows wrap inside the compact toolbar without text minimums");
-        icons[1].LeftClick(new UIMouseEvent(icons[1], icons[1].GetDimensions().Center()));
+        icons[0].LeftClick(new UIMouseEvent(icons[0], icons[0].GetDimensions().Center()));
         search.Update(new GameTime());
         Assert(categories.Category == 1 && Field<List<int>>(search, "_filtered").All(categories.Matches),
             "icon category selection applies the existing property filter");
         var children = Field<IList>(categories, "_children").Cast<UIElement>().ToArray();
         Assert(children.Length > 1 && children.All(child => (int)child.GetType().GetProperty("ItemType", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(child) > 0),
             "subcategories also use representative item sprites");
-        children[1].LeftClick(new UIMouseEvent(children[1], children[1].GetDimensions().Center()));
+        Assert(children.Length == BrowserCategories.Items[1].Children.Length, "subcategory toolbar does not repeat its parent's all button");
+        children[0].LeftClick(new UIMouseEvent(children[0], children[0].GetDimensions().Center()));
         Assert(categories.Child == 1, "subcategory icons remain independently selectable");
         icons[0].LeftClick(new UIMouseEvent(icons[0], icons[0].GetDimensions().Center()));
         search.Update(new GameTime());
+        Assert(categories.Category == 1 && categories.Child == 0, "clicking the parent category restores all its children");
+        Click(search, "_itemTab");
+        Assert(categories.Category == 0 && categories.Child == 0, "clicking the mother page restores the unfiltered catalogue");
+        icons = Field<IList>(categories, "_main").Cast<UIElement>().ToArray();
         int oldX = Main.mouseX, oldY = Main.mouseY; string oldName = Main.hoverItemName; Item oldHover = Main.HoverItem;
         try
         {
@@ -954,7 +969,7 @@ public sealed class UiRegressionSystem : ModSystem
                 "covered-category hover probe waits for the detail entrance and lies behind the panel");
             Main.mouseX = (int)point.X; Main.mouseY = (int)point.Y; Main.hoverItemName = ""; Main.HoverItem = new Item();
             RenderProbe(search, null);
-            Assert(Main.hoverItemName != BrowserCategories.Items[Math.Min(17, icons.Length - 1)].Name,
+            Assert(Main.hoverItemName != BrowserCategories.Items[Math.Min(17, icons.Length - 1) + 1].Name,
                 "category icons behind a foreground recipe never supply its hover text");
             search.CloseDetails();
         }
@@ -1011,6 +1026,8 @@ public sealed class UiRegressionSystem : ModSystem
         var device=Main.instance.GraphicsDevice;
         var oldTargets=device.GetRenderTargets();
         var restoreLayout=CaptureLayoutState();
+        string layoutFile = Path.Combine(Main.SavePath, "AE2ForTerraria-Layout.txt");
+        byte[] layoutBefore = File.Exists(layoutFile) ? File.ReadAllBytes(layoutFile) : null;
         var bindings=new[] {nameof(UISystem.ActiveTerminalPos),nameof(UISystem.ActiveNetwork),nameof(UISystem.ActiveNetworkContents),
             nameof(UISystem.ActiveAssembler),nameof(UISystem.ActiveCraftingCpu),nameof(UISystem.ActiveCraftingTerminal),nameof(UISystem.ActiveTerminalViewMode)}
             .Select(name=>typeof(UISystem).GetProperty(name)!).Select(property=>(Property:property,Value:property.GetValue(null))).ToArray();
@@ -1056,6 +1073,8 @@ public sealed class UiRegressionSystem : ModSystem
             ValidateAltFavorites();
             ValidateSelectedRecipeFavorite();
             ValidatePinnedTreeHud();
+            BrowserRefinementRegression.Snapshots(Assert);
+            BrowserRefinementRegression.Armor(Assert);
             ValidatePartialGrid();
             ValidateUnifiedBackNavigation();
             ValidateBrowser();
@@ -1170,6 +1189,8 @@ public sealed class UiRegressionSystem : ModSystem
                 }
             }
             ValidateActualAeLayerHover(drive, dir);
+            Assert(layoutBefore == null ? !File.Exists(layoutFile) : File.Exists(layoutFile) && layoutBefore.SequenceEqual(File.ReadAllBytes(layoutFile)),
+                "menu UI regression does not persist temporary window geometry into personal layout settings");
             Mod.Logger.Info("AE2 UI REGRESSION COMPLETE: rendered in menu without loading a world/player. " + dir);
         }
         catch (Exception ex) { Mod.Logger.Error("AE2 UI REGRESSION FAILED",ex); }
@@ -1283,6 +1304,37 @@ public sealed class UiRegressionSystem : ModSystem
             using var file = File.Create(Path.Combine(directory,"AE-interface-layer-disk-tooltip-1280x720.png"));
             target.SaveAsPng(file,1280,720);
             Mod.Logger.Info("AE2 UI RENDERED: actual AE interface layer with disk hover 1280x720");
+            var armorSearch = NewSearch();
+            armorSearch.Layout.X = 40; armorSearch.Layout.Y = 40; armorSearch.Layout.W = 750; armorSearch.Layout.H = 480; armorSearch.OnActivate();
+            var categories = Field<UIBrowserCategoryBar>(armorSearch, "_categories");
+            categories.GetType().GetMethod("SelectCategory", fields).Invoke(categories,
+                new object[] { Array.FindIndex(BrowserCategories.Items, category => category.Name == "盔甲") });
+            var armorGrid = Field<UIItemGrid>(armorSearch, "_grid");
+            int armorIndex = Field<List<int>>(armorGrid, "_items").IndexOf(ItemID.WoodHelmet);
+            Assert(armorIndex >= 0, "merged armor category retains native set components");
+            armorGrid.ScrollRows(armorIndex / armorGrid.Columns);
+            int row = armorIndex / armorGrid.Columns - Field<int>(armorGrid, "_rowOffset");
+            var gridBounds = armorGrid.GetDimensions();
+            point = new Vector2(gridBounds.X + armorIndex % armorGrid.Columns * armorGrid.CellSize + armorGrid.CellSize / 2,
+                gridBounds.Y + row * armorGrid.CellSize + armorGrid.CellSize / 2);
+            // Discard the private interface without deactivating its test drive and saving its geometry.
+            typeof(UISystem).GetProperty(nameof(UISystem.SecondaryInterface))!.SetValue(null, new UserInterface());
+            UISystem.Interface.SetState(armorSearch);
+            foreach (string name in new[] { "_originalMouseX", "_originalLastMouseX" }) zoomFields[name].SetValue(null, (int)point.X);
+            foreach (string name in new[] { "_originalMouseY", "_originalLastMouseY" }) zoomFields[name].SetValue(null, (int)point.Y);
+            Main.mouseX = (int)point.X; Main.mouseY = (int)point.Y;
+            Terraria.GameInput.PlayerInput.MouseInfo = new Microsoft.Xna.Framework.Input.MouseState((int)point.X, (int)point.Y, 0,
+                Microsoft.Xna.Framework.Input.ButtonState.Released, Microsoft.Xna.Framework.Input.ButtonState.Released, Microsoft.Xna.Framework.Input.ButtonState.Released,
+                Microsoft.Xna.Framework.Input.ButtonState.Released, Microsoft.Xna.Framework.Input.ButtonState.Released);
+            armorSearch.Update(new GameTime()); ArmorSetIndex.Request(ItemID.WoodHelmet, out _);
+            for (int tick = 0; tick < 100 && ArmorSetIndex.Request(ItemID.WoodHelmet, out _).Count == 0; tick++) ArmorSetIndex.Advance();
+            Main.mouseText = false; Main.HoverItem = new Item(); Main.hoverItemName = "";
+            mouseCache.SetValue(Main.instance, Activator.CreateInstance(mouseCache.FieldType));
+            device.SetRenderTarget(target); device.Clear(new Color(12, 16, 24));
+            Assert(layer.Draw() && Main.HoverItem.type == ItemID.WoodHelmet, "actual AE armor hover renders its native tooltip with queried set effects");
+            device.SetRenderTargets(targets);
+            using var armorFile = File.Create(Path.Combine(directory, "AE-interface-layer-armor-tooltip-1280x720.png"));
+            target.SaveAsPng(armorFile, 1280, 720); Mod.Logger.Info("AE2 UI RENDERED: actual AE armor category and set tooltip 1280x720");
         }
         finally
         {

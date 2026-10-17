@@ -149,6 +149,8 @@ namespace AE2ForTerraria.Systems
         public static string TerminalAccessStatus => TerminalRead.Denied ? "无权读取此网络" : TerminalRead.Waiting ? "正在同步库存…" : "";
         internal static bool AcceptTerminalSnapshot(Point16 position, int epoch) => position == ActiveTerminalPos
             && position == TerminalRead.Position && epoch == TerminalRead.Epoch && !TerminalRead.Denied;
+        internal static bool AcceptTerminalInventorySnapshot(Point16 position, int epoch)
+            => AcceptTerminalSnapshot(position, epoch) || PinnedInventory.Accepts(position, epoch);
         private static void ResetTerminalRead()
         {
             TerminalPolicy.Reset();
@@ -158,6 +160,7 @@ namespace AE2ForTerraria.Systems
         }
         internal static void ApplyTerminalAccess(Point16 position, int epoch, int level, Dictionary<ItemKey,long> contents, Point16 cpu, Point16 assembler)
         {
+            if (PinnedInventory.Apply(position, epoch, level, contents)) return;
             if (!TerminalRead.Apply(position,epoch,level)) return;
             if (!TerminalRead.Readable)
             {
@@ -253,6 +256,7 @@ namespace AE2ForTerraria.Systems
             ActiveAssembler=null; ActiveCraftingCpu=null; ActiveTerminalPos=new Point16(-1,-1);
             ActiveTerminalViewMode = TerminalViewMode.Access;
             FavoriteTreeHud.Reset();
+            ArmorSetIndex.Reset();
             AEUiSession.Reset(false);
             BlockGameInput(false);
         }
@@ -386,7 +390,7 @@ namespace AE2ForTerraria.Systems
 			WindowLayout.Save();
 			UIStatus.Clear();
 			UITextCache.Clear();
-            BrowserCategories.Reset(); BrowserFavorites.Reset(); BrowserHistory.Reset(); BrowserContent.Reset(); FavoriteTreeHud.Reset(); BrowserHover.Reset(); UIChoiceMenu.Close();
+            BrowserCategories.Reset(); BrowserFavorites.Reset(); BrowserHistory.Reset(); BrowserContent.Reset(); FavoriteTreeHud.Reset(); BrowserHover.Reset(); ArmorSetIndex.Reset(); UIChoiceMenu.Close();
 
 			Interface = null;
 			OverlayInterface = null;
@@ -696,6 +700,7 @@ namespace AE2ForTerraria.Systems
 			}
 
 			ActiveTerminalPos = MachineTiles.Origin(i, j);
+            PinnedInventory.Track(ActiveTerminalPos);
             MachineTiles.EnsureTerminal(ActiveTerminalPos.X, ActiveTerminalPos.Y);
             ResetTerminalRead();
 
@@ -988,6 +993,7 @@ namespace AE2ForTerraria.Systems
             // 状态提示的 2.5 秒计时靠这里推进(不用游戏时间,免得暂停时不动)
 			UIStatus.Advance(gameTime.ElapsedGameTime.TotalSeconds);
             FavoriteTreeHud.Update(gameTime);
+            ArmorSetIndex.Advance();
 
 			using (AEUiSession.EnterOwnedInput())
             {

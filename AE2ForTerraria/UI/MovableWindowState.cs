@@ -401,7 +401,7 @@ namespace AE2ForTerraria.UI
 			_resetButton.Height.Set(_chromeHeight, 0f);
 
 			_grip.Left.Set(Geo.W - 22f, 0f);
-			_grip.Top.Set(Geo.H - 22f, 0f);
+			_grip.Top.Set(Geo.H - 20f, 0f);
 
 			Window.Recalculate();
 			SyncGeometry();

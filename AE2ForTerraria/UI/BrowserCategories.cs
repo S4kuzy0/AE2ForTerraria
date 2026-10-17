@@ -25,7 +25,7 @@ internal static class BrowserCategories
         icon = category.Name switch
         {
             "全部" => ItemID.Book, "武器" => ItemID.IronBroadsword, "工具" => ItemID.IronPickaxe,
-            "套装" or "盔甲" => ItemID.IronHelmet, "物块" => ItemID.Wood, "墙壁" => ItemID.StoneWall,
+            "盔甲" => ItemID.IronHelmet, "物块" => ItemID.Wood, "墙壁" => ItemID.StoneWall,
             "药水" => ItemID.LesserHealingPotion, "饰品" => ItemID.CloudinaBottle,
             "专家" => ItemID.DemonHeart, "钓鱼" => ItemID.WoodFishingPole,
             "工作站" => ItemID.WorkBench, "其他" => ItemID.Chest,
@@ -50,7 +50,6 @@ internal static class BrowserCategories
                     C("召唤", i => i.CountsAsClass(DamageClass.Summon) && !i.sentry && !ProjectileID.Sets.IsAWhip[i.shoot]),
                     C("鞭", i => ProjectileID.Sets.IsAWhip[i.shoot]), C("哨兵", i => i.sentry)),
                 Union("工具", C("镐", i => i.pick > 0), C("斧", i => i.axe > 0), C("锤", i => i.hammer > 0)),
-                C("套装", i => i.headSlot >= 0 || i.bodySlot >= 0 || i.legSlot >= 0),
                 Union("盔甲", C("头部", i => i.headSlot >= 0), C("上衣", i => i.bodySlot >= 0), C("裤装", i => i.legSlot >= 0)),
                 C("物块", i => i.createTile >= 0,
                     C("工作站", i => _stations.Contains(i.createTile)), C("家具", i => i.createTile > 0 && Main.tileFrameImportant[i.createTile]),

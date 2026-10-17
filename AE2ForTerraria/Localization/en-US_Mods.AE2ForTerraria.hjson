@@ -682,7 +682,8 @@ UI: {
 		Arrow keys pick a slot, Enter opens it
 		The wheel scrolls (down = further along); PageUp / PageDown jump a screen
 		Alt + Left-click toggles favorites; a gold star marks a favorite
-		Scroll pinned trees; the eye switches always / inventory-only display
+		Drag pinned tree headers; the eye switches always / inventory-only display
+		Pinned trees track authorized terminal stock and show missing materials; hover armor for set bonuses
 		Shift + wheel scrolls deep branches horizontally; click a shared recipe reference to jump
 		History keeps the last ten visits across restarts; reopening starts at the catalogue
 		Sort button: default / tier / name / recent

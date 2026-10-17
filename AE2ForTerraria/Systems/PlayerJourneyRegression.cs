@@ -68,6 +68,8 @@ public sealed class PlayerJourneyRegression : ModSystem
     private int _clickGridType;
     private int _resizeFrames;
     private Vector2 _resizeOrigin, _sizeBeforeResize;
+    private int _hudDragFrames;
+    private Vector2 _hudDragOrigin, _hudBeforeDrag;
     private IDisposable _browserPreferences;
     private bool _favoriteModifier;
     private int _altInputFrames;
@@ -310,6 +312,12 @@ public sealed class PlayerJourneyRegression : ModSystem
             left = _resizeFrames > 1;
             _resizeFrames--;
         }
+        if (_hudDragFrames > 0)
+        {
+            int phase = 12 - _hudDragFrames;
+            _pointer = _hudDragOrigin + (phase < 2 ? Vector2.Zero : new Vector2(-120, 50));
+            left = _hudDragFrames > 1; _hudDragFrames--;
+        }
         // Native SetState/ResetState reserves 200 ms for opening-click suppression. Wait for
         // that actual timer to expire; never clear it or mistake the suppressed click for a bug.
         if (_clickFrames == 4 && (ClickGuardMilliseconds() > 0 || !Main.hasFocus))
@@ -370,7 +378,7 @@ public sealed class PlayerJourneyRegression : ModSystem
                 if (_copiedWorld) BuildCopiedWorldSteps();
                 else if (_reload) BuildReloadSteps(); else { PrepareArena(); BuildSteps(); }
             }
-            if (--_delay > 0 || _capture != null || _clickFrames > 0 || _resizeFrames > 0 || _worldRightFrames > 0 || _steps.Count == 0) return;
+            if (--_delay > 0 || _capture != null || _clickFrames > 0 || _resizeFrames > 0 || _hudDragFrames > 0 || _worldRightFrames > 0 || _steps.Count == 0) return;
             var step = _steps.Dequeue();
             long start = Stopwatch.GetTimestamp();
             step.Run();
@@ -553,6 +561,21 @@ public sealed class PlayerJourneyRegression : ModSystem
             Require(FavoriteTreeHud.Visible, "pinned tree remains visible after closing JEI and the native inventory");
             _capture = "03c-pinned-tree-always";
         });
+        Step("drag the pinned tree through native input", () =>
+        {
+            _hudBeforeDrag = FavoriteTreeHud.Bounds.Location.ToVector2();
+            _hudDragOrigin = _hudBeforeDrag + new Vector2(30, 11); _hudDragFrames = 12;
+        });
+        Step("check dragged pinned tree and saved position", () =>
+        {
+            var position = FavoriteTreeHud.Bounds.Location.ToVector2();
+            Require(position.X < _hudBeforeDrag.X - 80 && position.Y > _hudBeforeDrag.Y + 20,
+                "native header drag moves the pinned tree without an active AE window");
+            BrowserFavorites.Reset();
+            Require(BrowserFavorites.Position.HasValue && Vector2.Distance(BrowserFavorites.Position.Value, position) < 2,
+                "pinned tree drag position survives a preference file reload");
+            _capture = "03d-pinned-tree-dragged";
+        });
         Step("click eye without any AE window", () =>
         {
             var eye = (Rectangle)typeof(FavoriteTreeHud).GetField("_eye", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
@@ -673,6 +696,9 @@ public sealed class PlayerJourneyRegression : ModSystem
             _moveRight = false;
             Require(Main.LocalPlayer.position.X > _movementStart.X + 32, "character continues moving with the access terminal open");
             UISystem.CloseAll();
+            var pinnedStock = PinnedInventory.Snapshot();
+            Require(pinnedStock != null && pinnedStock.GetValueOrDefault(ItemKey.Crafted(ItemID.Wood)) == 90,
+                "closed access terminal continues supplying live network inventory to pinned trees");
             Main.LocalPlayer.position = new Vector2(_craftPosition.X * 16, _craftPosition.Y * 16 - 12);
             Main.LocalPlayer.velocity = Vector2.Zero;
             RightClick(_craftPosition); PositionWindow(UISystem.TerminalState);

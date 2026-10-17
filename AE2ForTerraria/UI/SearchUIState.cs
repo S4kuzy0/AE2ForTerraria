@@ -292,6 +292,7 @@ namespace AE2ForTerraria.UI
 
 			if (_category == category)
 			{
+				_categories.SetMode(category == Category.Npc); _details.Close(); RequestLayout(); Refresh();
 				return;
 			}
 
@@ -481,7 +482,7 @@ namespace AE2ForTerraria.UI
             top += 32;
             float gridHeight = Math.Max(43, h - Pad - top);
             Place(_grid, Pad, top, inner - 12, gridHeight);
-            Place(_scrollBar, w - Pad - 9, top, 9, gridHeight);
+            Place(_scrollBar, w - Pad - 9, top, 9, Math.Min(gridHeight, Math.Max(12, h - 28 - top)));
             _statusHint.Remove();
             // Cover the catalogue without rebuilding it, so returning keeps search and scroll.
             _details.SetBounds(Pad, SearchTop, inner, Math.Max(120, h - Pad - SearchTop));

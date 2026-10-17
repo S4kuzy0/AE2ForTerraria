@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using Microsoft.Xna.Framework;
 using Terraria;
 
 namespace AE2ForTerraria.UI;
@@ -11,12 +12,15 @@ internal sealed record BrowserBookmark(string Content, string Recipe = "", long 
 /// <summary>Stable personal bookmarks. Legacy item/NPC favorites are retained on upgrade.</summary>
 internal static class BrowserFavorites
 {
-    private sealed record Saved(int Version, bool AlwaysVisible, List<BrowserBookmark> Entries);
+    private sealed record Saved(int Version, bool AlwaysVisible, List<BrowserBookmark> Entries, float X = -1, float Y = -1);
     private const string FileName = "AE2-BrowserFavorites.json";
     private static HashSet<string> _keys;
     private static List<BrowserBookmark> _entries;
     private static bool _alwaysVisible, _canSave;
     private static int _revision;
+    private static Vector2? _position;
+    internal static Vector2? Position { get { Load(); return _position; } }
+    internal static void Move(Vector2 position) { Load(); _position = position; Save(); }
     internal static IReadOnlyList<BrowserBookmark> Entries { get { Load(); return _entries; } }
     internal static int Revision { get { Load(); return _revision; } }
     internal static bool AlwaysVisible
@@ -27,7 +31,7 @@ internal static class BrowserFavorites
     private static void Load()
     {
         if (_keys != null) return;
-        _keys = new(StringComparer.Ordinal); _entries = new(); _alwaysVisible = true; _canSave = true;
+        _keys = new(StringComparer.Ordinal); _entries = new(); _alwaysVisible = true; _canSave = true; _position = null;
         try
         {
             using var document = BrowserPreferences.Read(FileName);
@@ -41,6 +45,8 @@ internal static class BrowserFavorites
                 var saved = document.RootElement.Deserialize<Saved>();
                 if (saved?.Version != 2) throw new InvalidOperationException("Unsupported browser favorite format.");
                 _alwaysVisible = saved.AlwaysVisible;
+                if (float.IsFinite(saved.X) && float.IsFinite(saved.Y) && saved.X >= 0 && saved.Y >= 0)
+                    _position = new Vector2(saved.X, saved.Y);
                 foreach (var entry in saved.Entries ?? new()) Add(entry);
             }
         }
@@ -75,7 +81,7 @@ internal static class BrowserFavorites
     }
     private static bool Save()
     {
-        if (_canSave) return BrowserPreferences.Write(FileName, new Saved(2, _alwaysVisible, _entries));
+        if (_canSave) return BrowserPreferences.Write(FileName, new Saved(2, _alwaysVisible, _entries, _position?.X ?? -1, _position?.Y ?? -1));
         Systems.UIStatus.Toast("收藏仅保留本次会话：原设置文件有误，已保留原文件"); return false;
     }
     public static void Reset() { _keys = null; _entries = null; _revision++; }

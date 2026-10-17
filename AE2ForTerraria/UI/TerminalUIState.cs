@@ -104,7 +104,7 @@ namespace AE2ForTerraria.UI
             InitWindow(Geometry, "", frameless: true);
             Window.BackgroundColor = new Color(42, 54, 87);
             _catalogueButton=new UIButton("物品", .75f);
-            _catalogueButton.OnLeftClick+=(_,_)=>{_managementPage=0;_info?.Close();RequestLayout();};
+            _catalogueButton.OnLeftClick+=(_,_)=>{_managementPage=0;_info?.Close();_categories.SetMode(false);RebuildList();RequestLayout();};
             _recipesButton=new UIButton("配方", .75f);
             _recipesButton.OnLeftClick+=(_,_)=>
             {
@@ -435,7 +435,7 @@ namespace AE2ForTerraria.UI
                 : h - Pad - stationHeight - 6 - (UISystem.TerminalReadable ? 0 : 28);
             float gridHeight = Math.Max(43, gridBottom - top);
             Place(_grid, Pad, top, inner - 12, gridHeight);
-            Place(_scrollBar, w - Pad - 9, top, 9, gridHeight);
+            Place(_scrollBar, w - Pad - 9, top, 9, Math.Min(gridHeight, Math.Max(12, h - 28 - top)));
             Place(_capacity, Pad, h - 42, Math.Min(250, inner * .4f), 14);
             float capacityWidth = _itemCapacity ? Math.Min(440, inner * .64f) : Math.Min(250, inner * .4f);
             Place(_capacityCount, Pad, h - 40, capacityWidth, 22);
