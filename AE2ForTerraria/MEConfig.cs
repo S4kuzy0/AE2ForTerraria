@@ -69,7 +69,7 @@ namespace AE2ForTerraria
 		public bool CheatModeEnabled = true;
 
 		/// <summary>收集半径(格)。</summary>
-		[Range(2f, 128f)]
+		[Range(2f, 257f)]
 		[DefaultValue(24f)]
 		public float DropCollectorRadius = 24f;
 

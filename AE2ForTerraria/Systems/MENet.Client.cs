@@ -231,21 +231,10 @@ namespace AE2ForTerraria.Systems
 				case ServerSyncCollector:
 					if (entity is MEDropCollectorEntity collector)
 					{
-						collector.Enabled = reader.ReadBoolean();
-						collector.Radius = reader.ReadSingle();
-						collector.IsBlacklist = reader.ReadBoolean();
-						int filterCount = reader.ReadInt32();
-
-						var ids = new List<int>();
-						for (int i = 0; i < filterCount; i++)
-						{
-							int id = reader.ReadInt32();
-							if (id > 0)
-							{
-								ids.Add(id);
-							}
-						}
-
+                        ReadCollectorConfig(reader, out bool enabled, out float radius, out bool blacklist, out var ids);
+                        collector.Enabled = enabled;
+                        collector.Radius = radius;
+                        collector.IsBlacklist = blacklist;
 						collector.Filter = ids;
 						collector.MarkFilterDirty();
 					}

@@ -265,7 +265,7 @@ Configs: {
 
 		DropCollectorRadius: {
 			Label: 收集半径(格)
-			Tooltip: 新放置的掉落收集器的默认覆盖范围。
+			Tooltip: 新收集器默认半径；大于 256 格为无限，覆盖整个世界的掉落物。
 		}
 
 		FilterIsBlacklist: {

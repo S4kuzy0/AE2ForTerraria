@@ -58,6 +58,7 @@ public static class RegressionChecks
             Suite("planner performance", PlannerPerformanceRegression.Run);
             Suite("inventory deposit", InventoryDepositRegression.Run);
             Suite("cursor transaction acknowledgements", CursorTransactionRegression.Run);
+            Suite("world-range drop collection", DropCollectorRegression.Run);
             Suite("player state packet", PlayerStateRegression.Run);
             Suite("planner alternatives", PlannerRegression.Run);
             Suite("planner quantity boundaries", PlannerQuantityRegression.Run);

@@ -177,26 +177,12 @@ namespace AE2ForTerraria.Systems
 
 				case ClientSetCollector:
 				{
-					bool enabled = reader.ReadBoolean();
-					float radius = reader.ReadSingle();
-					bool blacklist = reader.ReadBoolean();
-					int count = ReadCount(reader);
-
-					var ids = new List<int>();
-					for (int i = 0; i < count; i++)
-					{
-						int id = reader.ReadInt32();
-						if (id > 0)
-						{
-							ids.Add(id);
-						}
-					}
-
+                    ReadCollectorConfig(reader, out bool enabled, out float radius, out bool blacklist, out var ids);
 					if (TileEntity.ByPosition.TryGetValue(position, out TileEntity entity)
 						&& entity is MEDropCollectorEntity collector)
 					{
 						collector.Enabled = enabled;
-						collector.Radius = float.IsFinite(radius) ? System.Math.Clamp(radius, 1f, 80f) : 1f;
+						collector.Radius = MEDropCollectorEntity.NormalizeRadius(radius);
 						collector.IsBlacklist = blacklist;
 						collector.Filter = ids;
 						collector.MarkFilterDirty();

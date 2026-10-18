@@ -160,6 +160,8 @@ namespace AE2ForTerraria.UI
 			{
 				CellSize = 44,
                 IsFavorite = key => BrowserFavorites.Contains(key.Type),
+                IsCraftable = key => !IsAccess && key.Prefix == 0 && key.Data == null
+                    && _availability.CanUse && _availability.Catalogue.IsCraftable(key.Type),
                 InputBlocked = () => _info?.BlocksPointer == true || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null,
                 CountProvider = key => UISystem.GetStoredAmount(key),
 

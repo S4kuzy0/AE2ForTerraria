@@ -540,6 +540,63 @@ public sealed class UiRegressionSystem : ModSystem
             Main.mouseLeft=left;Main.mouseLeftRelease=released;UISystem.RefreshNetwork();
         }
     }
+    private void ValidateDropCollector()
+    {
+        var state=new DropCollectorUIState();state.Activate();state.OnActivate();
+        var collector=new MEDropCollectorEntity {Radius=128};state.SetCollector(collector);state.Update(new GameTime());
+        var foreground=new UserInterface();
+        var secondaryProperty=typeof(UISystem).GetProperty(nameof(UISystem.SecondaryInterface))!;
+        var previousSecondary=secondaryProperty.GetValue(null);
+        var activeProperty=typeof(UserInterface).GetField("ActiveInstance",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic)!;
+        var previousActive=activeProperty.GetValue(null);
+        try
+        {
+            secondaryProperty.SetValue(null,foreground);foreground.SetState(state);
+            Assert(Field<UIItemGrid>(state,"_filterGrid").InputBlocked()==false,
+                "collector hosted in the real secondary layer does not block its own item-grid input");
+            foreground.SetState(new HelpUIState());
+            Assert(Field<UIItemGrid>(state,"_filterGrid").InputBlocked()==true,
+                "another foreground window still blocks the collector item grid underneath it");
+        }
+        finally {foreground.SetState(null);secondaryProperty.SetValue(null,previousSecondary);activeProperty.SetValue(null,previousActive);}
+        state.OnActivate();state.Recalculate();
+        var buttons=new[]{"_enableButton","_radiusButton","_modeButton"}.Select(name=>Field<UIButton>(state,name)).ToArray();
+        Assert(buttons.Select(button=>button.GetDimensions().Y).Distinct().Count()==1
+            && buttons.SelectMany((a,i)=>buttons.Skip(i+1).Select(b=>!a.GetDimensions().ToRectangle().Intersects(b.GetDimensions().ToRectangle()))).All(ok=>ok),
+            "collector exposes three separated interactive settings on one row");
+        Assert(state.GetType().GetField("_radiusDownButton",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance)==null,
+            "collector removes the old rows of increment, export and bulk-copy controls");
+        Click(state,"_enableButton");Click(state,"_modeButton");
+        Assert(!collector.Enabled && !collector.IsBlacklist,"collector header directly toggles enabled state and blacklist mode");
+        Click(state,"_radiusButton");
+        Assert(Field<string>(state,"_radiusBuffer")=="","collector radius editing starts a replacement value instead of appending digits to the old radius");
+        SetField(state,"_radiusBuffer","9999");Invoke(state,"CommitRadius");
+        Assert(collector.WorldRange && Field<UIButton>(state,"_radiusButton").Text.Contains("无限") && !state.SearchBoxFocused,
+            "collector numeric commit switches both its real range and displayed label to unlimited");
+        Click(state,"_radiusButton");SetField(state,"_radiusBuffer","NaN");Invoke(state,"CommitRadius");
+        Assert(collector.WorldRange,"invalid numeric entry preserves the previous collector range");
+        Click(state,"_radiusButton");SetField(state,"_radiusBuffer","256");Invoke(state,"CommitRadius");
+        Assert(!collector.WorldRange && collector.Radius==256,"typing a finite radius can leave unlimited mode again");
+        var search=Field<UIBrowserSearchField>(state,"_filterSearch");
+        SetField(search,"<Text>k__BackingField",Lang.GetItemNameValue(ItemID.Wood));state.Update(new GameTime());
+        var grid=Field<UIItemGrid>(state,"_filterGrid");int x=Main.mouseX,y=Main.mouseY;var held=Main.mouseItem;
+        try
+        {
+            Main.mouseItem=new Item(ItemID.Gel,23);var point=grid.GetDimensions().Position()+new Vector2(16,16);
+            Main.mouseX=(int)point.X;Main.mouseY=(int)point.Y;grid.Update(new GameTime());
+            int type=grid.HoveredType;Assert(type>0,"collector item search returns an actual selectable item");
+            grid.LeftClick(new UIMouseEvent(grid,point));
+            Assert(collector.Filter.Contains(type) && grid.IsMarked(ItemKey.Crafted(type))
+                && Main.mouseItem.type==ItemID.Gel && Main.mouseItem.stack==23,
+                "collector filter click marks the chosen type without consuming the held item");
+            grid.LeftClick(new UIMouseEvent(grid,point));
+            Assert(!collector.Filter.Contains(type) && !grid.IsMarked(ItemKey.Crafted(type)),
+                "collector repeated filter click removes the same stable item without moving selection under the pointer");
+        }
+        finally{Main.mouseX=x;Main.mouseY=y;Main.mouseItem=held;}
+        collector.Radius=257;SetField(search,"<Text>k__BackingField","");state.Update(new GameTime());
+        RenderProbe(state,"Collector-three-settings-unlimited");
+    }
     private void ValidateNativeTransferAndCaches()
     {
         var activeField=typeof(UserInterface).GetField("ActiveInstance",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic)!;
@@ -630,6 +687,13 @@ public sealed class UiRegressionSystem : ModSystem
             +" pending="+availability.Catalogue.PendingCount+"; real loaded recipes, temporary stock, no world opened.");
         reopened.Update(new GameTime());
         RenderProbe(reopened,"Terminal-cached-catalogue");
+        var markedGrid=Field<UIItemGrid>(reopened,"_grid");
+        Assert(markedGrid.IsCraftable(ItemKey.Crafted(ItemID.Torch))
+            && !markedGrid.IsCraftable(new ItemKey(ItemID.CopperShortsword,PrefixID.Legendary)),
+            "craftable plus follows checked complete recipes without claiming a stored prefixed item can be reproduced");
+        var accessGrid=Field<UIItemGrid>(NewTerminal(TerminalViewMode.Access),"_grid");
+        Assert(!accessGrid.IsCraftable(ItemKey.Crafted(ItemID.Torch)),"legacy access-only devices do not advertise craftable execution");
+
         var terminal=UISystem.ActiveCraftingTerminal;var stations=terminal.Stations;
         try
         {
@@ -1220,6 +1284,7 @@ public sealed class UiRegressionSystem : ModSystem
             ValidatePartialGrid();
             ValidateUnifiedBackNavigation();
             ValidateBrowser();
+            ValidateDropCollector();
             foreach (var size in new[] { new Point(800,600), new Point(1280,720), new Point(1920,1080) })
             {
                 SetViewport(size.X,size.Y,size.X==1920 ? 1.25f : 1f);
@@ -1259,6 +1324,10 @@ public sealed class UiRegressionSystem : ModSystem
                 var auxiliary = new MovableWindowState[] { new BridgeUIState(), new StorageBusUIState(), new DropCollectorUIState(),
                     new NetworkOverviewUIState(), new HelpUIState(), new RecipeOverlayUIState(), new NpcOverlayUIState() };
                 foreach (var page in auxiliary) page.Activate();
+                var collectorPage=auxiliary.OfType<DropCollectorUIState>().Single();
+                var collectorFixture=new MEDropCollectorEntity { Radius=257, Filter=new(){ItemID.Wood,ItemID.StoneBlock} };
+                collectorFixture.MarkFilterDirty();collectorPage.SetCollector(collectorFixture);
+
                 foreach (var state in new MovableWindowState[] {terminal,driveUi,assemblerUi,cpuUi,search,unitUi,partitionUi,keepUi,closedTerminal,detailSearch,treeSearch,npcSearch,npcDetail,filterSearch,modSearch,minimumSearch,terminalTasks,terminalStations,terminalKeep,longSearch,accessTerminal}.Concat(auxiliary))
                 {
                     UIChoiceMenu.Close();

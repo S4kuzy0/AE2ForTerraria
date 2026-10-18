@@ -268,7 +268,7 @@ Configs: {
 
 		DropCollectorRadius: {
 			Label: Collection Radius (tiles)
-			Tooltip: Default reach for newly placed drop collectors.
+			Tooltip: Default reach for new collectors. Above 256 tiles collects drops across the entire world.
 		}
 
 		FilterIsBlacklist: {

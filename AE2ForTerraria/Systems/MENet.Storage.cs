@@ -256,6 +256,27 @@ namespace AE2ForTerraria.Systems
 		}
 
 
+        internal static void ReadCollectorConfig(System.IO.BinaryReader reader, out bool enabled,
+            out float radius, out bool blacklist, out List<int> ids)
+        {
+            enabled = reader.ReadBoolean();
+            radius = reader.ReadSingle();
+            blacklist = reader.ReadBoolean();
+            int count = reader.ReadInt32();
+            if (!float.IsFinite(radius) || count < 0 || count > Terraria.ModLoader.ItemLoader.ItemCount
+                || count > (reader.BaseStream.Length - reader.BaseStream.Position) / sizeof(int))
+                throw new System.IO.InvalidDataException("Invalid collector configuration");
+            var unique = new HashSet<int>();
+            ids = new List<int>();
+            for (int i = 0; i < count; i++)
+            {
+                int id = reader.ReadInt32();
+                if (id > 0 && id < Terraria.ModLoader.ItemLoader.ItemCount && unique.Add(id)) ids.Add(id);
+            }
+            if (reader.BaseStream.Position != reader.BaseStream.Length)
+                throw new System.IO.InvalidDataException("Trailing collector configuration");
+            radius = MEDropCollectorEntity.NormalizeRadius(radius);
+        }
 		/// <summary>服务器把一个收集器的配置广播出去。</summary>
 		public static void SyncCollector(Point16 position, int toClient = -1, int ignoreClient = -1)
 		{
@@ -273,7 +294,7 @@ namespace AE2ForTerraria.Systems
 			packet.Write((short)position.X);
 			packet.Write((short)position.Y);
 			packet.Write(collector.Enabled);
-			packet.Write(collector.Radius);
+			packet.Write(MEDropCollectorEntity.NormalizeRadius(collector.Radius));
 			packet.Write(collector.IsBlacklist);
 			packet.Write(ids.Count);
 

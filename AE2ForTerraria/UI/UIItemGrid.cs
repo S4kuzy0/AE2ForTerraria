@@ -26,6 +26,7 @@ namespace AE2ForTerraria.UI
         private int CellHeight => NpcMode && NpcLabels ? 78 : CellSize;
         public Func<bool> InputBlocked;
         public Func<ItemKey, bool> IsFavorite;
+        public Func<ItemKey, bool> IsCraftable;
         public int Revision { get; private set; }
 
 		private readonly List<int> _items = new List<int>();
@@ -655,6 +656,15 @@ namespace AE2ForTerraria.UI
 				}
 			}
             if (IsFavorite?.Invoke(key) == true) FavoriteInput.Mark(spriteBatch, box);
+            if (IsCraftable?.Invoke(key) == true)
+            {
+                // Draw after the item so a large sprite cannot cover the AE-style plus.
+                int x = box.X + 3, y = box.Y + 3;
+                UITheme.Fill(spriteBatch, new Rectangle(x, y + 2, 9, 5), Color.Black);
+                UITheme.Fill(spriteBatch, new Rectangle(x + 2, y, 5, 9), Color.Black);
+                UITheme.Fill(spriteBatch, new Rectangle(x + 1, y + 3, 7, 3), Color.White);
+                UITheme.Fill(spriteBatch, new Rectangle(x + 3, y + 1, 3, 7), Color.White);
+            }
 		}
 	}
 }

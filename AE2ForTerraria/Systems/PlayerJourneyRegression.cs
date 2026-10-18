@@ -48,6 +48,10 @@ public sealed class PlayerJourneyRegression : ModSystem
     private Vector2 _pointer = new(12, 680), _movementStart;
     private Point16 _accessPosition, _drivePosition, _craftPosition;
     private MEDiskDriveEntity _drive;
+    private Point16 _collectorPosition;
+    private MEDropCollectorEntity _collector;
+    private long _beforeFarDrop;
+    private int _farDropIndex;
     private MECraftingTerminalEntity _craft;
     private Dictionary<ItemKey, long> _savedStock;
     private int[] _inventoryBeforeOverlap;
@@ -922,6 +926,53 @@ public sealed class PlayerJourneyRegression : ModSystem
             Require(UIStatus.Active().Count == 1, "repeated station protection checks produce one readable notification");
             _capture = "10-capacity-recovered";
         });
+        Step("open actual collector with the native tile dispatcher", () =>
+        {
+            UISystem.CloseAll();
+            _collectorPosition=new Point16(_craftPosition.X+2,_craftPosition.Y);
+            PlaceMachine(_collectorPosition,ModContent.TileType<MEDropCollectorTile2x2>());
+            _collector=(MEDropCollectorEntity)TileEntity.ByID[ModContent.GetInstance<MEDropCollectorEntity>().Place(_collectorPosition.X,_collectorPosition.Y)];
+            _collector.Enabled=false;MENetwork.InvalidateCache();
+            RightClick(_collectorPosition);PositionWindow(UISystem.DropCollectorState);
+            Require(ReferenceEquals(UISystem.SecondaryInterface.CurrentState,UISystem.DropCollectorState),
+                "actual collector right click opens its compact settings window");
+            Click(Field<UIElement>(UISystem.DropCollectorState,"_radiusButton"));_nextText="9999";
+        });
+        Step("commit collector radius through a header click", () =>
+        {
+            Require(AEUiSession.KeyboardCaptured && Field<string>(UISystem.DropCollectorState,"_radiusBuffer")=="9999",
+                "collector radius field receives text through the actual input loop");
+            Click(Field<UIElement>(UISystem.DropCollectorState,"_modeButton"));
+        });
+        Step("search the collector whitelist", () =>
+        {
+            Require(_collector.WorldRange && !_collector.IsBlacklist && !AEUiSession.KeyboardCaptured,
+                "clicking the mode header commits unlimited radius and switches to whitelist without leaving input captured");
+            Click(Field<UIElement>(UISystem.DropCollectorState,"_filterSearch"));_nextText=Lang.GetItemNameValue(ItemID.LunarBar);
+        });
+        Step("select a filter item through native left click", () =>
+        {
+            var grid=Field<UIItemGrid>(UISystem.DropCollectorState,"_filterGrid");
+            ClickGrid(grid,ItemID.LunarBar);
+        });
+        Step("enable unlimited collector against a far world drop", () =>
+        {
+            Require(_collector.Filter.Contains(ItemID.LunarBar) && Main.mouseItem.IsAir,
+                "collector item selection edits its whitelist without taking a physical item");
+            _beforeFarDrop=_drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.LunarBar));
+            var far=new Vector2(Math.Max(50,_collectorPosition.X-400)*16,_collectorPosition.Y*16);
+            Require(Vector2.DistanceSquared(far,new Vector2(_collectorPosition.X*16,_collectorPosition.Y*16))>256f*16*256*16,
+                "world-range collection target is farther than the largest finite radius");
+            _farDropIndex=Item.NewItem(Main.LocalPlayer.GetSource_Misc("AE2IsolatedCollectorJourney"),new Rectangle((int)far.X,(int)far.Y,16,16),ItemID.LunarBar,5,noBroadcast:true);
+            Main.item[_farDropIndex].noGrabDelay=0;
+            Click(Field<UIElement>(UISystem.DropCollectorState,"_enableButton"));
+        },60);
+        Step("verify real global collection and stop the fixture", () =>
+        {
+            Require(!Main.item[_farDropIndex].active && _drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.LunarBar))==_beforeFarDrop+5,
+                "enabled global collector transfers the exact far-away drop through the real world update");
+            Click(Field<UIElement>(UISystem.DropCollectorState,"_enableButton"));
+        });
         Step("save sandbox and reload", () =>
         {
             _savedStock = _drive.Ledger.Entries.ToDictionary(pair => pair.Key, pair => pair.Value);
@@ -941,6 +992,10 @@ public sealed class PlayerJourneyRegression : ModSystem
                 && _savedStock.All(pair => _drive.Ledger.GetAmount(pair.Key) == pair.Value),
                 "saved storage identities and quantities survive exit and actual world reload");
             Require(_craft.Stations.Any(item => item.type == ItemID.WorkBench), "installed Work Bench survives world reload");
+            Require(TileEntity.ByPosition.TryGetValue(_collectorPosition,out var restoredCollector)
+                && restoredCollector is MEDropCollectorEntity savedCollector && savedCollector.WorldRange
+                && !savedCollector.Enabled && !savedCollector.IsBlacklist && savedCollector.Filter.Contains(ItemID.LunarBar),
+                "global radius, whitelist and independent collector switch survive actual world reload");
             Require(InventoryAmount(ItemID.Wood) == 10 && Main.LocalPlayer.inventory[20].IsAir,
                 "native player inventory reload preserves withdrawals and installed disk ownership");
             RightClick(_accessPosition); PositionWindow(UISystem.TerminalState);

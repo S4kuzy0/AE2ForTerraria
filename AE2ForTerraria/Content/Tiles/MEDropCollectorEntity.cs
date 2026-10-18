@@ -16,6 +16,11 @@ namespace AE2ForTerraria.Content.Tiles
 	public class MEDropCollectorEntity : ModTileEntity
 	{
 		private const int IntervalTicks = 15;
+        public const float MaxFiniteRadius = 256f;
+        public const float WorldRadius = 257f;
+        public static float NormalizeRadius(float radius) => float.IsFinite(radius)
+            ? System.Math.Clamp(radius, 2f, WorldRadius) : 24f;
+        public bool WorldRange => NormalizeRadius(Radius) > MaxFiniteRadius;
 
 		private int _timer;
 
@@ -36,10 +41,12 @@ namespace AE2ForTerraria.Content.Tiles
 		// 靠**显式失效**刷新(MarkFilterDirty),而不是每次调用都重算签名:
 		// 以前那种写法等于每 15 tick 对地面每个掉落物都遍历一遍清单。
 		private HashSet<int> _filterSet;
+        public int FilterRevision { get; private set; }
 
 		public void MarkFilterDirty()
 		{
 			_filterSet = null;
+            FilterRevision++;
 		}
 
 		/// <summary>按加载时的模组配置给这块收集器设一份初值。</summary>
@@ -58,7 +65,7 @@ namespace AE2ForTerraria.Content.Tiles
 
 			Enabled = config.DropCollectorEnabled;
 			IsBlacklist = config.FilterIsBlacklist;
-			Radius = config.DropCollectorRadius;
+			Radius = NormalizeRadius(config.DropCollectorRadius);
 			Filter = new List<int>();
 
 			if (config.FilteredItems != null)
@@ -149,7 +156,7 @@ namespace AE2ForTerraria.Content.Tiles
 			}
 
 			var center = new Vector2(Position.X * 16f + 8f, Position.Y * 16f + 8f);
-			float radius = System.Math.Max(2f, Radius) * 16f;
+			float radius = NormalizeRadius(Radius) * 16f;
 			float radiusSquared = radius * radius;
 
 			for (int i = 0; i < Main.maxItems; i++)
@@ -160,7 +167,7 @@ namespace AE2ForTerraria.Content.Tiles
 					continue;
 				}
 
-				if (Vector2.DistanceSquared(item.Center, center) > radiusSquared)
+				if (!WorldRange && Vector2.DistanceSquared(item.Center, center) > radiusSquared)
 				{
 					continue;
 				}
@@ -193,7 +200,7 @@ namespace AE2ForTerraria.Content.Tiles
 		{
 			tag["enabled"] = Enabled;
 			tag["blacklist"] = IsBlacklist;
-			tag["radius"] = Radius;
+			tag["radius"] = NormalizeRadius(Radius);
 			ItemPersistence.SaveFilter(tag,"filter",Filter);
 		}
 
@@ -201,7 +208,7 @@ namespace AE2ForTerraria.Content.Tiles
 		{
 			Enabled = !tag.ContainsKey("enabled") || tag.GetBool("enabled");
 			IsBlacklist = !tag.ContainsKey("blacklist") || tag.GetBool("blacklist");
-			Radius = TagCompat.ReadFloat(tag, "radius", 24f);
+			Radius = NormalizeRadius(TagCompat.ReadFloat(tag, "radius", 24f));
 
 			Filter = ItemPersistence.LoadFilter(tag,"filter");
 
