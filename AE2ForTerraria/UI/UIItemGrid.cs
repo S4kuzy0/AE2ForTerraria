@@ -69,7 +69,7 @@ namespace AE2ForTerraria.UI
 		public Action<ItemKey> OnActivated;
         public Action<ItemKey> OnUsed;
 
-		/// <summary>双击(0.35 秒内同一格点两下)。终端用它做「取出这一种的全部」。</summary>
+		/// <summary>双击事件供显式绑定的调用方使用；终端不绑定取物。</summary>
 		public Action<ItemKey> OnDoubleClicked;
 
 		private ItemKey _lastClickKey = ItemKey.None;

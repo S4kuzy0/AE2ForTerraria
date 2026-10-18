@@ -35,10 +35,10 @@ internal sealed class UIBrowserCategoryBar : UIElement
         NpcMode = npc; Category = Child = 0; RemoveAllChildren(); _main.Clear(); _children.Clear();
         string[] labels = npc ? BrowserCategories.NpcKinds : BrowserCategories.Items.Select(c => c.Name).ToArray();
         int[] portraits = { NPCID.Guide, NPCID.BlueSlime, NPCID.EyeofCthulhu, NPCID.Guide, NPCID.Bunny, NPCID.OldMan };
-        for (int i = 1; i < labels.Length; i++)
+        for (int i = 0; i < labels.Length; i++)
         {
             int index = i;
-            var button = new CategoryIcon(labels[i], npc ? 0 : BrowserCategories.Icon(BrowserCategories.Items[i]), npc ? portraits[i] : 0) { Selected = i == 0 };
+            var button = new CategoryIcon(labels[i], i == 0 ? ItemID.CopperShortsword : npc ? 0 : BrowserCategories.Icon(BrowserCategories.Items[i]), npc && i > 0 ? portraits[i] : 0) { Selected = i == 0 };
             button.OnLeftClick += (_, _) => SelectCategory(index);
             _main.Add(button); Append(button);
         }
@@ -46,7 +46,7 @@ internal sealed class UIBrowserCategoryBar : UIElement
     private void RebuildChildren()
     {
         foreach (var button in _children) button.Remove(); _children.Clear();
-        for (int i = 0; i < _main.Count; i++) _main[i].Selected = Category == i + 1;
+        for (int i = 0; i < _main.Count; i++) _main[i].Selected = Category == i;
         var children = NpcMode ? null : BrowserCategories.Items[Category].Children;
         if (children == null || children.Length == 0) return;
         for (int i = 0; i < children.Length; i++)

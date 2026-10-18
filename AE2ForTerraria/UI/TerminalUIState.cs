@@ -16,7 +16,7 @@ using Terraria.UI;
 namespace AE2ForTerraria.UI
 {
 	/// <summary>
-	/// Access owns storage transfers; crafting owns recipes, tasks and stations.
+	/// Both terminals support storage transfers; the crafting terminal also owns recipes, tasks and stations.
 	/// Both entry points share catalogue controls without inferring purpose from network contents.
 	/// </summary>
 	public sealed class TerminalUIState : MovableWindowState
@@ -57,7 +57,7 @@ namespace AE2ForTerraria.UI
         private MECraftingCpuEntity _keepEditHost;
         private bool _inventoryVisible, _favoritesOnly;
         private string _modFilter;
-        private int _range = 1; // Craft view: verified craftable or all recipes. Access always shows stock.
+        private int _range = 2; // Stored, verified craftable, stored + craftable, or all recipes.
         private UIGridScrollBar _scrollBar;
 		private UIButton _orderButton;
 		private UITextPanel<string> _takeButton;
@@ -102,8 +102,8 @@ namespace AE2ForTerraria.UI
 		{
 			Geometry.Key = "TerminalUIState.v3";
             InitWindow(Geometry, "", frameless: true);
-            Window.BackgroundColor = new Color(42, 54, 87);
-            _catalogueButton=new UIButton("物品", .75f);
+            Window.BackgroundColor = new Color(124, 137, 158);
+            _catalogueButton=new UIButton("终端", .75f);
             _catalogueButton.OnLeftClick+=(_,_)=>{_managementPage=0;_info?.Close();_categories.SetMode(false);RebuildList();RequestLayout();};
             _recipesButton=new UIButton("配方", .75f);
             _recipesButton.OnLeftClick+=(_,_)=>
@@ -160,7 +160,7 @@ namespace AE2ForTerraria.UI
 				CellSize = 44,
                 IsFavorite = key => BrowserFavorites.Contains(key.Type),
                 InputBlocked = () => _info?.BlocksPointer == true || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null,
-                CountProvider = key => IsAccess ? UISystem.GetStoredAmount(key) : 0,
+                CountProvider = key => UISystem.GetStoredAmount(key),
 
 				// 「维持库存」的物品在格子上标一个 ∞,不用点开就知道哪些在自动补货
 				BadgeProvider = key =>
@@ -192,7 +192,7 @@ namespace AE2ForTerraria.UI
 				},
 
 				// 选中的格子加绿框(和过滤清单同一套视觉)
-				IsMarked = key => _selection.Contains(key) || IsAccess && _selected.Equals(key)
+				IsMarked = key => _selection.Contains(key)
 			};
 			_grid.OnLeftClick += (evt, element) =>
 			{
@@ -202,21 +202,16 @@ namespace AE2ForTerraria.UI
                     if (_grid.HoveredType > 0) { FavoriteInput.Toggle(_grid.HoveredType); RebuildList(false); }
                     return;
                 }
-                if (IsAccess && !Main.mouseItem.IsAir) { DepositHeldItem(); return; }
+                if (!Main.mouseItem.IsAir) { DepositHeldItem(); return; }
 
 				if (_grid.HoveredType <= 0)
 				{
 					return;
 				}
 
-				Select(_grid.HoveredKey);
-                if (!IsAccess) return;
-
 				// Ctrl = 加入 / 移出多选集合(批量操作)
-				if (IsCtrlDown())
+				if (IsAccess && IsCtrlDown())
 				{
-					int type = _grid.HoveredKey.Type;
-
 					if (!_selection.Remove(_grid.HoveredKey))
 					{
 						_selection.Add(_grid.HoveredKey);
@@ -229,18 +224,16 @@ namespace AE2ForTerraria.UI
 				// Alt is reserved for native-style favorites; Shift still withdraws a stack.
 				if (IsShiftDown())
 				{
+                    _selected = _grid.HoveredKey;
 					Withdraw(OverrideStack());
+                    return;
 				}
+                Select(_grid.HoveredKey);
 			};
 			_grid.OnActivated = key => Select(key);
-            _grid.OnUsed = key => { if (!IsAccess) _info.Show(key, _orderQuantity, uses: true); };
+            _grid.OnUsed = key => _info.Show(key, _orderQuantity, uses: true);
+            // Double clicks deliberately have no transfer action. Plain clicks open details.
 
-			// 双击 = 把这一种全部取出来(AE2 的习惯)
-			_grid.OnDoubleClicked = key =>
-			{
-				Select(key);
-				if (IsAccess) Withdraw(long.MaxValue);
-			};
 			Window.Append(_grid);
             _scrollBar = new UIGridScrollBar { Target = _grid }; Window.Append(_scrollBar);
 
@@ -398,14 +391,12 @@ namespace AE2ForTerraria.UI
             if (_info == null || _keepButton == null) return;
             float w = Geo.W, h = Geo.H, inner = w - Pad * 2;
             bool catalogue = _managementPage == 0 && !_info.IsOpen;
-            _catalogueButton.SetText(IsAccess ? "已储存" : "配方");
+            _catalogueButton.SetText("终端");
             Place(_catalogueButton, Pad, Pad, 80, 22);
-            Visible(_recipesButton, false);
-            Visible(_tasksButton, !IsAccess); Visible(_stationsButton, false);
-            Place(_tasksButton, Pad + 84, Pad, 80, 22); Place(_stationsButton, Pad + 168, Pad, 80, 22);
-            Visible(_inventoryButton, false); Visible(_depositButton, IsAccess);
-            Place(_inventoryButton, Pad + 84, Pad, 80, 22); Place(_depositButton, Pad + 84, Pad, 80, 22);
-            _inventoryButton.Selected = IsAccess && _inventoryVisible;
+            Visible(_recipesButton, false); Visible(_stationsButton, false);
+            Visible(_tasksButton, !IsAccess);
+            Place(_tasksButton, Pad + 84, Pad, 60, 22);
+            Visible(_inventoryButton, false);
             Place(_filterButton, w - Pad - 122, Pad, 42, 22);
             Place(_searchBox, Pad, 36, inner - 128, 24);
             Place(_modButton, w - Pad - 122, 36, 122, 24);
@@ -421,84 +412,65 @@ namespace AE2ForTerraria.UI
             }
             else
             {
-                Place(_craftableButton, Pad, top, 140, 26);
-                Place(_sortButton, w - Pad - 170, top, 170, 26);
+                Place(_craftableButton, Pad, top, inner - 224, 26);
+                Place(_prefixButton, w - Pad - 218, top, 94, 26);
+                Place(_sortButton, w - Pad - 118, top, 118, 26);
             }
             top += 32;
-            bool showBag = false;
-            float inventoryHeight = showBag ? Math.Clamp((h - top - 84) * .52f, 120, 212) : 0;
-            float accessActionHeight = IsAccess ? 54 : 0;
             float stationHeight = !IsAccess && catalogue ? _stationGrid.RequiredHeight : 0;
             Visible(_stationGrid, stationHeight > 0);
-            if (stationHeight > 0) _stationGrid.SetBounds(Pad, h - Pad - _stationGrid.RequiredHeight, inner);
-            float gridBottom = IsAccess ? h - 74 - inventoryHeight - accessActionHeight
-                : h - Pad - stationHeight - 6 - (UISystem.TerminalReadable ? 0 : 28);
+            if (stationHeight > 0) _stationGrid.SetBounds(Pad, h - Pad - 50 - stationHeight, inner);
+            float gridBottom = h - Pad - 54 - stationHeight;
             float gridHeight = Math.Max(43, gridBottom - top);
             Place(_grid, Pad, top, inner - 12, gridHeight);
             Place(_scrollBar, w - Pad - 9, top, 9, Math.Min(gridHeight, Math.Max(12, h - 28 - top)));
-            Place(_capacity, Pad, h - 42, Math.Min(250, inner * .4f), 14);
-            float capacityWidth = _itemCapacity ? Math.Min(440, inner * .64f) : Math.Min(250, inner * .4f);
-            Place(_capacityCount, Pad, h - 40, capacityWidth, 22);
-            _capacityCount.DynamicallyScaleDownToWidth = true;
-            Place(_status, IsAccess ? Pad + capacityWidth + 10 : Pad, h - 40 - stationHeight,
-                IsAccess ? inner - capacityWidth - 10 : inner, 22);
-            _status.DynamicallyScaleDownToWidth = true;
-            foreach (var element in new UIElement[] { _searchBox, _modButton, _categories, _sortButton, _grid, _scrollBar, _status }) Visible(element, catalogue);
-            Visible(_status, catalogue && (IsAccess || !UISystem.TerminalReadable));
-            foreach (var element in new UIElement[] { _takeSelectedButton, _clearSelectionButton, _prefixButton }) Visible(element, catalogue && IsAccess);
+            Place(_depositButton, Pad, h - Pad - 46, 100, 24);
+            Place(_ammoButton, Pad + 106, h - Pad - 46, inner - 106, 24);
+            float capacityWidth = inner * .45f;
+            Place(_capacity, Pad, h - Pad - 18, capacityWidth, 14);
+            Place(_capacityCount, Pad, h - Pad - 18, capacityWidth, 18);
+            Place(_status, Pad + capacityWidth + 8, h - Pad - 18, inner - capacityWidth - 20, 18);
+            foreach (var element in new UIElement[] { _searchBox, _modButton, _categories, _sortButton, _grid, _scrollBar,
+                _status, _depositButton, _ammoButton, _prefixButton }) Visible(element, catalogue);
+            foreach (var element in new UIElement[] { _takeSelectedButton, _clearSelectionButton }) Visible(element, catalogue && IsAccess);
             Visible(_craftableButton, catalogue && !IsAccess);
-            Visible(_capacity, catalogue && IsAccess && !_itemCapacity);
-            Visible(_capacityCount, catalogue && IsAccess && _itemCapacity);
-            Visible(_ammoButton, catalogue && IsAccess && showBag);
-            if (catalogue && IsAccess) { Visible(_ammoButton, true); Place(_ammoButton, Pad, h - 68, 192, 24); }
-            Visible(_playerInventory, showBag && (catalogue || _managementPage == 2));
-            if (showBag)
-            {
-                float bagTop = IsAccess ? top + gridHeight + accessActionHeight : h - Pad - inventoryHeight;
-                _playerInventory.SetBounds(Pad, bagTop, inner, inventoryHeight);
-                _playerInventory.SetTransferHandlers(IsAccess ? DepositSlot : null, IsAccess ? DepositAllOfType : null);
-            }
-            _catalogueButton.Selected = catalogue; _tasksButton.Selected = _managementPage == 1; _stationsButton.Selected = _managementPage == 2;
-            float drawerH = h - Pad - 36 - stationHeight - (stationHeight > 0 ? 8 : 0);
+            Visible(_capacity, catalogue && !_itemCapacity);
+            Visible(_capacityCount, catalogue && _itemCapacity);
+            Visible(_playerInventory, false); Visible(_selectionLabel, false);
+            _catalogueButton.Selected = catalogue; _tasksButton.Selected = _managementPage == 1;
+            float drawerH = h - Pad - 36;
+            _info.BottomReserve = IsAccess ? 38 : 92;
             _info.SetBounds(Pad, 36, inner, drawerH);
-            Place(_craftReadiness, 10, drawerH - 60, inner - 20, 22);
+            Place(_craftReadiness, 10, drawerH - 86, inner - 20, 18);
             if (_info.IsOpen) { _info.Remove(); Window.Append(_info); }
-            foreach (var action in new UIElement[] { _quantityButton, _quantityInput, _orderButton, _keepButton, _takeButton, _takeAllButton }) action.Remove();
-            if (IsAccess)
+            foreach (var action in new UIElement[] { _quantityButton, _quantityInput, _orderButton, _keepButton, _takeButton, _takeAllButton, _craftReadiness }) action.Remove();
+            if (!_selected.IsAir && _info.IsOpen)
             {
-                Visible(_selectionLabel, catalogue);
-                float y = top + gridHeight + 4;
-                Place(_selectionLabel, Pad, y, inner, 18);
-                UIElement[] actions = { _quantityButton, _quantityInput, _takeButton, _takeAllButton };
-                for (int i = 0; i < actions.Length; i++)
+                UIElement[] storage = { _quantityButton, _quantityInput, _takeButton, _takeAllButton };
+                float actionW = (inner - 38) / 4;
+                for (int i = 0; i < storage.Length; i++)
                 {
-                    if (catalogue) Window.Append(actions[i]);
-                    float actionWidth = (inner - 18) / 4;
-                    Place(actions[i], Pad + i * (actionWidth + 6), y + 20, actionWidth, 24);
+                    _info.Append(storage[i]);
+                    Place(storage[i], 10 + i * (actionW + 6), drawerH - 34, actionW, 26);
                 }
-            }
-            else
-            {
-                Visible(_selectionLabel, false);
-                if (!_selected.IsAir)
+                if (!IsAccess)
                 {
-                    UIElement[] actions = { _quantityButton, _quantityInput, _orderButton, _keepButton };
-                    float actionW = (inner - 38) / 4;
-                    for (int i = 0; i < actions.Length; i++)
-                    {
-                        _info.Append(actions[i]); Place(actions[i], 10 + i * (actionW + 6), drawerH - 34, actionW, 28);
-                    }
+                    _info.Append(_craftReadiness); _info.Append(_orderButton); _info.Append(_keepButton);
+                    Place(_orderButton, 10, drawerH - 64, (inner - 26) / 2, 26);
+                    Place(_keepButton, 16 + (inner - 26) / 2, drawerH - 64, (inner - 26) / 2, 26);
                 }
             }
             _quantityInput.SetPadding(0); _quantityText.Width.Set(-12, 1); _quantityText.DynamicallyScaleDownToWidth = true;
             if (_management != null)
             {
                 Visible(_management, !IsAccess && _managementPage != 0);
-                _management.SetBounds(Pad, 36, inner, h - Pad - 36 - (showBag ? inventoryHeight + 8 : 0));
+                _management.SetBounds(Pad, 36, inner, h - Pad - 36);
             }
+            KeepResizeGripInFront();
             Window.Recalculate();
         }
-        public void ShowDetails(int type, bool uses = false) { if (IsAccess) Select(ItemKey.Crafted(type)); else _info.Show(ItemKey.Crafted(type), _orderQuantity, uses); }
+        public void ShowDetails(int type, bool uses = false) => _info.Show(ItemKey.Crafted(type), _orderQuantity, uses);
+
         public bool CloseDetails() { if (!_info.IsOpen) return false; _info.Close(); return true; }
 
 		/// <summary>每次打开终端:重算锁定锚点并重建列表(角标要立刻正确)。</summary>
@@ -515,7 +487,7 @@ namespace AE2ForTerraria.UI
             _inventoryVisible = false; _searchFocused = _quantityTyping = false;
             _selection.Clear(); _selected = ItemKey.None; _selectedPlan = null;
             UITextCache.Set(_selectionLabel, "点击物品选择数量");
-            _range = 1; _craftableButton.SetText("可合成");
+            _range = IsAccess ? 0 : 2; _craftableButton.SetText(RangeLabel());
             _availability = TerminalCraftingCacheSystem.Current; _availability.Refresh();
             _lastAvailabilityRefresh = Main.GameUpdateCount;
             _availabilityRevision = _availability.Revision;
@@ -528,16 +500,14 @@ namespace AE2ForTerraria.UI
 
 		protected override void UpdateWindow(GameTime gameTime)
 		{
-            if (!IsAccess && _managementPage == 0 && !_info.IsOpen
-                && (_status.Parent != null) != !UISystem.TerminalReadable) RequestLayout();
             if(_stationLayoutDirty) {_stationLayoutDirty=false;RequestLayout();}
             if(_stationDataDirty) {_stationDataDirty=false;_availability.Refresh();RebuildList(false);UpdateSelectedPlan();}
 			HandleQuantityTyping();
 			UpdateTakeLabel();
 			UpdateCapacity();
             _orderButton.Enabled=!IsAccess && UISystem.TerminalCanUse && _selectedPlan?.FullySatisfied == true;
-            ((UIButton)_takeButton).Enabled=IsAccess && !_selected.IsAir && UISystem.TerminalCanUse;
-            ((UIButton)_takeAllButton).Enabled=IsAccess && !_selected.IsAir && UISystem.TerminalCanUse;
+            ((UIButton)_takeButton).Enabled=!_selected.IsAir && UISystem.GetStoredAmount(_selected) > 0 && UISystem.TerminalCanUse;
+            ((UIButton)_takeAllButton).Enabled=!_selected.IsAir && UISystem.GetStoredAmount(_selected) > 0 && UISystem.TerminalCanUse;
             ((UIButton)_depositButton).Enabled=UISystem.TerminalCanUse;
             ((UIButton)_keepButton).Enabled=UISystem.TerminalCanManage;
             if (!UISystem.TerminalReadable) UITextCache.Set(_status,UISystem.TerminalAccessStatus);
@@ -654,7 +624,7 @@ namespace AE2ForTerraria.UI
 			_filtered.Clear();
 			Dictionary<ItemKey, long> contents = UISystem.ActiveNetworkContents;
 
-			if (contents != null && IsAccess)
+			if (contents != null && (IsAccess || _range == 0 || _range == 2))
 			{
 				foreach (KeyValuePair<ItemKey, long> entry in contents)
 				{
@@ -679,8 +649,8 @@ namespace AE2ForTerraria.UI
 				}
 			}
 
-			// Craft catalogue is independent of stored products and their prefixes.
-			if (!IsAccess && StorageSystem.Recipes != null)
+			// Add canonical crafting outputs without merging distinct stored identities.
+			if (!IsAccess && _range != 0 && !_onlyPrefixed && StorageSystem.Recipes != null)
 			{
 				var known = new HashSet<ItemKey>();
                 var priority = new List<int>();
@@ -709,7 +679,7 @@ namespace AE2ForTerraria.UI
                     // positive craftable result requires a checked complete plan.
                     if(_lastQuery.Length>0) priority.Add(type);
                     bool ready = _availability.CanUse && _availability.Catalogue.IsCraftable(type);
-                    if (_range == 1 && !ready) continue;
+                    if (_range != 3 && !ready) continue;
 
 					_filtered.Add(ItemKey.Crafted(type));
 				}
@@ -769,10 +739,9 @@ namespace AE2ForTerraria.UI
 			string network = UISystem.ActiveNetwork == null
 				? ModText.Get("LblStatusNoDrive", "未连接驱动器")
 				: UISystem.ActiveNetwork.Count + " " + ModText.Get("LblStatusDrives", "个驱动器");
-            if (!IsAccess)
+            if (!UISystem.TerminalReadable)
             {
-                UITextCache.Set(_status, UISystem.TerminalReadable ? string.Empty : UISystem.TerminalAccessStatus);
-                return;
+                UITextCache.Set(_status, UISystem.TerminalAccessStatus); return;
             }
 
 			// 容量告警:快满 / 已满时状态行变色
@@ -896,11 +865,6 @@ namespace AE2ForTerraria.UI
 		{
             _keepEditHost=null;
 			_selected = key;
-            if (IsAccess)
-            {
-                UITextCache.Set(_selectionLabel, UIItemNames.Display(key) + " · 已储存 " + UISystem.GetStoredAmount(key));
-                return;
-            }
 			_info.Show(key, _orderQuantity);
 		}
 
@@ -1085,17 +1049,22 @@ namespace AE2ForTerraria.UI
         private void ToggleCraftable()
         {
             if (IsAccess) return;
-            _range = _range == 1 ? 2 : 1;
-            _craftableButton.SetText(_range == 1 ? "可合成" : "全部配方");
+            _range = (_range + 1) % 4;
+            _craftableButton.SetText(RangeLabel());
             RebuildList();
         }
+
+        private string RangeLabel() => _range switch
+        {
+            0 => "已储存", 1 => "可合成", 2 => "储存＋可合成", _ => "全部配方"
+        };
 
 		/// <summary>把网络里这个物品全部取出来。</summary>
 		private void WithdrawAll() { Withdraw(long.MaxValue); }
 
 		private void Withdraw(long? amountOverride = null)
         {
-            if (!IsAccess || !UISystem.TerminalCanUse) return;
+            if (!UISystem.TerminalCanUse) return;
             if (_selected.IsAir || !CanTakeLocally(_selected)) return;
             long wanted = amountOverride ?? (_orderQuantity > 1 ? _orderQuantity : MaxStackOf(_selected.Type));
             if (Main.netMode == NetmodeID.MultiplayerClient) { MENet.Withdraw(UISystem.ActiveTerminalPos,_selected,wanted); return; }
@@ -1165,7 +1134,7 @@ namespace AE2ForTerraria.UI
 		/// <summary>批量:把选中的每一种各取一个堆叠出来。</summary>
 		private void WithdrawSelected()
         {
-            if (!IsAccess || !UISystem.TerminalCanUse) return;
+            if (!UISystem.TerminalCanUse) return;
             long total = 0;
             foreach (ItemKey key in new List<ItemKey>(_selection))
             {
@@ -1200,7 +1169,7 @@ namespace AE2ForTerraria.UI
 		/// <summary>Shift+右键在背包格上 = 把背包里**这一种**全部存进网络。</summary>
 		private bool DepositAllOfType(Item item, int slotIndex)
 		{
-            if (!IsAccess || !UISystem.TerminalCanUse) return true;
+            if (!UISystem.TerminalCanUse) return true;
 			if (item == null || item.type <= 0)
 			{
 				return true;
@@ -1253,7 +1222,7 @@ namespace AE2ForTerraria.UI
         internal bool DepositInventorySlot(int slotIndex) => DepositSlot(Main.LocalPlayer.inventory[slotIndex], slotIndex);
         private void DepositHeldItem()
         {
-            if (!IsAccess || !UISystem.TerminalCanUse || MENet.CursorPending || MENet.InventoryTransactionPending) return;
+            if (!UISystem.TerminalCanUse || MENet.CursorPending || MENet.InventoryTransactionPending) return;
             if (Main.netMode == NetmodeID.MultiplayerClient) { MENet.DepositCursor(UISystem.ActiveTerminalPos); return; }
             var preview = StorageOperations.PreviewDeposit(UISystem.ActiveNetwork, Main.mouseItem);
             if (preview.Accepted <= 0) { UIStatus.Toast(preview.Message); return; }
@@ -1264,7 +1233,6 @@ namespace AE2ForTerraria.UI
         }
         private bool DepositSlot(Item item, int slotIndex)
 		{
-            if (!IsAccess) return true;
             if (!UISystem.TerminalCanUse)
             {
                 UIStatus.Toast(string.IsNullOrEmpty(UISystem.TerminalAccessStatus)
@@ -1334,7 +1302,7 @@ namespace AE2ForTerraria.UI
 
 		private void DepositAll()
         {
-            if (!IsAccess || !UISystem.TerminalCanUse) return;
+            if (!UISystem.TerminalCanUse) return;
             if (Main.netMode == NetmodeID.MultiplayerClient) { MENet.DepositAll(UISystem.ActiveTerminalPos,_depositAmmoAndCoins); return; }
             long moved = StorageOperations.DepositInventory(UISystem.ActiveNetwork,Main.LocalPlayer,_depositAmmoAndCoins);
             AfterNetworkChange();
@@ -1347,12 +1315,9 @@ namespace AE2ForTerraria.UI
 			UISystem.RefreshNetwork();
 			RefreshLockAnchor();
 			RebuildList();
-			if (IsAccess && !_selected.IsAir) Select(_selected);
-
-			if (_info.IsOpen && !_selected.IsAir)
-			{
-				Select(_selected);
-			}
+            _availability.Refresh(); UpdateSelectedPlan();
+            if (_info.IsOpen && !_selected.IsAir)
+                _info.Show(_selected, _orderQuantity, remember: false, preserveTab: true);
 		}
 
 		/// <summary>把当前网络的锚点缓下来,角标判断用(避免每格一次 BFS)。</summary>
@@ -1375,7 +1340,7 @@ namespace AE2ForTerraria.UI
 		/// </summary>
 		protected override void DrawHoverTooltip(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch)
 		{
-            if (IsAccess && !Main.mouseItem.IsAir && _grid.Parent != null && _grid.ContainsPoint(Main.MouseScreen))
+            if (!Main.mouseItem.IsAir && _grid.Parent != null && _grid.ContainsPoint(Main.MouseScreen))
             {
                 string message = Main.netMode == NetmodeID.MultiplayerClient
                     ? "存入时由服务器核验容量；未能存入的物品保留在手中"
@@ -1393,7 +1358,7 @@ namespace AE2ForTerraria.UI
 
 				int recipes = StorageSystem.Recipes.GetRecipesFor(ItemKey.Crafted(key.Type)).Count;
                 if (!IsAccess) return _availability.Catalogue.IsCraftable(key.Type)
-                    ? "完整合成树已满足 · 按新增一件核验" : "缺料、条件未满足或正在核验；点击查看合成树";
+                    ? "完整合成树已满足 · 左键查看配方；Shift＋左键取出一叠" : "左键查看配方与缺料；Shift＋左键取出一叠";
 				return recipes > 0
 					? ModText.Get("LblRecipeCount", "配方数量") + ": " + recipes
 					: ModText.Get("LblNoRecipeShort", "无配方(只能靠掉落/商店)");

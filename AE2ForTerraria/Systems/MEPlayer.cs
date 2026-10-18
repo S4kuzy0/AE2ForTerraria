@@ -20,7 +20,7 @@ namespace AE2ForTerraria.Systems
         {
             if (Player.whoAmI != Main.myPlayer || !ReferenceEquals(inventory, Player.inventory) || slot < 0 || slot >= 50
                 || AEUiSession.CapturesInput || MENet.InventoryTransactionPending || MENet.CursorPending
-                || UISystem.Interface?.CurrentState != UISystem.TerminalState || UISystem.ActiveTerminalViewMode != UI.TerminalViewMode.Access)
+                || UISystem.Interface?.CurrentState != UISystem.TerminalState)
                 return false;
             return UISystem.TerminalState.DepositInventorySlot(slot);
         }

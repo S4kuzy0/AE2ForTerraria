@@ -368,23 +368,33 @@ public sealed class UiRegressionSystem : ModSystem
             "access terminal uses native inventory without an embedded backpack or crafting tabs");
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         typeof(TerminalUIState).GetMethod("Select",flags)!.Invoke(terminal,new object[] { ItemKey.Crafted(ItemID.Wood) });
-        Assert(!Field<UIBrowserDetails>(terminal,"_info").IsOpen && Field<UIElement>(terminal,"_takeButton").Parent != null
+        Assert(Field<UIBrowserDetails>(terminal,"_info").IsOpen && Field<UIElement>(terminal,"_takeButton").Parent == Field<UIBrowserDetails>(terminal,"_info")
             && Field<UIElement>(terminal,"_orderButton").Parent == null,
-            "access selection keeps inventory visible and exposes withdrawal rather than an order button");
+            "access selection opens the recipe child page with withdrawal actions and no crafting command");
         terminal.CloseDetails(); typeof(TerminalUIState).GetMethod("AfterNetworkChange",flags)!.Invoke(terminal,null);
         Assert(!Field<UIBrowserDetails>(terminal,"_info").IsOpen,"background inventory refresh does not reopen closed details");
         var craft = NewTerminal(TerminalViewMode.Craft);
-        Assert(Field<int>(craft,"_range") == 1 && Field<UIElement>(craft,"_tasksButton").Parent != null
-            && Field<UIElement>(craft,"_stationsButton").Parent == null && Field<UIElement>(craft,"_stationGrid").Parent != null && Field<UIElement>(craft,"_depositButton").Parent == null
+        Assert(Field<int>(craft,"_range") == 2 && Field<UIElement>(craft,"_tasksButton").Parent != null
+            && Field<UIElement>(craft,"_stationsButton").Parent == null && Field<UIElement>(craft,"_stationGrid").Parent != null && Field<UIElement>(craft,"_depositButton").Parent != null
             && Field<UIElement>(craft,"_takeButton").Parent == null && Field<UIElement>(craft,"_playerInventory").Parent == null,
-            "craft terminal defaults to checked craftability and has no ordinary storage actions or backpack");
+            "unified terminal defaults to stored plus checked craftable items with native deposit and compact stations");
+        Assert(Field<List<ItemKey>>(craft,"_filtered").Any(k=>k.Prefix!=0)
+            && Field<UIItemGrid>(craft,"_grid").CountProvider(ItemKey.Crafted(ItemID.Wood))==321,
+            "unified catalogue retains complete stored identities and their real network quantities");
         Click(craft,"_craftableButton");
         var recipes = Field<List<ItemKey>>(craft,"_filtered");
-        Assert(Field<int>(craft,"_range") == 2 && recipes.Count > 0
+        Assert(Field<int>(craft,"_range") == 3 && recipes.Count > 0
             && recipes.All(k=>k.Prefix==0 && StorageSystem.Recipes.GetRecipesFor(k).Count>0),
-            "all recipes view contains real recipe outputs, never stored prefixed products");
+            "all recipes scope contains recipe outputs while the combined scope preserves stored prefixed products");
+        Click(craft,"_craftableButton");
+        Assert(Field<int>(craft,"_range")==0 && Field<List<ItemKey>>(craft,"_filtered").Any(k=>k.Prefix!=0),
+            "stored scope remains available in the crafting terminal");
+        Click(craft,"_craftableButton");
+        Assert(Field<int>(craft,"_range")==1 && Field<List<ItemKey>>(craft,"_filtered").All(k=>Field<TerminalCraftingAvailability>(craft,"_availability").Catalogue.IsCraftable(k.Type)),
+            "craftable scope contains only verified complete crafting trees");
         Assert(Field<UIElement>(craft,"_stationGrid").Parent != null && Field<UIElement>(craft,"_playerInventory").Parent == null,
             "recipe page contains the compact station grid without a duplicate backpack");
+        ValidateTerminalClickWithoutTransfer();
         Click(craft,"_tasksButton");
         Assert(Field<UIElement>(craft,"_playerInventory").Parent == null,
             "task management does not leave the station backpack active");
@@ -419,18 +429,51 @@ public sealed class UiRegressionSystem : ModSystem
         ValidateRecipeReader();
         ValidateNativeTransferAndCaches();
     }
+    private void ValidateTerminalClickWithoutTransfer()
+    {
+        var state = NewTerminal(TerminalViewMode.Craft);
+        var grid = Field<UIItemGrid>(state,"_grid");
+        int x = Main.mouseX, y = Main.mouseY;
+        var keys = Main.keyState; var cursor = Main.mouseItem;
+        try
+        {
+            Main.keyState = new Microsoft.Xna.Framework.Input.KeyboardState(); Main.mouseItem = new Item();
+            grid.SetKeys(new List<ItemKey> { ItemKey.Crafted(ItemID.Wood) }); grid.Recalculate();
+            var point = grid.GetDimensions().Position() + new Vector2(16,16);
+            Main.mouseX = (int)point.X; Main.mouseY = (int)point.Y;
+            grid.Update(new GameTime());
+            long before = UISystem.GetStoredAmount(ItemKey.Crafted(ItemID.Wood));
+            grid.LeftClick(new UIMouseEvent(grid,point));
+            var details = Field<UIBrowserDetails>(state,"_info");
+            Assert(details.IsOpen && Field<UIElement>(state,"_orderButton").Parent == details
+                && Field<UIElement>(state,"_takeButton").Parent == details,
+                "ordinary left click opens the existing child page with both craft and withdrawal actions");
+            var grip=WindowField<UIResizeGrip>(state,"_grip");
+            Assert(ReferenceEquals(WindowField<UIWindowPanel>(state,"<Window>k__BackingField").GetElementAt(grip.GetDimensions().Center()),grip),
+                "opened terminal recipe child page leaves the actual resize grip in front for native hit testing");
+            grid.LeftClick(new UIMouseEvent(grid,point));
+            Assert(grid.OnDoubleClicked == null && UISystem.GetStoredAmount(ItemKey.Crafted(ItemID.Wood)) == before && Main.mouseItem.IsAir,
+                "two consecutive plain left clicks never withdraw or consume a stored stack");
+            Invoke(details,"Back");
+            Assert(!details.IsOpen && Field<UIElement>(state,"_grid").Parent != null,
+                "unified child page returns directly to its unchanged catalogue");
+        }
+        finally { Main.mouseX=x; Main.mouseY=y; Main.keyState=keys; Main.mouseItem=cursor; }
+    }
     private void ValidateNativeTransferAndCaches()
     {
         var activeField=typeof(UserInterface).GetField("ActiveInstance",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.Public|System.Reflection.BindingFlags.NonPublic)!;
         object activeUi=activeField.GetValue(null);
-        var state=NewTerminal(TerminalViewMode.Access);
+        var state=NewTerminal(TerminalViewMode.Craft);
         var drive=UISystem.ActiveNetwork.OfType<MEDiskDriveEntity>().First();
         var stock=drive.Ledger.Copy(); var player=Main.LocalPlayer;
-        var inventoryItem=player.inventory[45];var cursorSlot=player.inventory[58];var mouse=Main.mouseItem;
+        var inventorySnapshot=player.inventory.Select(item=>item?.Clone()).ToArray();var mouse=Main.mouseItem;
+        var originalWorldItems=Main.item;
         bool inventoryOpen=Main.playerInventory;
         var oldUi=UISystem.Interface;var oldState=UISystem.TerminalState;var oldMode=UISystem.ActiveTerminalViewMode;
         try
         {
+            Main.item=originalWorldItems.Select(item=>item?.Clone()).ToArray();
             var ui=new UserInterface();ui.SetState(state);
             typeof(UISystem).GetProperty(nameof(UISystem.Interface))!.SetValue(null,ui);
             typeof(UISystem).GetProperty(nameof(UISystem.TerminalState))!.SetValue(null,state);
@@ -438,7 +481,7 @@ public sealed class UiRegressionSystem : ModSystem
             long before=drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood));
             Assert(player.GetModPlayer<MEPlayer>().ShiftClickSlot(player.inventory,0,45)
                 && player.inventory[45].IsAir && drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood))==before+17,
-                "native inventory shift click transfers the actual stack through the access terminal");
+                "native inventory shift click transfers the actual stack through the unified crafting terminal");
             drive.Ledger.MaxAmountPerType=before+20;
             Main.mouseItem=new Item(ItemID.Wood,9);
             Invoke(state,"DepositHeldItem");
@@ -453,11 +496,22 @@ public sealed class UiRegressionSystem : ModSystem
                 && player.inventory[45].stack == 7 && drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood)) == before+20
                 && UIStatus.Active().Any(line => line.Text.Contains("数量已达上限")),
                 "full storage shift deposit preserves the item and tells the player why nothing moved");
+            long inventoryBefore=player.inventory.Take(50).Where(item=>item?.type==ItemID.Wood).Sum(item=>(long)item.stack);
+            long dropsBefore=Main.item.Where(item=>item?.active==true && item.type==ItemID.Wood).Sum(item=>(long)item.stack);
+            SetField(state,"_orderQuantity",7L);
+            Field<UIItemGrid>(state,"_grid").OnActivated(ItemKey.Crafted(ItemID.Wood)); state.Update(new GameTime());
+            Click(state,"_takeButton");
+            Assert(drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood))==before+13
+                && player.inventory.Take(50).Where(item=>item?.type==ItemID.Wood).Sum(item=>(long)item.stack)
+                    + Main.item.Where(item=>item?.active==true && item.type==ItemID.Wood).Sum(item=>(long)item.stack)==inventoryBefore+dropsBefore+7,
+                "unified crafting child page withdraws the exact requested quantity across inventory and native pickup drops");
         }
         finally
         {
             drive.Ledger.MaxAmountPerType=stock.MaxAmountPerType;drive.Ledger.ReplaceContents(stock);
-            player.inventory[45]=inventoryItem;player.inventory[58]=cursorSlot;Main.mouseItem=mouse;Main.playerInventory=inventoryOpen;
+            for(int i=0;i<player.inventory.Length;i++) player.inventory[i]=inventorySnapshot[i];
+            Main.item=originalWorldItems;
+            Main.mouseItem=mouse;Main.playerInventory=inventoryOpen;
             typeof(UISystem).GetProperty(nameof(UISystem.Interface))!.SetValue(null,oldUi);
             typeof(UISystem).GetProperty(nameof(UISystem.TerminalState))!.SetValue(null,oldState);
             typeof(UISystem).GetProperty(nameof(UISystem.ActiveTerminalViewMode))!.SetValue(null,oldMode);
@@ -494,6 +548,7 @@ public sealed class UiRegressionSystem : ModSystem
             +" fullPlans="+availability.Catalogue.FullPlansComputed
             +" elapsedMs="+elapsed.ToString("F3",System.Globalization.CultureInfo.InvariantCulture)
             +" pending="+availability.Catalogue.PendingCount+"; real loaded recipes, temporary stock, no world opened.");
+        reopened.Update(new GameTime());
         RenderProbe(reopened,"Terminal-cached-catalogue");
         var terminal=UISystem.ActiveCraftingTerminal;var stations=terminal.Stations;
         try
@@ -936,14 +991,15 @@ public sealed class UiRegressionSystem : ModSystem
     {
         var categories = Field<UIBrowserCategoryBar>(search, "_categories");
         var icons = Field<IList>(categories, "_main").Cast<UIElement>().ToArray();
-        Assert(icons.Length == BrowserCategories.Items.Length - 1 && BrowserCategories.Items.All(category => category.Name != "套装"),
-            "category toolbar merges armor and removes the redundant all icon");
+        Assert(icons.Length == BrowserCategories.Items.Length && BrowserCategories.Items.All(category => category.Name != "套装")
+            && BrowserCategories.Icon(BrowserCategories.Items[0]) == ItemID.CopperShortsword,
+            "mother toolbar retains all as a copper shortsword icon and merges armor");
         Assert(icons.All(icon => (int)icon.GetType().GetProperty("ItemType", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(icon) > 0),
             "every item category has a real game item sprite");
         Assert(icons.All(icon => icon.GetDimensions().Width == 24 && icon.GetDimensions().Height == 24)
             && icons.All(icon => categories.GetDimensions().ToRectangle().Contains(icon.GetDimensions().ToRectangle())),
             "category icon rows wrap inside the compact toolbar without text minimums");
-        icons[0].LeftClick(new UIMouseEvent(icons[0], icons[0].GetDimensions().Center()));
+        icons[1].LeftClick(new UIMouseEvent(icons[1], icons[1].GetDimensions().Center()));
         search.Update(new GameTime());
         Assert(categories.Category == 1 && Field<List<int>>(search, "_filtered").All(categories.Matches),
             "icon category selection applies the existing property filter");
@@ -953,9 +1009,12 @@ public sealed class UiRegressionSystem : ModSystem
         Assert(children.Length == BrowserCategories.Items[1].Children.Length, "subcategory toolbar does not repeat its parent's all button");
         children[0].LeftClick(new UIMouseEvent(children[0], children[0].GetDimensions().Center()));
         Assert(categories.Child == 1, "subcategory icons remain independently selectable");
-        icons[0].LeftClick(new UIMouseEvent(icons[0], icons[0].GetDimensions().Center()));
+        icons[1].LeftClick(new UIMouseEvent(icons[1], icons[1].GetDimensions().Center()));
         search.Update(new GameTime());
         Assert(categories.Category == 1 && categories.Child == 0, "clicking the parent category restores all its children");
+        icons[0].LeftClick(new UIMouseEvent(icons[0], icons[0].GetDimensions().Center()));
+        Assert(categories.Category == 0 && categories.Child == 0 && Field<IList>(categories, "_children").Count == 0,
+            "copper shortsword all icon clears both category levels without an extra child all button");
         Click(search, "_itemTab");
         Assert(categories.Category == 0 && categories.Child == 0, "clicking the mother page restores the unfiltered catalogue");
         icons = Field<IList>(categories, "_main").Cast<UIElement>().ToArray();
@@ -969,7 +1028,7 @@ public sealed class UiRegressionSystem : ModSystem
                 "covered-category hover probe waits for the detail entrance and lies behind the panel");
             Main.mouseX = (int)point.X; Main.mouseY = (int)point.Y; Main.hoverItemName = ""; Main.HoverItem = new Item();
             RenderProbe(search, null);
-            Assert(Main.hoverItemName != BrowserCategories.Items[Math.Min(17, icons.Length - 1) + 1].Name,
+            Assert(Main.hoverItemName != BrowserCategories.Items[Math.Min(17, icons.Length - 1)].Name,
                 "category icons behind a foreground recipe never supply its hover text");
             search.CloseDetails();
         }
@@ -1139,7 +1198,7 @@ public sealed class UiRegressionSystem : ModSystem
                     {
                         var info=Field<UIBrowserDetails>(terminal,"_info").GetDimensions();
                         Assert(info.Width>terminal.Layout.W*.9f,"terminal recipe reader fills width at "+size.X);
-                        var actionNames=new[]{"_quantityButton","_quantityInput","_orderButton","_keepButton"};
+                        var actionNames=new[]{"_quantityButton","_quantityInput","_orderButton","_keepButton","_takeButton","_takeAllButton"};
                         var actionRects=actionNames.Select(name=>Field<UIElement>(terminal,name).GetDimensions().ToRectangle()).ToArray();
                         Assert(actionRects.All(rect=>info.ToRectangle().Contains(rect)) && actionRects.SelectMany((a,i)=>actionRects.Skip(i+1).Select(b=>!a.Intersects(b))).All(ok=>ok),"terminal action row stays within reader without overlaps at "+size.X);
                     }
@@ -1152,9 +1211,9 @@ public sealed class UiRegressionSystem : ModSystem
                         var stations=Field<UIStationGrid>((TerminalUIState)state,"_stationGrid");
                         var stationBounds=stations.GetDimensions().ToRectangle();
                         var filter=Field<UIButton>((TerminalUIState)state,"_craftableButton");
-                        Assert(Math.Abs(filter.GetDimensions().X-gridBounds.X)<1 && Field<UIElement>((TerminalUIState)state,"_status").Parent==null
+                        Assert(Math.Abs(filter.GetDimensions().X-gridBounds.X)<1 && Field<UIElement>((TerminalUIState)state,"_status").Parent!=null
                             && Field<UIElement>((TerminalUIState)state,"_selectionLabel").Parent==null
-                            && !stations.Children.OfType<UIText>().Any(),"craft catalogue left-aligns the filter and has no count or station captions at "+size.X);
+                            && !stations.Children.OfType<UIText>().Any(),"unified catalogue left-aligns the range filter and keeps storage status without duplicate selection or station captions at "+size.X);
                         Assert(gridBounds.Width>=state.Layout.W-48 && stationBounds.Top-gridBounds.Bottom<=8
                             && !gridBounds.Intersects(stationBounds),"craft catalogue fills available width and reaches the station slots at "+size.X);
                     }

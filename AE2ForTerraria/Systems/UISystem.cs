@@ -313,7 +313,7 @@ namespace AE2ForTerraria.Systems
             allReady &= ActivateState("无线桥", BridgeState);
 			allReady &= ActivateState("帮助", HelpState);
 			allReady &= ActivateState("磁盘驱动器", DriveState);
-			allReady &= ActivateState("合成终端", TerminalState);
+			allReady &= ActivateState("终端", TerminalState);
 			allReady &= ActivateState("分子装配室", AssemblerState);
 			allReady &= ActivateState("来源 / 用途", RecipeState);
 			allReady &= ActivateState("怪物详情", NpcState);
@@ -694,7 +694,7 @@ namespace AE2ForTerraria.Systems
 			CloseOverlay();
 			SecondaryInterface?.SetState(null);
 
-			if (!ActivateState("合成终端", TerminalState))
+			if (!ActivateState("终端", TerminalState))
 			{
 				return;
 			}

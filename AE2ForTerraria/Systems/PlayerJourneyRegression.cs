@@ -703,6 +703,23 @@ public sealed class PlayerJourneyRegression : ModSystem
             Main.LocalPlayer.velocity = Vector2.Zero;
             RightClick(_craftPosition); PositionWindow(UISystem.TerminalState);
         });
+        Step("inspect unified catalogue and select stored Wood", () =>
+        {
+            var grid=Field<UIItemGrid>(UISystem.TerminalState,"_grid");
+            Require(Field<UIElement>(UISystem.TerminalState,"_depositButton").Parent!=null
+                && grid.CountProvider(ItemKey.Crafted(ItemID.Wood))==90,
+                "crafting terminal exposes actual stock and deposit alongside recipes");
+            _capture="05c-unified-terminal-catalogue";
+            ClickGrid(grid,ItemID.Wood);
+        });
+        Step("check ordinary stored-item click and return to catalogue", () =>
+        {
+            var details=Field<UIBrowserDetails>(UISystem.TerminalState,"_info");
+            Require(details.IsOpen && details.SelectedKey.Type==ItemID.Wood
+                && _drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood))==90 && InventoryAmount(ItemID.Wood)==10,
+                "native ordinary left click opens the recipe child page without withdrawing any stock");
+            Click(Field<UIElement>(details,"_back"));
+        });
         Step("install station through recipe-page slot", () =>
         {
             Require(UISystem.ActiveTerminalViewMode == TerminalViewMode.Craft

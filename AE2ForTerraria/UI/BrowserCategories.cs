@@ -24,7 +24,7 @@ internal static class BrowserCategories
         if (Icons.TryGetValue(category, out int icon)) return icon;
         icon = category.Name switch
         {
-            "全部" => ItemID.Book, "武器" => ItemID.IronBroadsword, "工具" => ItemID.IronPickaxe,
+            "全部" => ItemID.CopperShortsword, "武器" => ItemID.IronBroadsword, "工具" => ItemID.IronPickaxe,
             "盔甲" => ItemID.IronHelmet, "物块" => ItemID.Wood, "墙壁" => ItemID.StoneWall,
             "药水" => ItemID.LesserHealingPotion, "饰品" => ItemID.CloudinaBottle,
             "专家" => ItemID.DemonHeart, "钓鱼" => ItemID.WoodFishingPole,

@@ -111,7 +111,8 @@ internal sealed class UIBrowserDetails : UIElement
     private void Open()
     {
         if (IsOpen) return;
-        IsOpen = true; _entrance = 0; _host.Append(this); Arrange();
+        // Terminal action rows use the full reader width immediately, including on the first click.
+        IsOpen = true; _entrance = _plan == null ? 0 : 1; _host.Append(this); Arrange();
     }
     public void Close()
     {
