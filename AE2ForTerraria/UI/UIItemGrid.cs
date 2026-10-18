@@ -64,6 +64,7 @@ namespace AE2ForTerraria.UI
 		/// 否则方向键会被两边同时吃掉。
 		/// </summary>
 		public bool KeyboardEnabled = true;
+        public bool RecipeShortcutRequiresHover;
 
 		/// <summary>回车激活(参数是完整身份)。名字故意不叫 OnActivate —— 那是 UIElement 自己的激活回调。</summary>
 		public Action<ItemKey> OnActivated;
@@ -337,7 +338,7 @@ namespace AE2ForTerraria.UI
             HoveredKey = ItemKey.None;
 			RecalcLayout();
 
-			if (InputBlocked?.Invoke() != true) HandleKeyboard();
+			HandleKeyboard();
 
 			if (InputBlocked?.Invoke() == true || !ContainsPoint(Main.MouseScreen))
 			{
@@ -393,9 +394,9 @@ namespace AE2ForTerraria.UI
 		/// </summary>
 		private void HandleKeyboard()
 		{
-			var now = Microsoft.Xna.Framework.Input.Keyboard.GetState();
+			var now = RecipeShortcutRequiresHover ? Main.keyState : Microsoft.Xna.Framework.Input.Keyboard.GetState();
 
-			if (!KeyboardEnabled || EntryCount == 0)
+			if (!KeyboardEnabled || EntryCount == 0 || InputBlocked?.Invoke() == true)
 			{
 				_prevKeys = now;
 				return;
@@ -457,7 +458,15 @@ namespace AE2ForTerraria.UI
             {
                 OnUsed?.Invoke(ActiveKey); _prevKeys = now; return;
             }
-            else if (pressed(Microsoft.Xna.Framework.Input.Keys.Enter) || pressed(Microsoft.Xna.Framework.Input.Keys.R))
+            else if (pressed(Microsoft.Xna.Framework.Input.Keys.R))
+			{
+                int index = EntryIndexAt(Main.MouseScreen);
+                if (!RecipeShortcutRequiresHover) OnActivated?.Invoke(ActiveKey);
+                else if (index >= 0) OnActivated?.Invoke(KeyAt(index));
+                _prevKeys = now;
+                return;
+			}
+            else if (pressed(Microsoft.Xna.Framework.Input.Keys.Enter))
 			{
 				OnActivated?.Invoke(ActiveKey);
 				_prevKeys = now;

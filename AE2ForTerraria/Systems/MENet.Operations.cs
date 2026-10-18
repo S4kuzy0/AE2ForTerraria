@@ -16,6 +16,7 @@ public static partial class MENet
 
     public static bool CursorPending;
     internal const byte ClientDepositCursor = (MessageTag << ProtocolShift) | 52;
+    internal const byte ClientWithdrawCursor = (MessageTag << ProtocolShift) | 53;
     private static long _cursorSequence, _pendingCursor;
     private static Player _pendingCursorPlayer;
     private static readonly Dictionary<int, long> LastCursorRequest = new();
@@ -77,12 +78,28 @@ public static partial class MENet
         packet.Write(request); packet.Send();
     }
 
+    internal static void WithdrawCursor(Point16 position, ItemKey key)
+    {
+        if (!Main.mouseItem.IsAir || key.IsAir) return;
+        long request = BeginCursorTransaction();
+        if (request == 0) return;
+        Main.LocalPlayer.inventory[58] = Main.mouseItem;
+        NetMessage.SendData(MessageID.SyncEquipment, -1, -1, null, Main.myPlayer, 58);
+        var packet = CreatePacket(); packet.Write(ClientWithdrawCursor); packet.Write(position.X); packet.Write(position.Y);
+        packet.Write(request); WriteKey(packet, key); packet.Send();
+    }
+
+    private static bool IsCursorTerminal(Point16 position)
+    {
+        if (!WorldGen.InWorld(position.X,position.Y,0)) return false;
+        int type = Main.tile[position.X,position.Y].HasTile ? MachineTiles.CanonicalType(Main.tile[position.X,position.Y].TileType) : -1;
+        return type == Terraria.ModLoader.ModContent.TileType<MEAccessTerminalTile>()
+            || type == Terraria.ModLoader.ModContent.TileType<MECraftingTerminalTile>();
+    }
+
     internal static long ApplyCursorDeposit(Point16 position, Player player)
     {
-        if (!WorldGen.InWorld(position.X,position.Y,0)) return 0;
-        int type = Main.tile[position.X,position.Y].HasTile ? MachineTiles.CanonicalType(Main.tile[position.X,position.Y].TileType) : -1;
-        if (type != Terraria.ModLoader.ModContent.TileType<MEAccessTerminalTile>()
-            && type != Terraria.ModLoader.ModContent.TileType<MECraftingTerminalTile>()) return 0;
+        if (!IsCursorTerminal(position)) return 0;
         return MENetwork.Deposit(MENetwork.CollectStorage(position.X,position.Y),player.inventory[58]);
     }
 
@@ -95,10 +112,30 @@ public static partial class MENet
             if (request <= 0 || LastCursorRequest.TryGetValue(who, out long previous) && request <= previous) return;
             LastCursorRequest[who] = request;
             int slot = 0; bool station = false, right = false;
+            ItemKey key = ItemKey.None;
             if (message == ClientSlotAction)
             { slot = reader.ReadInt32(); station = reader.ReadBoolean(); right = reader.ReadBoolean(); }
+            else if (message == ClientWithdrawCursor) key = ReadKey(reader);
+            if (reader.BaseStream.Position != reader.BaseStream.Length)
+                throw new InvalidDataException("Trailing cursor request data");
             if (!CheckPermission(message,position,who)) return;
             if (message == ClientSlotAction) ApplySlot(position,slot,station,right,who);
+            else if (message == ClientWithdrawCursor)
+            {
+                if (!IsCursorTerminal(position)) return;
+                Point16 anchor = AnchorOf(position);
+                if (NetworkRegistry.IsLocked(anchor, key.Type)
+                    && NetworkRegistry.GetLevel(anchor, Main.player[who].name) < NetworkRegistry.LevelManage)
+                { Deny(who); return; }
+                int moved = StorageOperations.WithdrawToCursor(MENetwork.CollectStorage(position.X, position.Y),
+                    key, ref Main.player[who].inventory[58]);
+                if (moved > 0)
+                {
+                    NetMessage.SendData(MessageID.SyncEquipment, -1, -1, null, who, 58);
+                    SendNetworkLedgers(position.X, position.Y);
+                    AuditWithdraw(position, who, key, moved);
+                }
+            }
             else
             {
                 var preview = StorageOperations.PreviewDeposit(MENetwork.CollectStorage(position.X, position.Y), Main.player[who].inventory[58]);

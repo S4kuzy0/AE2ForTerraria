@@ -94,6 +94,21 @@ public static class StorageOperations
         return moved;
     }
 
+    /// <summary>Prepare the exact native item before debiting storage; never overwrite an occupied cursor.</summary>
+    internal static int WithdrawToCursor(List<IMEStorage> storage, ItemKey key, ref Item cursor)
+    {
+        if (Main.netMode == NetmodeID.MultiplayerClient || cursor == null || !cursor.IsAir
+            || storage == null || key.IsAir || !SavedItemGuard.IsValidType(key.Type)
+            || !storage.Exists(unit => unit.Ledger.GetAmount(key) > 0)) return 0;
+        Item output = key.CreateItem();
+        if (output.IsAir) return 0;
+        int taken = (int)MENetwork.TryWithdraw(storage, key, Math.Max(1, output.maxStack));
+        if (taken <= 0) return 0;
+        output.stack = taken;
+        cursor = output;
+        return taken;
+    }
+
     public static long Withdraw(List<IMEStorage> storage, ItemKey key, long amount, Player player, bool ground = false)
     {
         if (storage == null || key.IsAir || amount <= 0 || player == null || !SavedItemGuard.IsValidType(key.Type)) return 0;

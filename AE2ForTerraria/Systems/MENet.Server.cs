@@ -21,7 +21,7 @@ namespace AE2ForTerraria.Systems
 		private static void HandleOnServer(byte message, Point16 position, BinaryReader reader, int whoAmI)
 		{
 			if (message==ClientPlayerState) { ReceivePlayerState(reader,whoAmI); return; }
-            if (message==ClientDepositCursor || message==ClientSlotAction) { HandleCursorRequest(message,position,reader,whoAmI); return; }
+            if (message==ClientDepositCursor || message==ClientWithdrawCursor || message==ClientSlotAction) { HandleCursorRequest(message,position,reader,whoAmI); return; }
             if (message==ClientUpgradeStorageUnit) { HandleStorageUpgrade(position,reader,whoAmI); return; }
             if (message==ClientInventoryDeposit) { HandleInventoryDeposit(position,reader,whoAmI); return; }
             if (message==ClientDepositAll || message==ClientDepositScope) return; // Retired: no captured slots or completion identity.

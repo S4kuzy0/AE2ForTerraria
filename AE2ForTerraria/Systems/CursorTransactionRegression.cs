@@ -204,6 +204,78 @@ internal static class CursorTransactionRegression
             check(!MENet.CursorPending && Main.mouseItem.type == ItemID.StoneBlock,
                 "unsolicited cursor acknowledgement cannot replace the held item when no operation is pending");
 
+            storage.Ledger.MaxAmountPerType = int.MaxValue;
+            storage.Ledger.Insert(wood, 20000);
+            long occupied = Begin(new Item(ItemID.Gel, 7));
+            Reply(Execute(Request(MENet.ClientWithdrawCursor, terminal, occupied, key:wood)));
+            check(Main.mouseItem.type == ItemID.Gel && Main.mouseItem.stack == 7 && storage.Ledger.GetAmount(wood)==20000,
+                "cursor withdrawal refuses an occupied authoritative cursor without destroying either item");
+            long pickup = Begin(new Item());
+            byte[] pickupRequest = Request(MENet.ClientWithdrawCursor, terminal, pickup, key:wood);
+            byte[] pickupAck = Execute(pickupRequest);
+            int stack = new Item(ItemID.Wood).maxStack;
+            check(server.inventory[58].type==ItemID.Wood && server.inventory[58].stack==stack
+                && storage.Ledger.GetAmount(wood)==20000-stack,
+                "server cursor pickup debits at most one native stack instead of spawning a world drop");
+            Reply(pickupAck);
+            check(!MENet.CursorPending && Main.mouseItem.stack==stack && client.inventory[58].stack==stack
+                && Main.clientPlayer.inventory[58].stack==stack,
+                "authoritative cursor pickup publishes the actual held stack and both native mirrors");
+            server.inventory[58]=new Item(); Reply(Execute(pickupRequest));
+            check(server.inventory[58].IsAir && storage.Ledger.GetAmount(wood)==20000-stack && Main.mouseItem.stack==stack,
+                "duplicate pickup nonce cannot take another stack or replace the completed client cursor");
+            long broken = Begin(new Item());
+            Reply(Execute(Request(MENet.ClientWithdrawCursor,terminal,broken,key:wood)[..^1]));
+            check(!MENet.CursorPending && Main.mouseItem.IsAir && storage.Ledger.GetAmount(wood)==20000-stack,
+                "truncated pickup identity returns its own completion without debiting storage");
+            long trailing = Begin(new Item());
+            Reply(Execute(Request(MENet.ClientWithdrawCursor,terminal,trailing,key:wood).Concat(new byte[]{1}).ToArray()));
+            check(!MENet.CursorPending && Main.mouseItem.IsAir && storage.Ledger.GetAmount(wood)==20000-stack,
+                "trailing cursor intent bytes are rejected before storage mutation");
+            long wrongDevice = Begin(new Item());
+            Reply(Execute(Request(MENet.ClientWithdrawCursor,storage.Position,wrongDevice,key:wood)));
+            check(Main.mouseItem.IsAir && storage.Ledger.GetAmount(wood)==20000-stack,
+                "cursor pickup intent cannot address a nonterminal storage device");
+            var anchor = MENetwork.CanonicalAnchor(MENetwork.Collect(terminal.X,terminal.Y));
+            server.name="CursorRegressionVisitor";
+            long noPermission=Begin(new Item());
+            Reply(Execute(Request(MENet.ClientWithdrawCursor,terminal,noPermission,key:wood)));
+            check(!MENet.CursorPending && Main.mouseItem.IsAir && storage.Ledger.GetAmount(wood)==20000-stack,
+                "cursor pickup permission refusal preserves storage and completes its request");
+            NetworkRegistry.SetLevel(anchor,server.name,NetworkRegistry.LevelUse);
+            NetworkRegistry.SetLocked(anchor,ItemID.Wood,true);
+            long locked=Begin(new Item());
+            Reply(Execute(Request(MENet.ClientWithdrawCursor,terminal,locked,key:wood)));
+            check(Main.mouseItem.IsAir && storage.Ledger.GetAmount(wood)==20000-stack,
+                "a use-level visitor cannot pick up a locked network item through the new cursor intent");
+            server.name=client.name;
+            var prefixed=ItemKey.FromItem(new Item(ItemID.CopperShortsword,1,PrefixID.Legendary));
+            storage.Ledger.Insert(prefixed,2);
+            long prefixPickup=Begin(new Item());
+            Reply(Execute(Request(MENet.ClientWithdrawCursor,terminal,prefixPickup,key:prefixed)));
+            check(ItemKey.FromItem(Main.mouseItem).Equals(prefixed) && Main.mouseItem.stack==1
+                && storage.Ledger.GetAmount(prefixed)==1,
+                "cursor pickup preserves the exact prefixed item identity and its native nonstackable limit");
+
+            var customSaved = Terraria.ModLoader.IO.ItemIO.Save(new Item(ItemID.Wood));
+            customSaved["globalData"] = new List<Terraria.ModLoader.IO.TagCompound>
+            {
+                new() { ["mod"]="AE2RegressionMissingGlobal", ["name"]="CursorState",
+                    ["data"]=new Terraria.ModLoader.IO.TagCompound { ["charge"]=27 } }
+            };
+            var customKey = ItemKey.FromItem(Terraria.ModLoader.IO.ItemIO.Load(customSaved));
+            storage.Ledger.Insert(customKey,3);
+            var customCursor = new Item();
+            Main.netMode=NetmodeID.MultiplayerClient;
+            check(StorageOperations.WithdrawToCursor(new(){storage},customKey,ref customCursor)==0
+                && storage.Ledger.GetAmount(customKey)==3 && customCursor.IsAir,
+                "a multiplayer client cannot debit storage locally for cursor pickup");
+            Main.netMode=NetmodeID.SinglePlayer;
+            check(StorageOperations.WithdrawToCursor(new(){storage},customKey,ref customCursor)==3
+                && customKey.Data!=null && ItemKey.FromItem(customCursor).Equals(customKey)
+                && storage.Ledger.GetAmount(customKey)==0,
+                "cursor pickup retains serialized custom data instead of reconstructing a type-only item");
+
             SecuritySnapshotChecks(check, drive.Position, server, client, sink);
         }
         finally
@@ -317,11 +389,13 @@ internal static class CursorTransactionRegression
         return (owner, acl, audit, locks);
     }
 
-    private static byte[] Request(byte message, Point16 position, long nonce, int slot = 0, bool station = false, bool right = false)
+    private static byte[] Request(byte message, Point16 position, long nonce, int slot = 0, bool station = false, bool right = false, ItemKey key = default)
     {
         using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream);
         writer.Write(message); writer.Write(position.X); writer.Write(position.Y); writer.Write(nonce);
         if (message == MENet.ClientSlotAction) { writer.Write(slot); writer.Write(station); writer.Write(right); }
+        if (message == MENet.ClientWithdrawCursor)
+        { writer.Write(key.Type); writer.Write(key.Prefix); writer.Write(key.Data ?? string.Empty); }
         return stream.ToArray();
     }
 }

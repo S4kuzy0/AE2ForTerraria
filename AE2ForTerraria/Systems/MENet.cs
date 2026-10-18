@@ -28,7 +28,7 @@ namespace AE2ForTerraria.Systems
 
 	{
         // Explicit envelope allows future protocol versions without exhausting message ID bits.
-        public const ushort ProtocolVersion = 7;
+        public const ushort ProtocolVersion = 8;
         private const byte MessageTag = 3;
         public const byte ClientJobPause = (MessageTag << ProtocolShift) | 47;
         public const byte ServerTerminalStations = (MessageTag << ProtocolShift) | 48;

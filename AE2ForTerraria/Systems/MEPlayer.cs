@@ -16,6 +16,14 @@ namespace AE2ForTerraria.Systems
 	/// </summary>
 	public class MEPlayer : ModPlayer
 	{
+        public override void SetControls()
+        {
+            if (Player.whoAmI == Main.myPlayer && Main.keyState.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.R)
+                && AEUiSession.FocusedInterface?.CurrentState is global::AE2ForTerraria.UI.TerminalUIState terminal
+                && terminal.RecipeShortcutHovered)
+                Player.controlMount = false;
+        }
+
         public override bool ShiftClickSlot(Item[] inventory, int context, int slot)
         {
             if (Player.whoAmI != Main.myPlayer || !ReferenceEquals(inventory, Player.inventory) || slot < 0 || slot >= 50

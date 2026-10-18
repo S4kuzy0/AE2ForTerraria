@@ -73,6 +73,7 @@ public sealed class PlayerJourneyRegression : ModSystem
     private IDisposable _browserPreferences;
     private bool _favoriteModifier;
     private int _altInputFrames;
+    private int _recipeKeyFrames;
 
     private delegate void InputHook(Action original);
     private delegate void MainInputHook(Action<Main> original, Main self);
@@ -123,7 +124,9 @@ public sealed class PlayerJourneyRegression : ModSystem
             // Inject modifiers at that actual boundary, only in the isolated world.
             if (_enabled && !_done && !_saving && IsSandbox() && !Main.gameMenu)
             {
-                Main.keyState = _favoriteModifier ? new KeyboardState(Keys.LeftAlt) : new KeyboardState();
+                Main.keyState = _favoriteModifier ? new KeyboardState(Keys.LeftAlt)
+                    : _recipeKeyFrames > 0 ? new KeyboardState(Keys.R) : new KeyboardState();
+                if (_recipeKeyFrames > 0) _recipeKeyFrames--;
                 if (_favoriteModifier && ++_altInputFrames == 1) Mod.Logger.Info("AE2 JOURNEY ALT: injected after native HandleInput keyboard refresh");
             }
         }));
@@ -712,12 +715,37 @@ public sealed class PlayerJourneyRegression : ModSystem
             _capture="05c-unified-terminal-catalogue";
             ClickGrid(grid,ItemID.Wood);
         });
-        Step("check ordinary stored-item click and return to catalogue", () =>
+        Step("check cursor pickup and place into native backpack", () =>
+        {
+            var details=Field<UIBrowserDetails>(UISystem.TerminalState,"_info");
+            Require(!details.IsOpen && Main.mouseItem.type==ItemID.Wood && Main.mouseItem.stack==90
+                && _drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood))==0 && InventoryAmount(ItemID.Wood)==10,
+                "native ordinary terminal click takes the actual stored Wood onto the mouse cursor");
+            Require(Main.LocalPlayer.inventory[25].IsAir,"native destination backpack slot is empty");
+            bool left=Main.mouseLeft, released=Main.mouseLeftRelease;
+            try
+            {
+                Main.mouseLeft=Main.mouseLeftRelease=true;
+                using var owned=AEUiSession.EnterOwnedInput();
+                ItemSlot.LeftClick(Main.LocalPlayer.inventory,0,25);
+            }
+            finally { Main.mouseLeft=left;Main.mouseLeftRelease=released; }
+            Require(Main.mouseItem.IsAir && Main.LocalPlayer.inventory[25].stack==90,
+                "native backpack left click accepts the terminal cursor stack");
+            NativePick(25);
+            Method(typeof(TerminalUIState),"DepositHeldItem").Invoke(UISystem.TerminalState,null);
+            Require(Main.mouseItem.IsAir && _drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood))==90
+                && InventoryAmount(ItemID.Wood)==10,"pickup, backpack placement and deposit conserve exact inventory");
+            var grid=Field<UIItemGrid>(UISystem.TerminalState,"_grid");
+            ClickGrid(grid,ItemID.Wood);_clickFrames=0;_clickTarget=null;
+            _recipeKeyFrames=3;
+        });
+        Step("check native R recipe shortcut and return", () =>
         {
             var details=Field<UIBrowserDetails>(UISystem.TerminalState,"_info");
             Require(details.IsOpen && details.SelectedKey.Type==ItemID.Wood
-                && _drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood))==90 && InventoryAmount(ItemID.Wood)==10,
-                "native ordinary left click opens the recipe child page without withdrawing any stock");
+                && _drive.Ledger.GetAmount(ItemKey.Crafted(ItemID.Wood))==90 && Main.mouseItem.IsAir,
+                "R in the actual input loop opens the hovered recipe without moving stored items");
             Click(Field<UIElement>(details,"_back"));
         });
         Step("install station through recipe-page slot", () =>

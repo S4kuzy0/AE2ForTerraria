@@ -222,18 +222,19 @@ namespace AE2ForTerraria.UI
 					return;
 				}
 
-				// Alt is reserved for native-style favorites; Shift still withdraws a stack.
+				// Alt favorites and Shift quick-transfer keep their existing native shortcuts.
 				if (IsShiftDown())
 				{
                     _selected = _grid.HoveredKey;
 					Withdraw(OverrideStack());
                     return;
 				}
-                Select(_grid.HoveredKey);
+                TakeToCursor(_grid.HoveredKey);
 			};
+			_grid.RecipeShortcutRequiresHover = true;
 			_grid.OnActivated = key => Select(key);
             _grid.OnUsed = key => _info.Show(key, _orderQuantity, uses: true);
-            // Double clicks deliberately have no transfer action. Plain clicks open details.
+            // A second click deposits the held stack; double-click never withdraws everything.
 
 			Window.Append(_grid);
             _scrollBar = new UIGridScrollBar { Target = _grid }; Window.Append(_scrollBar);
@@ -1077,6 +1078,20 @@ namespace AE2ForTerraria.UI
             UIStatus.Toast("已取出 " + taken + " 件；未取出的余量仍在网络中");
         }
 
+        internal bool RecipeShortcutHovered => !_searchFocused && !_quantityTyping && _grid != null
+            && _grid.InputBlocked?.Invoke() != true && _grid.HasEntryAt(AEUiSession.PointerPosition);
+
+        private void TakeToCursor(ItemKey key)
+        {
+            if (!UISystem.TerminalCanUse || MENet.CursorPending || MENet.InventoryTransactionPending
+                || Main.LocalPlayer.HasLockedInventory() || !Main.mouseItem.IsAir || !CanTakeLocally(key)) return;
+            if (Main.netMode == NetmodeID.MultiplayerClient)
+            { MENet.WithdrawCursor(UISystem.ActiveTerminalPos, key); return; }
+            int taken = StorageOperations.WithdrawToCursor(UISystem.ActiveNetwork, key, ref Main.mouseItem);
+            if (taken <= 0) return;
+            Main.LocalPlayer.inventory[58] = Main.mouseItem;
+            AfterNetworkChange();
+        }
 		private static int MaxStackOf(int type)
 		{
 			return SavedItemGuard.MaxStackOf(type);
@@ -1362,7 +1377,7 @@ namespace AE2ForTerraria.UI
 
 				int recipes = StorageSystem.Recipes.GetRecipesFor(ItemKey.Crafted(key.Type)).Count;
                 if (!IsAccess) return _availability.Catalogue.IsCraftable(key.Type)
-                    ? "完整合成树已满足 · 左键查看配方；Shift＋左键取出一叠" : "左键查看配方与缺料；Shift＋左键取出一叠";
+                    ? "完整合成树已满足 · 左键拿起物品；R 查看配方；Shift＋左键快速取出" : "左键拿起已储存物品；R 查看配方与缺料；Shift＋左键快速取出";
 				return recipes > 0
 					? ModText.Get("LblRecipeCount", "配方数量") + ": " + recipes
 					: ModText.Get("LblNoRecipeShort", "无配方(只能靠掉落/商店)");

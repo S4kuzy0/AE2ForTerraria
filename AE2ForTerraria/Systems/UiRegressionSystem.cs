@@ -479,32 +479,66 @@ public sealed class UiRegressionSystem : ModSystem
     {
         var state = NewTerminal(TerminalViewMode.Craft);
         var grid = Field<UIItemGrid>(state,"_grid");
+        var drive = UISystem.ActiveNetwork.OfType<MEDiskDriveEntity>().First();
+        var stock = drive.Ledger.Copy(); var player = Main.LocalPlayer;
+        var inventory = player.inventory.Select(item => item?.Clone()).ToArray();
         int x = Main.mouseX, y = Main.mouseY;
         var keys = Main.keyState; var cursor = Main.mouseItem;
+        bool left = Main.mouseLeft, released = Main.mouseLeftRelease;
+        var wood = ItemKey.Crafted(ItemID.Wood);
         try
         {
             Main.keyState = new Microsoft.Xna.Framework.Input.KeyboardState(); Main.mouseItem = new Item();
-            grid.SetKeys(new List<ItemKey> { ItemKey.Crafted(ItemID.Wood) }); grid.Recalculate();
+            grid.SetKeys(new List<ItemKey> { wood }); grid.Recalculate();
             var point = grid.GetDimensions().Position() + new Vector2(16,16);
-            Main.mouseX = (int)point.X; Main.mouseY = (int)point.Y;
-            grid.Update(new GameTime());
-            long before = UISystem.GetStoredAmount(ItemKey.Crafted(ItemID.Wood));
+            Main.mouseX = (int)point.X; Main.mouseY = (int)point.Y; grid.Update(new GameTime());
+            long before = UISystem.GetStoredAmount(wood);
             grid.LeftClick(new UIMouseEvent(grid,point));
             var details = Field<UIBrowserDetails>(state,"_info");
-            Assert(details.IsOpen && Field<UIElement>(state,"_orderButton").Parent == details
-                && Field<UIElement>(state,"_takeButton").Parent == details,
-                "ordinary left click opens the existing child page with both craft and withdrawal actions");
+            int held = Main.mouseItem.stack;
+            Assert(!details.IsOpen && Main.mouseItem.type == ItemID.Wood && held > 0
+                && held <= Main.mouseItem.maxStack && UISystem.GetStoredAmount(wood) == before-held
+                && ReferenceEquals(player.inventory[58], Main.mouseItem),
+                "ordinary terminal click takes an exact native stack onto the cursor without opening details");
+            player.inventory[45] = new Item(); Main.mouseLeft = Main.mouseLeftRelease = true;
+            Terraria.UI.ItemSlot.LeftClick(player.inventory, 0, 45);
+            Assert(Main.mouseItem.IsAir && player.inventory[45].type == ItemID.Wood && player.inventory[45].stack == held,
+                "native inventory left click places the actual terminal cursor stack into the backpack");
+            Main.mouseLeft = Main.mouseLeftRelease = true;
+            Terraria.UI.ItemSlot.LeftClick(player.inventory, 0, 45);
+            Invoke(state,"DepositHeldItem");
+            Assert(Main.mouseItem.IsAir && UISystem.GetStoredAmount(wood) == before,
+                "native backpack pickup and terminal cursor deposit conserve all stored items");
+            grid.SetKeys(new List<ItemKey>{wood}); grid.Update(new GameTime());
+            Main.keyState = new Microsoft.Xna.Framework.Input.KeyboardState(Microsoft.Xna.Framework.Input.Keys.R);
+            grid.Update(new GameTime()); state.Update(new GameTime());
+            Assert(details.IsOpen && details.SelectedKey.Equals(wood) && Main.mouseItem.IsAir
+                && UISystem.GetStoredAmount(wood) == before,
+                "R over the current terminal item opens its recipe without transferring inventory");
             var grip=WindowField<UIResizeGrip>(state,"_grip");
             Assert(ReferenceEquals(WindowField<UIWindowPanel>(state,"<Window>k__BackingField").GetElementAt(grip.GetDimensions().Center()),grip),
-                "opened terminal recipe child page leaves the actual resize grip in front for native hit testing");
-            grid.LeftClick(new UIMouseEvent(grid,point));
-            Assert(grid.OnDoubleClicked == null && UISystem.GetStoredAmount(ItemKey.Crafted(ItemID.Wood)) == before && Main.mouseItem.IsAir,
-                "two consecutive plain left clicks never withdraw or consume a stored stack");
-            Invoke(details,"Back");
-            Assert(!details.IsOpen && Field<UIElement>(state,"_grid").Parent != null,
-                "unified child page returns directly to its unchanged catalogue");
+                "terminal recipe child page leaves its actual resize grip in front");
+            Invoke(details,"Back"); Main.keyState = new Microsoft.Xna.Framework.Input.KeyboardState(); grid.Update(new GameTime());
+            Main.mouseX=0;Main.mouseY=0;Main.keyState=new Microsoft.Xna.Framework.Input.KeyboardState(Microsoft.Xna.Framework.Input.Keys.R);
+            grid.Update(new GameTime());
+            Assert(!details.IsOpen,"R outside the item grid cannot reopen a stale selected recipe");
+            Main.keyState=new Microsoft.Xna.Framework.Input.KeyboardState();grid.Update(new GameTime());
+            Main.mouseX=(int)point.X;Main.mouseY=(int)point.Y;grid.KeyboardEnabled=false;
+            Main.keyState=new Microsoft.Xna.Framework.Input.KeyboardState(Microsoft.Xna.Framework.Input.Keys.R);grid.Update(new GameTime());
+            Assert(!details.IsOpen,"text-entry keyboard ownership prevents the terminal R shortcut");
+            Main.keyState=new Microsoft.Xna.Framework.Input.KeyboardState(); grid.KeyboardEnabled=true;grid.Update(new GameTime());
+            grid.LeftClick(new UIMouseEvent(grid,point));grid.LeftClick(new UIMouseEvent(grid,point));
+            Assert(!details.IsOpen && Main.mouseItem.IsAir && UISystem.GetStoredAmount(wood)==before,
+                "consecutive terminal clicks take then deposit the cursor stack without withdrawing all or opening details");
+            Assert(grid.OnDoubleClicked==null,"terminal has no double-click withdraw-all binding");
         }
-        finally { Main.mouseX=x; Main.mouseY=y; Main.keyState=keys; Main.mouseItem=cursor; }
+        finally
+        {
+            drive.Ledger.ReplaceContents(stock);
+            for(int i=0;i<inventory.Length;i++) player.inventory[i]=inventory[i];
+            Main.mouseX=x;Main.mouseY=y;Main.keyState=keys;Main.mouseItem=cursor;
+            Main.mouseLeft=left;Main.mouseLeftRelease=released;UISystem.RefreshNetwork();
+        }
     }
     private void ValidateNativeTransferAndCaches()
     {
