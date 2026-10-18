@@ -11,10 +11,10 @@ namespace AE2ForTerraria.Content.Items
 		/// <summary>Disks no longer charge bytes; retained for capacity compatibility with fixed storage units.</summary>
 		public virtual long CapacityBytes => long.MaxValue;
 
-		/// <summary>Logical identity capacity; physical dictionaries and snapshots remain resource bounded.</summary>
+		/// <summary>Base item type capacity; physical dictionaries and snapshots remain resource bounded.</summary>
 		public abstract long CapacityTypes { get; }
 
-		/// <summary>Each item identity can hold this quantity, independent of other identities.</summary>
+		/// <summary>All identities of one base item type share this quantity limit; actual identities stay separate.</summary>
 		public virtual long CapacityPerType => int.MaxValue;
 	}
 }

@@ -52,6 +52,8 @@ namespace AE2ForTerraria.UI
 		/// 0 = 按类型(默认)  1 = 按名称  2 = 数量从多到少  3 = 带词缀的排前面
 		/// </summary>
 		private static int SharedSortMode;
+        private static bool SharedDescending;
+        private bool _builtDescending;
 
 		private UITextPanel<string> _sortButton;
 
@@ -82,7 +84,8 @@ namespace AE2ForTerraria.UI
 
 			_grid = new UIItemGrid
 			{
-				CountProvider = key => _storage?.Ledger.GetAmount(key) ?? 0,
+				InputBlocked = () => UIChoiceMenu.IsOpen,
+                CountProvider = key => _storage?.Ledger.GetAmount(key) ?? 0,
 
 				// 锁定标记:和终端用同一套角标
 				BadgeProvider = key => _anchor.X >= 0 && NetworkRegistry.IsLocked(_anchor, key.Type)
@@ -151,9 +154,12 @@ namespace AE2ForTerraria.UI
 			_sortButton = new UIButton(SortLabel(), 0.72f, false);
 			_sortButton.OnLeftClick += (evt, element) =>
 			{
-				SharedSortMode = (SharedSortMode + 1) % 4;
-				_sortButton.SetText(SortLabel());
-				Refresh();
+                UIChoiceMenu.Show(this,_sortButton,new[]{"默认","名称","数量","词缀优先",
+                    SharedDescending ? "正序" : "正序（当前）", SharedDescending ? "倒序（当前）" : "倒序"},(index,_) =>
+                {
+                    if(index < 4) SharedSortMode = index; else SharedDescending = index == 5;
+                    _sortButton.SetText(SortLabel()); Refresh();
+                },SharedSortMode);
 			};
 			Append(_sortButton);
 		}
@@ -247,7 +253,7 @@ namespace AE2ForTerraria.UI
 			_lastQuery = query;
 
 			bool sameAsBuilt = _builtVersion == _storage.Ledger.Version
-				&& _builtSortMode == SharedSortMode
+				&& _builtSortMode == SharedSortMode && _builtDescending == SharedDescending
 				&& string.Equals(_builtQuery, query, System.StringComparison.Ordinal);
 
 			if (!sameAsBuilt)
@@ -274,7 +280,7 @@ namespace AE2ForTerraria.UI
 
 				_builtVersion = _storage.Ledger.Version;
 				_builtQuery = query;
-				_builtSortMode = SharedSortMode;
+				_builtSortMode = SharedSortMode; _builtDescending = SharedDescending;
 			}
 
 			if (_items.Count == 0)
@@ -293,16 +299,17 @@ namespace AE2ForTerraria.UI
 
 		private string SortLabel()
 		{
-			return SharedSortMode switch
+			return (SharedSortMode switch
 			{
 				1 => ModText.Get("SortName", "排序: 名称"),
 				2 => ModText.Get("SortCount", "排序: 数量"),
 				3 => ModText.Get("SortPrefixed", "排序: 词缀优先"),
 				_ => ModText.Get("SortDefault", "排序: 默认")
-			};
+			}) + (SharedDescending ? " ↓" : " ↑");
 		}
 
-		private void SortItems()
+		private static int Direction(int value) => SharedDescending ? -Math.Sign(value) : value;
+        private void SortItems()
 		{
 			_items.Sort((a, b) =>
 			{
@@ -315,7 +322,7 @@ namespace AE2ForTerraria.UI
 
 						if (byName != 0)
 						{
-							return byName;
+							return Direction(byName);
 						}
 
 						break;
@@ -328,7 +335,7 @@ namespace AE2ForTerraria.UI
 
 						if (amountA != amountB)
 						{
-							return amountB.CompareTo(amountA);
+							return Direction(amountA.CompareTo(amountB));
 						}
 
 						break;
@@ -342,7 +349,7 @@ namespace AE2ForTerraria.UI
 
 						if (prefixedA != prefixedB)
 						{
-							return prefixedA ? -1 : 1;
+							return Direction(prefixedA ? -1 : 1);
 						}
 
 						break;
@@ -350,7 +357,7 @@ namespace AE2ForTerraria.UI
 				}
 
 				int byType = a.Type.CompareTo(b.Type);
-				return byType != 0 ? byType : a.Prefix.CompareTo(b.Prefix);
+				return Direction(byType != 0 ? byType : a.Prefix.CompareTo(b.Prefix));
 			});
 		}
 

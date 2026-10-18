@@ -28,6 +28,20 @@ namespace AE2ForTerraria.UI
         public Func<ItemKey, bool> IsFavorite;
         public Func<ItemKey, bool> IsCraftable;
         public int Revision { get; private set; }
+        public Func<int,int> GroupOf;
+        public Func<int,string> GroupLabel;
+        public bool ProgressionTooltip;
+        private readonly List<(int first,int count,int group)> _rows = new();
+        private int[] _entryRows = Array.Empty<int>();
+        private int _rowsRevision = -1, _rowsColumns;
+        private Func<int,int> _rowsGroup;
+        private int RowOf(int index) => GroupOf == null ? index / Columns : _entryRows[index];
+        private int FirstInRow(int row)
+        {
+            if(GroupOf == null) return Math.Min(EntryCount - 1, row * Columns);
+            for(int i = row; i < _rows.Count; i++) if(_rows[i].count > 0) return _rows[i].first;
+            return EntryCount - 1;
+        }
 
 		private readonly List<int> _items = new List<int>();
 		private readonly List<ItemKey> _keys = new List<ItemKey>();
@@ -211,7 +225,7 @@ namespace AE2ForTerraria.UI
 				return;
 			}
 
-			if (!NpcMode) { BrowserHover.Item(HoveredKey); return; }
+			if (!NpcMode) { BrowserHover.Item(HoveredKey, ProgressionTooltip); return; }
 
             string title = NpcMode
 				? Systems.NpcIndex.GetName(HoveredType)
@@ -327,7 +341,24 @@ namespace AE2ForTerraria.UI
 			CalculatedStyle dims = GetDimensions();
 			Columns = Math.Max(1, (int)(dims.Width / CellWidth));
 			VisibleRows = Math.Max(1, (int)(dims.Height / CellHeight));
-			TotalRows = Math.Max(1, (int)Math.Ceiling(EntryCount / (double)Columns));
+			if (GroupOf != null && (_rowsRevision != Revision || _rowsColumns != Columns || _rowsGroup != GroupOf))
+            {
+                _rows.Clear(); _entryRows = new int[EntryCount];
+                int index = 0;
+                while(index < EntryCount)
+                {
+                    int group = GroupOf(TypeAt(index)); _rows.Add((-1,0,group));
+                    while(index < EntryCount && GroupOf(TypeAt(index)) == group)
+                    {
+                        int first = index, count = 0;
+                        while(index < EntryCount && count < Columns && GroupOf(TypeAt(index)) == group)
+                        { _entryRows[index++] = _rows.Count; count++; }
+                        _rows.Add((first,count,group));
+                    }
+                }
+                _rowsRevision = Revision; _rowsColumns = Columns; _rowsGroup = GroupOf;
+            }
+            TotalRows = Math.Max(1, GroupOf == null ? (int)Math.Ceiling(EntryCount / (double)Columns) : _rows.Count);
 
 			ClampScroll();
 		}
@@ -385,7 +416,9 @@ namespace AE2ForTerraria.UI
 			var dims = GetDimensions();
 			int col = (int)((point.X - dims.X) / CellWidth), row = (int)((point.Y - dims.Y) / CellHeight);
 			if (col < 0 || col >= Columns || row < 0 || row >= Math.Ceiling(dims.Height / CellHeight)) return -1;
-			int index = (_rowOffset + row) * Columns + col;
+			int displayRow = _rowOffset + row;
+            if (GroupOf != null && (displayRow >= _rows.Count || col >= _rows[displayRow].count)) return -1;
+            int index = GroupOf == null ? displayRow * Columns + col : _rows[displayRow].first + col;
 			return index >= 0 && index < EntryCount ? index : -1;
 		}
 
@@ -425,7 +458,7 @@ namespace AE2ForTerraria.UI
 
 			if (CursorIndex < 0)
 			{
-				CursorIndex = _rowOffset * Columns;
+				CursorIndex = FirstInRow(_rowOffset);
 			}
 
 			int columns = Math.Max(1, Columns);
@@ -492,7 +525,7 @@ namespace AE2ForTerraria.UI
 		/// <summary>把光标放到当前屏幕的第一行(PgUp/PgDn 之后用)。</summary>
 		private void MoveCursorToTopRow()
 		{
-			CursorIndex = _rowOffset * Columns;
+			CursorIndex = FirstInRow(_rowOffset);
 			ClampCursor();
 		}
 
@@ -504,7 +537,7 @@ namespace AE2ForTerraria.UI
 				return;
 			}
 
-			int row = CursorIndex / Columns;
+			int row = RowOf(CursorIndex);
 
 			if (row < _rowOffset)
 			{
@@ -523,22 +556,30 @@ namespace AE2ForTerraria.UI
 		{
             RecalcLayout();
 			CalculatedStyle dims = GetDimensions();
-			int perPage = Math.Max(1, (int)Math.Ceiling(dims.Height / CellHeight) * Columns);
-			int start = _rowOffset * Columns;
-
-			for (int i = 0; i < perPage; i++)
-			{
-				int index = start + i;
-				if (index >= EntryCount)
-				{
-					break;
-				}
-
-				int col = i % Columns;
-				int row = i / Columns;
-				var position = new Vector2(dims.X + col * CellWidth, dims.Y + row * CellHeight);
-				DrawSlot(spriteBatch, position, TypeAt(index), KeyAt(index));
-			}
+            int visible = (int)Math.Ceiling(dims.Height / CellHeight);
+            for(int row = _rowOffset; row < Math.Min(TotalRows, _rowOffset + visible); row++)
+            {
+                int first = row * Columns, count = Math.Min(Columns,EntryCount - first);
+                if(GroupOf != null)
+                {
+                    var display = _rows[row]; first = display.first; count = display.count; int group = display.group;
+                    if(count == 0)
+                    {
+                        var band = new Rectangle((int)dims.X + 2,(int)dims.Y + (row - _rowOffset) * CellHeight + 8,(int)dims.Width - 4,25);
+                        UITheme.Fill(spriteBatch,band,UITheme.Field);
+                        string label = GroupLabel?.Invoke(group) ?? group.ToString();
+                        while(label.Length > 1 && FontAssets.MouseText.Value.MeasureString(label).X * .65f > band.Width - 12) label = label[..^1];
+                        Utils.DrawBorderString(spriteBatch,label,new Vector2(band.X + 5,band.Y + 5),UITheme.Text,.65f);
+                        continue;
+                    }
+                }
+                for(int col = 0; col < count; col++)
+                {
+                    int index = first + col;
+                    var position = new Vector2(dims.X + col * CellWidth,dims.Y + (row - _rowOffset) * CellHeight);
+                    DrawSlot(spriteBatch,position,TypeAt(index),KeyAt(index));
+                }
+            }
 		}
 
         // UIElement clips children using the native UI transform and restores SpriteBatch state.
@@ -660,10 +701,10 @@ namespace AE2ForTerraria.UI
             {
                 // Draw after the item so a large sprite cannot cover the AE-style plus.
                 int x = box.X + 3, y = box.Y + 3;
-                UITheme.Fill(spriteBatch, new Rectangle(x, y + 2, 9, 5), Color.Black);
-                UITheme.Fill(spriteBatch, new Rectangle(x + 2, y, 5, 9), Color.Black);
-                UITheme.Fill(spriteBatch, new Rectangle(x + 1, y + 3, 7, 3), Color.White);
-                UITheme.Fill(spriteBatch, new Rectangle(x + 3, y + 1, 3, 7), Color.White);
+                UITheme.Fill(spriteBatch, new Rectangle(x, y + 3, 9, 3), Color.Black);
+                UITheme.Fill(spriteBatch, new Rectangle(x + 3, y, 3, 9), Color.Black);
+                UITheme.Fill(spriteBatch, new Rectangle(x + 1, y + 4, 7, 1), Color.White);
+                UITheme.Fill(spriteBatch, new Rectangle(x + 4, y + 1, 1, 7), Color.White);
             }
 		}
 	}

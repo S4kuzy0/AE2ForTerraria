@@ -78,6 +78,7 @@ namespace AE2ForTerraria.UI
 		private UITextPanel<string> _sortButton;
 		private UITextPanel<string> _ammoButton;
 		private int _sortMode;
+        private bool _sortDescending;
 		
 
 		public override bool SearchBoxFocused => _searchFocused || _quantityTyping;
@@ -162,7 +163,7 @@ namespace AE2ForTerraria.UI
                 IsFavorite = key => BrowserFavorites.Contains(key.Type),
                 IsCraftable = key => !IsAccess && key.Prefix == 0 && key.Data == null
                     && _availability.CanUse && _availability.Catalogue.IsCraftable(key.Type),
-                InputBlocked = () => _info?.BlocksPointer == true || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null,
+                InputBlocked = () => _info?.BlocksPointer == true || UIBossOrderPanel.IsOpen || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null,
                 CountProvider = key => UISystem.GetStoredAmount(key),
 
 				// 「维持库存」的物品在格子上标一个 ∞,不用点开就知道哪些在自动补货
@@ -470,7 +471,7 @@ namespace AE2ForTerraria.UI
         }
         public void ShowDetails(int type, bool uses = false) => _info.Show(ItemKey.Crafted(type), _orderQuantity, uses);
 
-        public bool CloseDetails() { if (!_info.IsOpen) return false; _info.Close(); return true; }
+        public bool CloseDetails() { if (UIBossOrderPanel.Close()) return true; if (!_info.IsOpen) return false; _info.Close(); return true; }
 
 		/// <summary>每次打开终端:重算锁定锚点并重建列表(角标要立刻正确)。</summary>
 		public override void OnActivate()
@@ -685,43 +686,34 @@ namespace AE2ForTerraria.UI
                 if(priority.Count>0) _availability.Catalogue.Prioritize(priority);
 			}
 
-			// 排序:收藏永远在最前,然后按所选模式
-			_filtered.Sort((a, b) =>
-			{
-				bool favA = BrowserFavorites.Contains(a.Type);
-				bool favB = BrowserFavorites.Contains(b.Type);
-				if (favA != favB)
-				{
-					return favA ? -1 : 1;
-				}
-
-				if (_sortMode == 1)
-				{
-					int byName = string.Compare(UIItemNames.Display(a), UIItemNames.Display(b),
-						StringComparison.OrdinalIgnoreCase);
-					if (byName != 0)
-					{
-						return byName;
-					}
-
-					return CompareKeys(a, b);
-				}
-
-				if (_sortMode == 2)
-				{
-					long amountA = UISystem.GetStoredAmount(a);
-					long amountB = UISystem.GetStoredAmount(b);
-					return amountA != amountB ? amountB.CompareTo(amountA) : CompareKeys(a, b);
-				}
-
-				return CompareKeys(a, b);
-			});
+            _filtered.Sort((a,b) =>
+            {
+                int Direction(int order) => _sortDescending ? -Math.Sign(order) : order;
+                if(_sortMode == 3)
+                {
+                    int left = StageOf(a.Type), right = StageOf(b.Type);
+                    if((left < 0) != (right < 0)) return left < 0 ? 1 : -1;
+                    if(left != right) return Direction(left.CompareTo(right));
+                }
+                bool favA = BrowserFavorites.Contains(a.Type), favB = BrowserFavorites.Contains(b.Type);
+                if(favA != favB) return favA ? -1 : 1;
+                int result = _sortMode switch
+                {
+                    1 => string.Compare(UIItemNames.Display(a),UIItemNames.Display(b),StringComparison.OrdinalIgnoreCase),
+                    2 => UISystem.GetStoredAmount(a).CompareTo(UISystem.GetStoredAmount(b)),
+                    _ => 0
+                };
+                return Direction(result != 0 ? result : CompareKeys(a,b));
+            });
+            _grid.GroupOf = _sortMode == 3 ? StageOf : null;
+            _grid.GroupLabel = tier => StorageSystem.Progression?.GetIntervalName(tier) ?? "阶段未知";
+            _grid.ProgressionTooltip = _sortMode == 3;
 
 			_grid.SetKeys(_filtered, resetPage);
 			UpdateStatus();
 		}
 
-		public override void OnDeactivate() { base.OnDeactivate(); _info?.Close(); ImeInput.Blur(); UIChoiceMenu.Close(); _searchFocused = _quantityTyping = false; }
+		public override void OnDeactivate() { base.OnDeactivate(); UIBossOrderPanel.Close(); _info?.Close(); ImeInput.Blur(); UIChoiceMenu.Close(); _searchFocused = _quantityTyping = false; }
         private static int CompareKeys(ItemKey a, ItemKey b)
 		{
 			int byType = a.Type.CompareTo(b.Type);
@@ -775,14 +767,9 @@ namespace AE2ForTerraria.UI
 				+ ModText.Get("LblStatusKinds", "种物品"));
 		}
 
-		private string SortLabel()
-		{
-			return _sortMode == 0
-				? ModText.Get("SortDefault", "排序: 默认")
-				: _sortMode == 1
-					? ModText.Get("SortName", "排序: 名称")
-					: ModText.Get("SortCount", "排序: 数量");
-		}
+        private static int StageOf(int type) => StorageSystem.Progression?.GetTierIndex(ItemKey.Crafted(type)) ?? -1;
+        private string SortLabel() => "排序：" + (_sortMode switch { 1 => "名称", 2 => "数量", 3 => "获取阶段", _ => "默认" })
+            + (_sortDescending ? " ↓" : " ↑");
 
 		private string QuantityLabel()
 		{
@@ -1059,10 +1046,12 @@ namespace AE2ForTerraria.UI
 
         private void ShowSortMenu()
         {
-            UIChoiceMenu.Show(Window, _sortButton, new[] { "默认", "名称", "数量" }, (index, _) =>
+            UIChoiceMenu.Show(Window, _sortButton, new[] { "默认", "名称", "数量", "获取阶段",
+                _sortDescending ? "正序" : "正序（当前）", _sortDescending ? "倒序（当前）" : "倒序", "调整 Boss 顺序" }, (index, _) =>
             {
-                if (_sortMode == index) return;
-                _sortMode = index; _sortButton.SetText(SortLabel()); RebuildList();
+                if(index == 6) { _searchFocused = _quantityTyping = false; ImeInput.Blur(); UIBossOrderPanel.Show(this,Window,() => RebuildList()); return; }
+                if(index < 4) _sortMode = index; else _sortDescending = index == 5;
+                _sortButton.SetText(SortLabel()); RebuildList();
             }, selectedIndex: _sortMode);
         }
 

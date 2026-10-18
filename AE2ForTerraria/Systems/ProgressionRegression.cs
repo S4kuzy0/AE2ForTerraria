@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using AE2ForTerraria.Core;
 using AE2ForTerraria.Progression;
@@ -17,6 +18,29 @@ internal static class ProgressionRegression
             var stages=new List<ProgressionTier>();
             check(new BossChecklistProvider().TryBuild(stages) && stages.Count>10 && stages.Exists(t=>t.NpcIds.Contains(NPCID.MoonLordCore))
                 && stages.Exists(t=>t.IsDowned!=null),"actual BossChecklist API supplies the standard vanilla and mod timeline with live defeat callbacks");
+        }
+        GameDataIndex.EnsureBuilt();
+        var live = StorageSystem.Progression;
+        if(live != null)
+        {
+            var sourceAnchors = new Dictionary<ItemKey,int>(); ProgressionSources.Anchor(live,sourceAnchors);
+            AE2ForTerraria.Instance.Logger.Info("AE2 PROGRESSION SOURCES: built=" + GameDataIndex.Built
+                + "; dungeonSpirit=" + string.Join(";",GameDataIndex.GetNpcDropRecords(NPCID.DungeonSpirit).Select(d=>d.ItemType+":"+string.Join(",",d.Conditions.Select(c=>c.GetType().FullName))))
+                + "; ectoplasm=" + sourceAnchors.GetValueOrDefault(ItemKey.Crafted(ItemID.Ectoplasm),-1)
+                + "; plantera=" + ProgressionSources.BossTier(live,NPCID.Plantera));
+            check(sourceAnchors.TryGetValue(ItemKey.Crafted(ItemID.Ectoplasm),out int ectoplasm)
+                && ectoplasm == ProgressionSources.BossTier(live,NPCID.Plantera),
+                "actual dungeon-spirit drop records anchor ectoplasm to the Plantera world change");
+            check(sourceAnchors.GetValueOrDefault(ItemKey.Crafted(ItemID.SoulofNight),-1)==ProgressionSources.BossTier(live,NPCID.WallofFlesh)
+                && sourceAnchors.GetValueOrDefault(ItemKey.Crafted(ItemID.SoulofLight),-1)==ProgressionSources.BossTier(live,NPCID.WallofFlesh),
+                "actual global soul drop conditions unlock light and night souls only after the Wall of Flesh");
+            var routes = ProgressionSources.MiningRoutes(live);
+            check(routes.Exists(r=>r.Item==ItemID.CobaltOre && r.Gate==ProgressionSources.BossTier(live,NPCID.WallofFlesh))
+                && routes.Exists(r=>r.Item==ItemID.ChlorophyteOre && r.Pick==200),
+                "actual ore routes retain both world-generation and mining-power requirements");
+            if(Terraria.ModLoader.ModLoader.HasMod("CalamityMod"))
+                check(routes.Single(r=>r.Item==ItemID.MythrilOre).Gate>=0,
+                    "loaded Calamity ore-rework configuration is readable without mutating its settings");
         }
         var recipes=Main.recipe; int count=Recipe.numRecipes;
         try
@@ -50,6 +74,22 @@ internal static class ProgressionRegression
             check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==2,"a later workstation prevents an early-material recipe from sorting before its unlock");
             graph=Graph(Recipe.Create(ItemID.Torch).AddIngredient(ItemID.Wood).AddCondition(new Condition("Mods.AE2ForTerraria.UnknownGate",()=>true)));
             check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))<0,"an opaque mod condition remains unknown instead of becoming a fabricated early unlock");
+            graph=Graph(Recipe.Create(ItemID.MoltenPickaxe).AddIngredient(ItemID.Ruby),Recipe.Create(ItemID.ObsidianSkull).AddIngredient(ItemID.Hellstone));
+            graph.AnchorItem(ItemKey.Crafted(ItemID.CopperPickaxe),"start");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Hellstone))==1 && graph.GetTierIndex(ItemKey.Crafted(ItemID.ObsidianSkull))==1
+                && graph.GetExplanation(ItemID.Hellstone).Contains(Lang.GetItemNameValue(ItemID.MoltenPickaxe)),
+                "a boss material unlocks a stronger pick, then a mineable ore, then dependent recipes with a tool explanation");
+            graph=Graph(Recipe.Create(ItemID.MoltenPickaxe).AddIngredient(ItemID.Hellstone));
+            graph.AnchorItem(ItemKey.Crafted(ItemID.CopperPickaxe),"start");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Hellstone))<0,"an ore and its only capable pick cannot bootstrap each other's acquisition stage");
+            graph=Graph(); graph.AnchorItem(ItemKey.Crafted(ItemID.Ectoplasm),"bc_fixture_wall");
+            var priorNpc=graph.Tiers[1]; var priorDowned=priorNpc.IsDowned;
+            graph.ApplyOrder(new[]{"bc_fixture_wall","bc_fixture_eye"});
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Ectoplasm))==1 && ReferenceEquals(graph.Tiers[2],priorNpc)
+                && ReferenceEquals(graph.Tiers[2].IsDowned,priorDowned) && graph.Tiers[2].NpcIds.Contains(NPCID.EyeofCthulhu),
+                "reordering remaps explicit anchors and preserves original NPC records and defeat callbacks");
+            check(graph.GetIntervalName(1).Contains("血肉墙后") && graph.GetIntervalName(1).Contains("克苏鲁之眼前")
+                && graph.GetIntervalName(-1)=="阶段未知","stage labels describe explicit after/before intervals and unknown remains distinct");
             var drops=(Dictionary<int,List<DropRecord>>)typeof(GameDataIndex).GetField("NpcDrops",BindingFlags.Static|BindingFlags.NonPublic)!.GetValue(null);
             bool had=drops.TryGetValue(NPCID.EyeofCthulhu,out var prior);
             try

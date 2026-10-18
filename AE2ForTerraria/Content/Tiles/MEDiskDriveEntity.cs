@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections.Generic;
 using AE2ForTerraria.Content.Items;
 using AE2ForTerraria.Core;
@@ -131,8 +132,8 @@ namespace AE2ForTerraria.Content.Tiles
                 reason = "换盘后类别容量不足，磁盘未移动（已存 " + Ledger.StoredTypeCount + " 类，可容纳 " + capacity.Types + " 类）";
                 return false;
             }
-            foreach (long amount in Ledger.Entries.Values)
-                if (amount > capacity.PerType && capacity.PerType < currentCapacity.PerType)
+            foreach (int type in Ledger.Entries.Keys.Select(key => key.Type).Distinct())
+                if (Ledger.GetTypeAmount(type) > capacity.PerType && capacity.PerType < currentCapacity.PerType)
                 {
                     reason = "换盘后单类数量上限不足，磁盘未移动；请保留数字奇点或先取出超额物品";
                     return false;

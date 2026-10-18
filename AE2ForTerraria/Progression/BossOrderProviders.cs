@@ -497,7 +497,7 @@ namespace AE2ForTerraria.Progression
 			int index = output.Count;
 			foreach ((int npc, float score) in extras)
 			{
-				output.Add(new ProgressionTier(index++, "inf_" + npc, NpcIndex.GetName(npc), Name));
+				output.Add(new ProgressionTier(index++, "inf_" + (NPCLoader.GetNPC(npc)?.FullName ?? "Terraria/" + Terraria.ID.NPCID.Search.GetName(npc)), NpcIndex.GetName(npc), Name));
 			}
 
 			return extras.Count > 0;

@@ -28,6 +28,11 @@ namespace AE2ForTerraria.Progression
 		private readonly Dictionary<ItemKey, int> _inferredCache = new Dictionary<ItemKey, int>();
         private readonly Dictionary<int,List<int>> _stationItems = new();
         private bool _tierCacheReady; private int _tierRecipeRevision;
+        public IReadOnlyList<ProgressionTier> DefaultOrder { get; private set; } = Array.Empty<ProgressionTier>();
+        private readonly Dictionary<int,string> _sourceReasons = new();
+        private readonly Dictionary<int,string> _reasons = new();
+        internal void SourceReason(int type, string reason) => _sourceReasons[type] = reason;
+        public int Revision { get; private set; }
         public double TierBuildMilliseconds { get; private set; }
         public int RankedItemCount { get; private set; }
 
@@ -37,7 +42,7 @@ namespace AE2ForTerraria.Progression
 		public ProgressionGraph(RecipeIndex recipes)
 		{
 			_recipes = recipes;
-			_providers.Add(new PlayerOverrideProvider());
+			// Personal order is applied to full provider records, preserving NPC and drop metadata.
 			_providers.Add(new BossChecklistProvider());
 			_providers.Add(new BuiltinModOrderProvider());
 			_providers.Add(new InferenceProvider());
@@ -71,6 +76,15 @@ namespace AE2ForTerraria.Progression
 			_inferredCache.Clear(); _tierCacheReady=false;
 
 			AppendInferredBosses();
+            DefaultOrder = Tiers.ToArray();
+            var savedOrder = !Main.dedServ ? global::AE2ForTerraria.UI.BossOrderPreferences.Order : Array.Empty<string>();
+            if(savedOrder.Count > 0) ApplyOrder(savedOrder);
+            else
+            {
+                var legacy = MEConfig.Instance?.CustomBossOrder;
+                ApplyOrder(legacy == null ? Array.Empty<string>() : legacy.Select(name =>
+                    Tiers.FirstOrDefault(t => t.Id == name || t.DisplayName == name)?.Id).Where(id => id != null).ToArray());
+            }
             _stationItems.Clear();
             foreach (var item in ContentSamples.ItemsByType.Values)
                 if (!item.IsAir && item.createTile>=0)
@@ -114,7 +128,9 @@ namespace AE2ForTerraria.Progression
 					continue;
 				}
 
-                var inferred = new ProgressionTier(Tiers.Count,"inf_"+npc,name,"inferred");
+                var modNpc = NPCLoader.GetNPC(npc);
+                string stableNpc = modNpc == null ? "Terraria/" + NPCID.Search.GetName(npc) : modNpc.Mod.Name + "/" + modNpc.Name;
+                var inferred = new ProgressionTier(Tiers.Count,"inf_"+stableNpc,name,"inferred");
                 inferred.NpcIds.Add(npc); Tiers.Add(inferred);
 				added++;
 			}
@@ -582,6 +598,7 @@ namespace AE2ForTerraria.Progression
 		/// </summary>
 		private void AnchorItemsFromBosses()
 		{
+            _sourceReasons.Clear();
 			_bossAnchored.Clear();
 
 			int matchedBosses = 0;
@@ -775,6 +792,41 @@ namespace AE2ForTerraria.Progression
 			return index >= 0 && index < Tiers.Count ? Tiers[index] : null;
 		}
 
+        public void ApplyOrder(IEnumerable<string> ids)
+        {
+            var priorIds = Tiers.Select(t => t.Id).ToArray();
+            var byId = Tiers.ToDictionary(t => t.Id);
+            var ordered = new List<ProgressionTier>();
+            if (byId.Remove("start", out var start)) ordered.Add(start);
+            foreach (string id in ids)
+                if (byId.Remove(id, out var tier)) ordered.Add(tier);
+            foreach (var tier in Tiers)
+                if (byId.Remove(tier.Id)) ordered.Add(tier);
+            Tiers.Clear(); Tiers.AddRange(ordered);
+            for (int i = 0; i < Tiers.Count; i++) Tiers[i].Index = i;
+            foreach (var key in _explicitItemTier.Keys.ToArray())
+            {
+                int old = _explicitItemTier[key];
+                if (old >= 0 && old < priorIds.Length) _explicitItemTier[key] = Tiers.FindIndex(t => t.Id == priorIds[old]);
+            }
+            AnchorItemsFromBosses(); ProgressionSources.Anchor(this, _bossAnchored);
+            _tierCacheReady = false; Revision++;
+        }
+        public string GetIntervalName(int index)
+        {
+            if (index < 0 || index >= Tiers.Count) return "阶段未知";
+            string Clean(string name) => name.EndsWith("后") ? name[..^1] : name;
+            string current = index == 0 ? "Boss 前" : Clean(Tiers[index].DisplayName) + "后";
+            if (index + 1 < Tiers.Count) current += "（" + Clean(Tiers[index + 1].DisplayName) + "前）";
+            if (Tiers[index].Source == "inferred") current += " · 推测";
+            return current;
+        }
+        public string GetExplanation(int type)
+        {
+            int tier = GetTierIndex(ItemKey.Crafted(type));
+            return GetIntervalName(tier) + "\n" + (tier < 0 ? "尚无可确认的公开解锁依据" : _reasons.GetValueOrDefault(type, "显式阶段设置"));
+        }
+
 		public string GetTierName(int index)
 		{
 			ProgressionTier tier = GetTier(index);
@@ -814,8 +866,13 @@ namespace AE2ForTerraria.Progression
         {
             if(_tierCacheReady && _tierRecipeRevision==_recipes.Revision) return;
             long started=System.Diagnostics.Stopwatch.GetTimestamp();
-            _inferredCache.Clear(); _tierCacheReady=false;
-            foreach(var entry in _bossAnchored) _inferredCache[entry.Key]=entry.Value;
+            _inferredCache.Clear(); _reasons.Clear(); _tierCacheReady=false;
+            foreach(var entry in _bossAnchored)
+            {
+                _inferredCache[entry.Key]=entry.Value;
+                _reasons[entry.Key.Type] = _sourceReasons.GetValueOrDefault(entry.Key.Type,
+                    entry.Value == 0 ? "基础资源" : "Boss / 事件掉落：" + Tiers[entry.Value].DisplayName);
+            }
             foreach(var entry in _explicitItemTier) _inferredCache[entry.Key]=entry.Value;
             var stationUsers=new Dictionary<int,List<int>>();
             var queue=new Queue<int>();var queued=new bool[Recipe.numRecipes];
@@ -830,6 +887,33 @@ namespace AE2ForTerraria.Progression
                     {if(!stationUsers.TryGetValue(tile,out var list)) stationUsers[tile]=list=new();list.Add(index);}
                 Enqueue(index);
             }
+            void Notify(int type)
+            {
+                foreach(int dependent in _recipes.GetRecipesUsing(type)) Enqueue(dependent);
+                if(ContentSamples.ItemsByType.TryGetValue(type,out var item)
+                    && stationUsers.TryGetValue(item.createTile,out var consumers))
+                    foreach(int dependent in consumers) Enqueue(dependent);
+            }
+            var mining = ProgressionSources.MiningRoutes(this);
+            var picks = ContentSamples.ItemsByType.Values.Where(i => !i.IsAir && i.pick > 0).ToArray();
+            void UpdateMining()
+            {
+                foreach(var route in mining)
+                {
+                    if (route.Gate < 0 || _explicitItemTier.ContainsKey(ItemKey.Crafted(route.Item))) continue;
+                    int best = -1, tool = 0;
+                    foreach(var pick in picks)
+                        if(pick.pick >= route.Pick && _inferredCache.TryGetValue(ItemKey.Crafted(pick.type),out int value)
+                            && (best < 0 || value < best)) { best = value; tool = pick.type; }
+                    if(best < 0) continue;
+                    best = Math.Max(best,route.Gate); var key = ItemKey.Crafted(route.Item);
+                    if(_inferredCache.TryGetValue(key,out int previous) && previous <= best) continue;
+                    _inferredCache[key] = best;
+                    _reasons[route.Item] = route.Reason + "；镐力要求 " + route.Pick + "，可用 " + Lang.GetItemNameValue(tool);
+                    Notify(route.Item);
+                }
+            }
+            UpdateMining();
             while(queue.Count>0)
             {
                 int index=queue.Dequeue();queued[index]=false;var recipe=Main.recipe[index];
@@ -838,14 +922,25 @@ namespace AE2ForTerraria.Progression
                 int candidate=RecipeTier(recipe);
                 if(candidate<0 || _inferredCache.TryGetValue(output,out int old) && old<=candidate) continue;
                 _inferredCache[output]=candidate;
-                foreach(int dependent in _recipes.GetRecipesUsing(output.Type)) Enqueue(dependent);
-                if(ContentSamples.ItemsByType.TryGetValue(output.Type,out var item)
-                    && stationUsers.TryGetValue(item.createTile,out var consumers))
-                    foreach(int dependent in consumers) Enqueue(dependent);
+                _reasons[output.Type] = RecipeReason(recipe, candidate);
+                Notify(output.Type);
+                if(ContentSamples.ItemsByType.TryGetValue(output.Type,out var crafted) && crafted.pick > 0) UpdateMining();
             }
             _tierCacheReady=true;_tierRecipeRevision=_recipes.Revision;
             TierBuildMilliseconds=System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             RankedItemCount=_inferredCache.Count;
+        }
+
+        private string RecipeReason(Recipe recipe, int tier)
+        {
+            foreach(var material in recipe.requiredItem)
+            {
+                if(material.IsAir || !_inferredCache.TryGetValue(ItemKey.Crafted(material.type),out int value) || value != tier) continue;
+                string source = _reasons.GetValueOrDefault(material.type, "材料阶段");
+                if(source.Length > 140) source = source[..140] + "…";
+                return "配方材料：" + Lang.GetItemNameValue(material.type) + "；" + source;
+            }
+            return "配方材料、工作站及环境条件的最早共同阶段";
         }
 
         private int RecipeTier(Recipe recipe)
@@ -880,7 +975,6 @@ namespace AE2ForTerraria.Progression
 		/// <summary>当前世界进度所处的阶段序号。</summary>
 		public int CurrentTierIndex()
 		{
-            if(ActiveProviderName=="vanilla") return VanillaCheckpointProvider.CurrentCheckpointIndex();
             int highest=0;
             foreach(var tier in Tiers)
                 try {if(tier.IsDowned?.Invoke()==true) highest=Math.Max(highest,tier.Index);}

@@ -37,8 +37,8 @@ public static class StorageOperations
             remaining -= ledger.Insert(key, remaining, simulate: true);
             if (remaining <= 0) return new(requested, requested, null);
             excess |= ledger.StoredTypeCount > ledger.MaxTypes;
-            types |= !ledger.Contains(key) && ledger.StoredTypeCount >= ledger.MaxTypes;
-            quantity |= ledger.GetAmount(key) >= ledger.MaxAmountPerType || ledger.StoredTotalAmount == long.MaxValue;
+            types |= !ledger.ContainsType(key.Type) && ledger.StoredTypeCount >= ledger.MaxTypes;
+            quantity |= ledger.GetTypeAmount(key.Type) >= ledger.MaxAmountPerType || ledger.StoredTotalAmount == long.MaxValue;
         }
         string reason = !allowed ? "所有存储设备的过滤规则都拒绝此物品"
             : excess ? "已有类别超过容量；可右键驱动器继续加盘，或先取出物品"

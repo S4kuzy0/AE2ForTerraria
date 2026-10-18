@@ -10,9 +10,11 @@ internal static class BrowserHover
     private static Item _item;
     private static ulong _at;
     internal static bool IsCurrent(Item item) => _item != null && item.type == _key.Type && _at == Main.GameUpdateCount;
-    public static void Item(ItemKey key)
+    internal static bool ShowProgression { get; private set; }
+    public static void Item(ItemKey key, bool progression = false)
     {
         if (key.IsAir) return;
+        ShowProgression = progression;
         if (_item == null || !_key.Equals(key)) { _key = key; _item = key.CreateItem(); }
         Main.HoverItem = _item;
         Main.hoverItemName = _item.Name;

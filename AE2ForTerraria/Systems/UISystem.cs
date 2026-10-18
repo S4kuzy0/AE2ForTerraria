@@ -390,7 +390,7 @@ namespace AE2ForTerraria.Systems
 			WindowLayout.Save();
 			UIStatus.Clear();
 			UITextCache.Clear();
-            BrowserCategories.Reset(); BrowserFavorites.Reset(); BrowserHistory.Reset(); BrowserContent.Reset(); FavoriteTreeHud.Reset(); BrowserHover.Reset(); ArmorSetIndex.Reset(); UIChoiceMenu.Close();
+            BrowserCategories.Reset(); BrowserFavorites.Reset(); BrowserHistory.Reset(); BrowserContent.Reset(); FavoriteTreeHud.Reset(); BrowserHover.Reset(); BossOrderPreferences.Reset(); UIBossOrderPanel.Close(); ArmorSetIndex.Reset(); UIChoiceMenu.Close();
 
 			Interface = null;
 			OverlayInterface = null;

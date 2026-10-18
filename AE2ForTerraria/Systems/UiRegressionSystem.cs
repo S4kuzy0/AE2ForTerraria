@@ -84,6 +84,89 @@ public sealed class UiRegressionSystem : ModSystem
         if (!condition) throw new InvalidOperationException("AE2 BROWSER CHECK FAILED: " + label);
         Mod.Logger.Info("AE2 BROWSER CHECK PASS: " + label);
     }
+    private void ValidateProgressionUI()
+    {
+        var graph = StorageSystem.Progression; var prior = graph.Tiers.Select(t => t.Id).ToArray();
+        SetViewport(1280,720,1f);
+        var state = NewSearch(); state.Layout.X=24;state.Layout.Y=24;state.Layout.W=760;state.Layout.H=600;
+        state.FitToScreen(); Invoke(state,"ApplyLayout");
+        var all = Field<List<int>>(state,"_allItems"); all.Clear(); all.AddRange(new int[]{ItemID.Wood,ItemID.StoneBlock,ItemID.Torch,ItemID.Ectoplasm,ItemID.CobaltOre,ItemID.ChlorophyteOre,ItemID.LunarBar});
+        try
+        {
+            void Choose(string label)
+            {
+                Click(state,"_sortButton"); var menu = ActiveChoice();
+                int index = Array.FindIndex(Field<string[]>(menu,"_choices"),value => value.StartsWith(label,StringComparison.Ordinal));
+                Assert(index >= 0,"sort menu provides " + label);
+                SetField(menu,"_scroll",index);
+                var d = menu.GetDimensions();
+                menu.LeftClick(new UIMouseEvent(menu,new Vector2(d.X+15,d.Y+15)));
+            }
+            Choose("默认"); var ascending = Field<List<int>>(state,"_filtered").ToArray();
+            Choose("倒序"); var descending = Field<List<int>>(state,"_filtered").ToArray();
+            Assert(descending.Where(t=>!BrowserFavorites.Contains(t)).SequenceEqual(ascending.Where(t=>!BrowserFavorites.Contains(t)).Reverse()),"explicit descending reverses the base item order");
+            Choose("正序"); Choose("获取阶段");
+            var grid = Field<UIItemGrid>(state,"_grid");
+            Assert(grid.GroupOf != null && grid.ProgressionTooltip && grid.GroupLabel(0).Contains("Boss 前"),
+                "acquisition sort enables timeline headers and native tooltip explanations");
+            RenderProbe(state,"Search-stage-groups");
+            Choose("调整 Boss 顺序");
+            var panel = (UIBossOrderPanel)typeof(UIBossOrderPanel).GetField("_active",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static)!.GetValue(null);
+            var draft = Field<List<global::AE2ForTerraria.Progression.ProgressionTier>>(panel,"_draft");
+            var first = draft[0]; var second = draft[1]; var bounds = panel.GetDimensions();
+            Assert(UIBossOrderPanel.IsOpen && grid.InputBlocked(),"boss order subpage blocks catalogue input");
+            panel.LeftClick(new UIMouseEvent(panel,new Vector2(bounds.X+bounds.Width-15,bounds.Y+70)));
+            Assert(ReferenceEquals(draft[0],second) && graph.Tiers[1].Id == prior[1],"draft down-arrow changes order without changing the live graph");
+            RenderProbe(state,"Boss-order-editor");
+            panel.Children.ElementAt(2).LeftClick(new UIMouseEvent(panel,panel.Children.ElementAt(2).GetDimensions().Center()));
+            Assert(!UIBossOrderPanel.IsOpen && graph.Tiers[1].Id == second.Id && ReferenceEquals(graph.Tiers[2],first)
+                && graph.Tiers[1].NpcIds.Count == second.NpcIds.Count,"save applies reordered full boss records without discarding NPC metadata");
+            BossOrderPreferences.Reset();
+            Assert(BossOrderPreferences.Order.First() == second.Id,"boss order survives a preference reload");
+            Choose("调整 Boss 顺序");
+            panel = (UIBossOrderPanel)typeof(UIBossOrderPanel).GetField("_active",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static)!.GetValue(null);
+            panel.Children.ElementAt(1).LeftClick(new UIMouseEvent(panel,panel.Children.ElementAt(1).GetDimensions().Center()));
+            Assert(Field<List<global::AE2ForTerraria.Progression.ProgressionTier>>(panel,"_draft").First().Id == graph.DefaultOrder[1].Id
+                && graph.Tiers[1].Id == second.Id,"restore-default changes only the draft until saved");
+            state.CloseDetails(); Assert(!UIBossOrderPanel.IsOpen,"unified back closes the boss order editor");
+        }
+        finally { UIChoiceMenu.Close(); UIBossOrderPanel.Close(); graph.ApplyOrder(prior); BossOrderPreferences.Save(prior); }
+        var deviceState = new DriveUIState(); deviceState.Activate();
+        deviceState.SetDrive((MEDiskDriveEntity)UISystem.ActiveNetwork[0]);
+        var contents = Field<UIStorageContents>(deviceState,"_contents");
+        var sortButton = Field<UIElement>(contents,"_sortButton");
+        int mouseX=Main.mouseX,mouseY=Main.mouseY; bool mouseDown=Main.mouseLeft;
+        try
+        {
+            sortButton.LeftClick(new UIMouseEvent(sortButton,sortButton.GetDimensions().Center()));
+            Assert(UIChoiceMenu.IsOpen,"device contents uses an actual dropdown rather than cycling sort values");
+            Main.mouseX=0;Main.mouseY=0;Main.mouseLeft=true;
+            deviceState.Update(new GameTime());
+            Assert(!UIChoiceMenu.IsOpen,"nested device popup dismisses during complete window update without mutating a live child enumeration");
+        }
+        finally {UIChoiceMenu.Close(); Main.mouseX=mouseX;Main.mouseY=mouseY;Main.mouseLeft=mouseDown;}
+        var grouped = new UIItemGrid { CellSize=44,GroupOf=type=>type == ItemID.Torch ? 1 : 0,GroupLabel=stage=>"阶段 " + stage };
+        grouped.Width.Set(90,0);grouped.Height.Set(110,0); grouped.Activate();grouped.Recalculate();
+        grouped.SetItems(new(){ItemID.Wood,ItemID.StoneBlock,ItemID.Torch}); var area = grouped.GetDimensions();
+        Assert(grouped.TotalRows == 4 && !grouped.HasEntryAt(new Vector2(area.X+10,area.Y+12))
+            && grouped.HasEntryAt(new Vector2(area.X+10,area.Y+54)),"group headers consume a row and cannot be mistaken for an item");
+        grouped.ScrollRows(2);
+        Assert(!grouped.HasEntryAt(new Vector2(area.X+10,area.Y+12)) && grouped.HasEntryAt(new Vector2(area.X+10,area.Y+54))
+            && !grouped.HasEntryAt(new Vector2(area.X+54,area.Y+54)),"scrolling grouped rows keeps header and empty-column hit tests correct");
+        var oldKeys=Main.keyState; int oldMouseX=Main.mouseX,oldMouseY=Main.mouseY; int opened=0;
+        try
+        {
+            grouped.RecipeShortcutRequiresHover=true; grouped.OnActivated=key=>opened=key.Type;
+            Main.mouseX=(int)area.X+10;Main.mouseY=(int)area.Y+54;
+            Main.keyState=new Microsoft.Xna.Framework.Input.KeyboardState();grouped.Update(new GameTime());
+            Main.keyState=new Microsoft.Xna.Framework.Input.KeyboardState(Microsoft.Xna.Framework.Input.Keys.R);grouped.Update(new GameTime());
+            Assert(opened==ItemID.Torch,"R uses the actual item under the mouse after grouped scrolling");
+        }
+        finally {Main.keyState=oldKeys;Main.mouseX=oldMouseX;Main.mouseY=oldMouseY;}
+        grouped.Width.Set(135,0);grouped.Recalculate();grouped.SetItems(new(){ItemID.Wood,ItemID.StoneBlock,ItemID.Torch});
+        Assert(grouped.Columns == 3 && grouped.TotalRows == 4,"grouped row map rebuilds after window resizing");
+    }
+
     private void ValidateUnifiedBackNavigation()
     {
         foreach (bool terminal in new[] { false, true })
@@ -454,7 +537,7 @@ public sealed class UiRegressionSystem : ModSystem
         revision=grid.Revision;
         Click(state,"_craftableButton"); Click(state,"_sortButton"); menu=ActiveChoice();
         Assert(Field<UIElement>(menu,"_anchor")==Field<UIElement>(state,"_sortButton")
-            && Field<string[]>(menu,"_choices").SequenceEqual(new[]{"默认","名称","数量"})
+            && Field<string[]>(menu,"_choices").SequenceEqual(new[]{"默认","名称","数量","获取阶段","正序（当前）","倒序","调整 Boss 顺序"})
             && Field<int>(state,"_sortMode")==0 && grid.Revision==revision,
             "sort click replaces the range popup without sorting until an option is selected");
         RenderProbe(state,"Terminal-sort-dropdown"); Choose(2);
@@ -1282,6 +1365,7 @@ public sealed class UiRegressionSystem : ModSystem
             BrowserRefinementRegression.Snapshots(Assert);
             BrowserRefinementRegression.Armor(Assert);
             ValidatePartialGrid();
+            ValidateProgressionUI();
             ValidateUnifiedBackNavigation();
             ValidateBrowser();
             ValidateDropCollector();

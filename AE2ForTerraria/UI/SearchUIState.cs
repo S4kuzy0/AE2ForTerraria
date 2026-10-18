@@ -81,6 +81,7 @@ namespace AE2ForTerraria.UI
 
 		private Category _category = Category.Item;
 		private SortMode _sort = SortMode.Default;
+        private bool _sortDescending;
 		private bool _built;
 
 		private bool _typing;
@@ -192,7 +193,7 @@ namespace AE2ForTerraria.UI
 			};
 			Window.Append(_sortButton);
 
-			_grid = new UIItemGrid { CellSize = 44, IsFavorite = key => IsFavorite(key.Type), InputBlocked = () => _details.BlocksPointer || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null };
+			_grid = new UIItemGrid { CellSize = 44, IsFavorite = key => IsFavorite(key.Type), InputBlocked = () => _details.BlocksPointer || UIBossOrderPanel.IsOpen || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null };
 			// 回车 = 打开这一项的来源(和左键同一个动作)
 			_grid.OnActivated = key =>
 			{
@@ -268,7 +269,7 @@ namespace AE2ForTerraria.UI
 
 		public override void OnDeactivate()
 		{
-			base.OnDeactivate();
+			base.OnDeactivate(); UIBossOrderPanel.Close();
             _details?.Close();
             UIChoiceMenu.Close();
 			ReleaseIme();
@@ -454,7 +455,7 @@ namespace AE2ForTerraria.UI
 
         public void ShowDetails(int type, bool uses = false) { _typing = false; _details.Show(ItemKey.Crafted(type), uses: uses); }
         public void ShowNpcDetails(int type) { _typing = false; _details.ShowNpc(type); }
-        public bool CloseDetails() { if (!_details.IsOpen) return false; _details.Close(); return true; }
+        public bool CloseDetails() { if (UIBossOrderPanel.Close()) return true; if (!_details.IsOpen) return false; _details.Close(); return true; }
         private static void Place(UIElement e, float x, float y, float w, float h)
         { e.Left.Set(x, 0); e.Top.Set(y, 0); e.Width.Set(w, 0); e.Height.Set(h, 0); }
         protected override void ApplyLayout()
@@ -779,13 +780,21 @@ namespace AE2ForTerraria.UI
 				Window.Top.Pixels + SearchTop + SearchHeight + 38f));
 		}
 
-        private string SortLabel() => "排序：" + (_category == Category.Npc && _sort == SortMode.Default ? "图鉴" : SortName(_sort));
+        private string SortLabel() => "排序：" + (_category == Category.Npc && _sort == SortMode.Default ? "图鉴" : SortName(_sort)) + (_sortDescending ? " ↓" : " ↑");
 
         private void CycleSort()
         {
             SortMode[] modes = _category == Category.Npc ? new[] { SortMode.Default, SortMode.Name } : Enum.GetValues<SortMode>();
-            UIChoiceMenu.Show(Window, _sortButton, modes.Select(mode => _category == Category.Npc && mode == SortMode.Default ? "图鉴顺序" : SortName(mode)).ToArray(),
-                (index, label) => { _sort = modes[index]; _sortButton.SetText(SortLabel()); Refresh(); });
+            var choices = modes.Select(mode => _category == Category.Npc && mode == SortMode.Default ? "图鉴顺序" : SortName(mode))
+                .Concat(new[]{_sortDescending ? "正序" : "正序（当前）", _sortDescending ? "倒序（当前）" : "倒序", "调整 Boss 顺序"}).ToArray();
+            UIChoiceMenu.Show(Window, _sortButton, choices, (index, _) =>
+            {
+                if(index == modes.Length + 2)
+                { _typing = false; ImeInput.Blur(); UIBossOrderPanel.Show(this,Window,Refresh); return; }
+                if(index < modes.Length) _sort = modes[index];
+                else _sortDescending = index == modes.Length + 1;
+                _sortButton.SetText(SortLabel()); Refresh();
+            }, Array.IndexOf(modes,_sort));
         }
         private static string SortName(SortMode mode) => mode switch
         {
@@ -805,8 +814,8 @@ namespace AE2ForTerraria.UI
         private static float SortValue(Item item, SortMode mode) => mode switch
         {
             SortMode.Value => item.value, SortMode.Rarity => item.rare, SortMode.Damage => item.damage, SortMode.Defence => item.defense,
-            SortMode.UseTime => -item.useTime, SortMode.Pick => item.pick, SortMode.Axe => item.axe, SortMode.Hammer => item.hammer,
-            SortMode.Fishing => item.fishingPole, SortMode.Bait => item.bait, SortMode.Tile => -item.createTile,
+            SortMode.UseTime => item.useTime, SortMode.Pick => item.pick, SortMode.Axe => item.axe, SortMode.Hammer => item.hammer,
+            SortMode.Fishing => item.fishingPole, SortMode.Bait => item.bait, SortMode.Tile => item.createTile,
             SortMode.WingFlight => item.wingSlot > 0 ? ArmorIDs.Wing.Sets.Stats[item.wingSlot].FlyTime : 0, _ => 0
         };
 
@@ -826,7 +835,7 @@ namespace AE2ForTerraria.UI
 					}
 				}
 
-				_filtered.Sort((a,b) => _sort == SortMode.Name ? string.Compare(NpcIndex.GetName(a), NpcIndex.GetName(b), StringComparison.OrdinalIgnoreCase) : CompareBestiaryOrder(a,b));
+				_filtered.Sort((a,b) => Direction(_sort == SortMode.Name ? string.Compare(NpcIndex.GetName(a), NpcIndex.GetName(b), StringComparison.OrdinalIgnoreCase) : CompareBestiaryOrder(a,b)));
 			}
 			else
 			{
@@ -868,107 +877,44 @@ namespace AE2ForTerraria.UI
 				ApplySort();
 			}
 
-			_grid.SetItems(_filtered);
+			_grid.GroupOf = _category != Category.Npc && _sort == SortMode.Tier ? StageOf : null;
+            _grid.GroupLabel = StageLabel; _grid.ProgressionTooltip = _grid.GroupOf != null;
+            _grid.SetItems(_filtered);
 			UpdateStatus();
 		}
 
-		private void ApplySort()
-		{
-			if ((int)_sort >= (int)SortMode.Value)
+        private int Direction(int value) => _sortDescending ? -Math.Sign(value) : value;
+        private static int StageOf(int type) => StorageSystem.Progression?.GetTierIndex(ItemKey.Crafted(type)) ?? -1;
+        private static string StageLabel(int tier) => StorageSystem.Progression?.GetIntervalName(tier) ?? "阶段未知";
+        private void ApplySort()
+        {
+            var recent = new Dictionary<int,int>();
+            if(_sort == SortMode.Recent)
+                foreach(var visit in BrowserHistory.Entries)
+                    if(BrowserContent.Resolve(visit.Content,out int type,out bool npc) && !npc) recent.TryAdd(type,recent.Count);
+            _filtered.Sort((a,b) =>
             {
-                _filtered.Sort((a,b) => { int result = SortValue(ContentSamples.ItemsByType[b], _sort).CompareTo(SortValue(ContentSamples.ItemsByType[a], _sort)); return result != 0 ? result : a.CompareTo(b); });
-                SortFavoritesFirst(); return;
-            }
-            // 收藏永远置顶(和终端一致);最近查看按打开顺序倒序
-			if (_sort == SortMode.Recent)
-			{
-                var recent = new Dictionary<int, int>();
-                foreach (var visit in BrowserHistory.Entries)
-                    if (BrowserContent.Resolve(visit.Content, out int type, out bool npc) && npc == (_category == Category.Npc))
-                        recent.TryAdd(type, recent.Count);
-				_filtered.Sort((a, b) =>
-				{
-					int rankA = recent.TryGetValue(a, out int first) ? first : -1;
-					int rankB = recent.TryGetValue(b, out int second) ? second : -1;
-
-					if (rankA < 0 && rankB < 0)
-					{
-						return a.CompareTo(b);
-					}
-
-					if (rankA < 0)
-					{
-						return 1;
-					}
-
-					return rankB < 0 ? -1 : rankA.CompareTo(rankB);
-				});
-				return;
-			}
-
-			if (_sort == SortMode.Name)
-			{
-				_filtered.Sort((a, b) => string.Compare(
-					Lang.GetItemNameValue(a), Lang.GetItemNameValue(b), StringComparison.OrdinalIgnoreCase));
-				SortFavoritesFirst();
-				return;
-			}
-
-			if (_sort == SortMode.Tier && StorageSystem.Progression != null)
-			{
-				_filtered.Sort((a, b) =>
-				{
-					int tierA = TierOf(a);
-					int tierB = TierOf(b);
-					if(tierA!=tierB) return tierA.CompareTo(tierB);
-                    bool favoriteA=BrowserFavorites.Contains(a),favoriteB=BrowserFavorites.Contains(b);
-                    return favoriteA!=favoriteB ? (favoriteA ? -1 : 1) : a.CompareTo(b);
-				});
-				return;
-			}
-
-			_filtered.Sort();
-			SortFavoritesFirst();
-		}
-
-		/// <summary>收藏置顶。用稳定插入而不是重排,保留各个排序模式内部的相对顺序。</summary>
-		private void SortFavoritesFirst()
-		{
-			if (_filtered.Count == 0)
-			{
-				return;
-			}
-
-			var starred = new List<int>();
-
-			for (int i = _filtered.Count - 1; i >= 0; i--)
-			{
-				if (IsFavorite(_filtered[i]))
-				{
-					starred.Add(_filtered[i]);
-					_filtered.RemoveAt(i);
-				}
-			}
-
-			if (starred.Count == 0)
-			{
-				return;
-			}
-
-			starred.Reverse();
-			_filtered.InsertRange(0, starred);
-		}
-
-		private static int TierOf(int type)
-		{
-			if (StorageSystem.Progression == null)
-			{
-				return int.MaxValue;
-			}
-
-			int tier = StorageSystem.Progression.GetTierIndex(ItemKey.Crafted(type));
-			return tier < 0 ? int.MaxValue : tier;
-		}
+                if(_sort == SortMode.Tier)
+                {
+                    int left = StageOf(a), right = StageOf(b);
+                    if((left < 0) != (right < 0)) return left < 0 ? 1 : -1;
+                    if(left != right) return Direction(left.CompareTo(right));
+                }
+                bool favoriteA = IsFavorite(a), favoriteB = IsFavorite(b);
+                if(favoriteA != favoriteB) return favoriteA ? -1 : 1;
+                int order = 0;
+                if(_sort == SortMode.Name) order = string.Compare(Lang.GetItemNameValue(a),Lang.GetItemNameValue(b),StringComparison.OrdinalIgnoreCase);
+                else if(_sort == SortMode.Recent)
+                {
+                    bool hasA = recent.TryGetValue(a,out int rankA), hasB = recent.TryGetValue(b,out int rankB);
+                    if(hasA != hasB) return hasA ? -1 : 1;
+                    order = rankA.CompareTo(rankB);
+                }
+                else if((int)_sort >= (int)SortMode.Value)
+                    order = SortValue(ContentSamples.ItemsByType[a],_sort).CompareTo(SortValue(ContentSamples.ItemsByType[b],_sort));
+                return Direction(order != 0 ? order : a.CompareTo(b));
+            });
+        }
 
         private bool MatchesFilter(int type)
         {

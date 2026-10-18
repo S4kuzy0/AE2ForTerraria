@@ -10,6 +10,7 @@ namespace AE2ForTerraria.Core
 	public sealed class StorageLedger
 	{
 		private Dictionary<ItemKey, long> _amounts = new Dictionary<ItemKey, long>();
+		private Dictionary<int, long> _typeTotals = new();
 
 		/// <summary>每占用一种类型消耗的字节。</summary>
 		public long BytesPerType { get; set; }
@@ -23,7 +24,7 @@ namespace AE2ForTerraria.Core
 		/// <summary>总字节预算。由插进去的磁盘提供容量;long.MaxValue 表示不限。</summary>
 		public long MaxBytes { get; set; } = long.MaxValue;
 
-		/// <summary>Per-identity quantity limit; loading and withdrawing older excess stock remain lossless.</summary>
+		/// <summary>Aggregate limit for all identities of one base item type; old excess stock remains lossless.</summary>
 		public long MaxAmountPerType { get; set; } = long.MaxValue;
 
 		public StorageLedger(long bytesPerType = 8, long amountPerByte = 8, long maxTypes = 63)
@@ -33,7 +34,9 @@ namespace AE2ForTerraria.Core
 			MaxTypes = maxTypes <= 0 ? 1 : maxTypes;
 		}
 
-		public int StoredTypeCount => _amounts.Count;
+		public int StoredTypeCount => _typeTotals.Count;
+		public long GetTypeAmount(int type) => _typeTotals.GetValueOrDefault(type);
+		public bool ContainsType(int type) => _typeTotals.ContainsKey(type);
 
 		public long StoredTotalAmount { get; private set; }
 
@@ -71,9 +74,10 @@ namespace AE2ForTerraria.Core
 			}
 
 			long current = GetAmount(key);
-			amount = System.Math.Min(amount, System.Math.Max(0, MaxAmountPerType - current));
+			long typeTotal = GetTypeAmount(key.Type);
+			amount = System.Math.Min(amount, System.Math.Max(0, MaxAmountPerType - typeTotal));
 			amount = System.Math.Min(amount, long.MaxValue - StoredTotalAmount);
-			if (current <= 0 && StoredTypeCount >= MaxTypes)
+			if (typeTotal <= 0 && StoredTypeCount >= MaxTypes)
 			{
 				return 0; // 类型已满,开不了新类别
 			}
@@ -81,7 +85,7 @@ namespace AE2ForTerraria.Core
 			// 字节预算:先算这个身份要占的字节,超出就只存得下的部分
 			if (MaxBytes != long.MaxValue)
 			{
-				decimal typeBytes = ((decimal)StoredTypeCount + (current > 0 ? 0 : 1))
+				decimal typeBytes = ((decimal)StoredTypeCount + (typeTotal > 0 ? 0 : 1))
 					* System.Math.Max(1, BytesPerType);
 				long capacityItems = (long)System.Math.Clamp(
 					((decimal)MaxBytes - typeBytes) * System.Math.Max(1, AmountPerByte)
@@ -103,6 +107,7 @@ namespace AE2ForTerraria.Core
 			}
 
 			_amounts[key] = current + amount;
+			_typeTotals[key.Type] = typeTotal + amount;
 			StoredTotalAmount += amount;
 			Version++;
 			return amount;
@@ -134,6 +139,9 @@ namespace AE2ForTerraria.Core
 			}
 
 			StoredTotalAmount -= taken;
+			long typeLeft = GetTypeAmount(key.Type) - taken;
+			if (typeLeft == 0) _typeTotals.Remove(key.Type);
+			else _typeTotals[key.Type] = typeLeft;
 			Version++;
 			return taken;
 		}
@@ -164,6 +172,7 @@ namespace AE2ForTerraria.Core
 			}
 
 			_amounts.Clear();
+			_typeTotals.Clear();
 			StoredTotalAmount = 0;
 		}
 
@@ -174,6 +183,7 @@ namespace AE2ForTerraria.Core
 			if (amount > long.MaxValue - StoredTotalAmount)
 				throw new System.IO.InvalidDataException("Storage quantity overflow");
 			_amounts[key] = GetAmount(key) + amount;
+			_typeTotals[key.Type] = GetTypeAmount(key.Type) + amount;
 			StoredTotalAmount += amount;
 			Version++;
 		}
@@ -191,7 +201,9 @@ namespace AE2ForTerraria.Core
         {
             // Allocate before touching this ledger; even a failed allocation leaves the previous contents intact.
             var replacement = new Dictionary<ItemKey, long>(decoded._amounts);
+            var typeTotals = new Dictionary<int, long>(decoded._typeTotals);
             _amounts = replacement;
+            _typeTotals = typeTotals;
             StoredTotalAmount = decoded.StoredTotalAmount;
             Version++;
         }

@@ -38,8 +38,8 @@ internal static class BrowserPreferences
     internal static IDisposable Isolate(string directory)
     {
         string previous = _directory;
-        _directory = directory; BrowserHistory.Reset(); BrowserFavorites.Reset(); FavoriteTreeHud.Reset();
-        return new Restore(() => { _directory = previous; BrowserHistory.Reset(); BrowserFavorites.Reset(); FavoriteTreeHud.Reset(); });
+        _directory = directory; BrowserHistory.Reset(); BrowserFavorites.Reset(); FavoriteTreeHud.Reset(); BossOrderPreferences.Reset();
+        return new Restore(() => { _directory = previous; BrowserHistory.Reset(); BrowserFavorites.Reset(); FavoriteTreeHud.Reset(); BossOrderPreferences.Reset(); });
     }
     private sealed class Restore(Action action) : IDisposable
     {

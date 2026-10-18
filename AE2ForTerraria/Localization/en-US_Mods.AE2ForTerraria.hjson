@@ -105,9 +105,9 @@ Items: {
 		DisplayName: ME Storage Disk (32 Types)
 		Tooltip:
 			'''
-			Adds 32 item identity slots to a drive
-			Up to 2,147,483,647 items per identity
-			Prefixes and custom data use separate slots
+			Adds 32 item type slots to a drive
+			Up to 2,147,483,647 items per base item type
+			Variants share one type slot; prefixes and custom data are preserved
 			Items remain stored in the drive
 			'''
 	}
@@ -116,9 +116,9 @@ Items: {
 		DisplayName: ME Storage Disk (64 Types)
 		Tooltip:
 			'''
-			Adds 64 item identity slots to a drive
-			Up to 2,147,483,647 items per identity
-			Prefixes and custom data use separate slots
+			Adds 64 item type slots to a drive
+			Up to 2,147,483,647 items per base item type
+			Variants share one type slot; prefixes and custom data are preserved
 			Items remain stored in the drive
 			'''
 	}
@@ -127,9 +127,9 @@ Items: {
 		DisplayName: ME Storage Disk (128 Types)
 		Tooltip:
 			'''
-			Adds 128 item identity slots to a drive
-			Up to 2,147,483,647 items per identity
-			Prefixes and custom data use separate slots
+			Adds 128 item type slots to a drive
+			Up to 2,147,483,647 items per base item type
+			Variants share one type slot; prefixes and custom data are preserved
 			Items remain stored in the drive
 			'''
 	}
@@ -138,9 +138,9 @@ Items: {
 		DisplayName: ME Storage Disk (256 Types)
 		Tooltip:
 			'''
-			Adds 256 item identity slots to a drive
-			Up to 2,147,483,647 items per identity
-			Prefixes and custom data use separate slots
+			Adds 256 item type slots to a drive
+			Up to 2,147,483,647 items per base item type
+			Variants share one type slot; prefixes and custom data are preserved
 			Items remain stored in the drive
 			'''
 	}

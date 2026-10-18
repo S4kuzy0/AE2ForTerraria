@@ -18,6 +18,7 @@ public static class DiskCapacityRegression
 {
     public static void Run(Action<bool, string> check)
     {
+        CheckVariants(check);
         int[] tiers = { ModContent.ItemType<MEDisk1K>(), ModContent.ItemType<MEDisk4K>(),
             ModContent.ItemType<MEDisk16K>(), ModContent.ItemType<MEDisk64K>() };
         long[] capacities = { 32, 64, 128, 256 };
@@ -112,6 +113,50 @@ public static class DiskCapacityRegression
         check(!LegacyContentVisibility.IsHiddenFromCatalog(terminal)
             && Main.recipe.Take(Recipe.numRecipes).Any(r=>r!=null && !r.Disabled && r.createItem.type==terminal),
             "unified crafting terminal remains obtainable after hiding the legacy access terminal");
+    }
+
+    private static void CheckVariants(Action<bool,string> check)
+    {
+        Item Custom(int charge)
+        {
+            var tag = ItemIO.Save(new Item(ItemID.CopperShortsword));
+            tag["globalData"] = new List<TagCompound> { new() { ["mod"] = "AE2RegressionMissingGlobal", ["name"] = "Variant",
+                ["data"] = new TagCompound { ["charge"] = charge } } };
+            return ItemIO.Load(tag);
+        }
+        var basic = ItemKey.Crafted(ItemID.CopperShortsword);
+        var sword = new Item(ItemID.CopperShortsword); sword.Prefix(PrefixID.Legendary);
+        var legendary = ItemKey.FromItem(sword); var customA = ItemKey.FromItem(Custom(1)); var customB = ItemKey.FromItem(Custom(2));
+        var ledger = new StorageLedger(maxTypes:1) { MaxAmountPerType = int.MaxValue };
+        foreach(var key in new[]{basic,legendary,customA,customB}) check(ledger.Insert(key,1) == 1,"new variant fits an occupied base type at full category capacity");
+        check(ledger.StoredTypeCount == 1 && ledger.Entries.Count == 4 && ledger.GetTypeAmount(basic.Type) == 4,
+            "four exact identities share one category while retaining four independent quantities");
+        var drive = new MEDiskDriveEntity(); drive.Disks[0] = new Item(ModContent.ItemType<MEDisk1K>()); drive.RefreshCapacity();
+        drive.Ledger.ReplaceContents(ledger);
+        var tag = new TagCompound(); drive.SaveData(tag); var loaded = new MEDiskDriveEntity(); loaded.LoadData(tag);
+        check(loaded.Ledger.StoredTypeCount == 1 && loaded.Ledger.Entries.Count == 4
+            && loaded.Ledger.Entries.All(e => e.Value == 1 && ItemKey.FromItem(e.Key.CreateItem()).Equals(e.Key)),
+            "save/reload and ItemIO reconstruction retain every actual prefix and both custom payloads");
+        CheckWire(check,ledger,customB);
+        ledger.Insert(basic,int.MaxValue);
+        check(ledger.GetTypeAmount(basic.Type) == int.MaxValue && ledger.GetAmount(basic) == int.MaxValue - 3
+            && ledger.Insert(legendary,1,true) == 0 && ledger.Copy().Insert(customA,1) == 0,
+            "all variants share one Int32 quantity budget including simulation and transaction copies");
+        check(ledger.Extract(legendary,1) == 1 && ledger.StoredTypeCount == 1 && ledger.Insert(customB,3) == 1,
+            "withdrawing one variant frees aggregate quantity but retains the category until every variant is gone");
+        ledger.Restore(legendary,100);
+        var copy = ledger.Copy();
+        check(copy.GetTypeAmount(basic.Type) == (long)int.MaxValue + 100 && copy.GetAmount(legendary) == 100
+            && copy.Insert(customA,1) == 0 && copy.Extract(legendary,100) == 100,
+            "legacy aggregate excess is kept intact, withdrawable and rejects further deposits");
+        copy.Clear(); check(copy.StoredTypeCount == 0 && copy.GetTypeAmount(basic.Type) == 0,"clear removes the category aggregate as well as identity records");
+        drive.Disks[0] = new Item(ModContent.ItemType<MEDigitalSingularity>()); drive.RefreshCapacity();
+        drive.Ledger.Clear(); drive.Ledger.Restore(basic,int.MaxValue); drive.Ledger.Restore(legendary,1);
+        check(!drive.CanReplaceDisk(0,new Item(ModContent.ItemType<MEDisk64K>()),out _),
+            "singularity downgrade checks the aggregate even when every individual variant fits Int32");
+        var bytes = new StorageLedger(bytesPerType:8,amountPerByte:8,maxTypes:1) { MaxBytes = 9 };
+        check(bytes.Insert(basic,4) == 4 && bytes.Insert(legendary,9) == 4 && bytes.UsedBytes == 9,
+            "fixed byte storage charges the category overhead once across multiple prefixes");
     }
 
     private static void CheckWire(Action<bool, string> check, StorageLedger source, ItemKey key)

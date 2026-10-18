@@ -21,7 +21,9 @@ internal sealed class UIChoiceMenu : UIElement
     {
         var menu = _active; _active = null;
         if (menu == null) return;
-        if (menu.Parent?.Parent is MovableWindowState owner) owner.AfterChildUpdate(menu.Remove);
+        UIElement ancestor = menu.Parent;
+        while (ancestor != null && ancestor is not MovableWindowState) ancestor = ancestor.Parent;
+        if (ancestor is MovableWindowState owner) owner.AfterChildUpdate(menu.Remove);
         else menu.Remove();
     }
     public static void Show(UIElement host, UIElement anchor, string[] choices, Action<int, string> choose, int selectedIndex = -1)
