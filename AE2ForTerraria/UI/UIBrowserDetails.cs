@@ -560,7 +560,7 @@ internal sealed class UIBrowserDetails : UIElement
     protected override void DrawSelf(SpriteBatch batch)
     {
         var d = GetDimensions(); var box = d.ToRectangle();
-        UITheme.Fill(batch, box, new Color(32, 42, 68)); UITheme.Outline(batch, box, UITheme.ItemBorder);
+        UITheme.Fill(batch, box, UITheme.Panel); UITheme.Outline(batch, box, UITheme.ItemBorder);
         var titleIcon = new Rectangle(box.X + 10, box.Y + 32, 22, 22);
         DrawIcon(batch, _key.Type, _npc, titleIcon);
         if (BrowserFavorites.Contains(_npc > 0 ? _npc : _key.Type, _npc > 0)) FavoriteInput.Mark(batch, titleIcon);

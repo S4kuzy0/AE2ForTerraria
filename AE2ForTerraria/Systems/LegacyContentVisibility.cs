@@ -10,7 +10,7 @@ public sealed class LegacyContentVisibility : ModSystem
 {
     public static bool IsHiddenFromCatalog(int itemType) =>
         ContentSamples.ItemsByType.TryGetValue(itemType, out var sample)
-        && sample.ModItem is MECraftingCpu or MEMolecularAssembler or MEStorageUnit;
+        && sample.ModItem is MECraftingCpu or MEMolecularAssembler or MEStorageUnit or MEAccessTerminal;
 
     public override void PostAddRecipes()
     {

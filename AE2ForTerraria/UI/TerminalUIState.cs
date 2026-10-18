@@ -57,7 +57,8 @@ namespace AE2ForTerraria.UI
         private MECraftingCpuEntity _keepEditHost;
         private bool _inventoryVisible, _favoritesOnly;
         private string _modFilter;
-        private int _range = 2; // Stored, verified craftable, stored + craftable, or all recipes.
+        private static readonly string[] RangeChoices = { "已储存", "可合成", "已储存/可合成" };
+        private int _range = 2; // Stored, verified craftable, or their union.
         private UIGridScrollBar _scrollBar;
 		private UIButton _orderButton;
 		private UITextPanel<string> _takeButton;
@@ -102,7 +103,7 @@ namespace AE2ForTerraria.UI
 		{
 			Geometry.Key = "TerminalUIState.v3";
             InitWindow(Geometry, "", frameless: true);
-            Window.BackgroundColor = new Color(124, 137, 158);
+            Window.BackgroundColor = UITheme.WindowBg;
             _catalogueButton=new UIButton("终端", .75f);
             _catalogueButton.OnLeftClick+=(_,_)=>{_managementPage=0;_info?.Close();_categories.SetMode(false);RebuildList();RequestLayout();};
             _recipesButton=new UIButton("配方", .75f);
@@ -242,13 +243,8 @@ namespace AE2ForTerraria.UI
 			Window.Append(_capacity);
             _capacityCount=new UIText("",.7f) { DynamicallyScaleDownToWidth=true };
 
-			_sortButton = new UIButton(SortLabel(), 0.78f, false);
-			_sortButton.OnLeftClick += (evt, element) =>
-			{
-				_sortMode = (_sortMode + 1) % 3;
-				_sortButton.SetText(SortLabel());
-				RebuildList();
-			};
+			_sortButton = new UIButton(SortLabel(), 0.78f, false) { Dropdown = true };
+			_sortButton.OnLeftClick += (_, _) => ShowSortMenu();
 			Window.Append(_sortButton);
 
 			// 「存入全部」的范围开关。
@@ -335,8 +331,8 @@ namespace AE2ForTerraria.UI
 			_quantityText.Left.Set(6f, 0f);
 			_quantityText.Top.Set(4f, 0f);
 
-			_craftableButton = new UIButton("已储存", 0.82f, false);
-			_craftableButton.OnLeftClick += (evt, element) => ToggleCraftable();
+			_craftableButton = new UIButton("已储存", 0.82f, false) { Dropdown = true };
+			_craftableButton.OnLeftClick += (_, _) => ShowRangeMenu();
 			Window.Append(_craftableButton);
 
 			// 词缀过滤:只看带词缀的装备,方便集中重铸 / 整理
@@ -679,7 +675,7 @@ namespace AE2ForTerraria.UI
                     // positive craftable result requires a checked complete plan.
                     if(_lastQuery.Length>0) priority.Add(type);
                     bool ready = _availability.CanUse && _availability.Catalogue.IsCraftable(type);
-                    if (_range != 3 && !ready) continue;
+                    if (!ready) continue;
 
 					_filtered.Add(ItemKey.Crafted(type));
 				}
@@ -1046,18 +1042,26 @@ namespace AE2ForTerraria.UI
 
         private bool MatchesCatalogue(int type) => _categories.Matches(type) && (!_favoritesOnly || BrowserFavorites.Contains(type))
             && (_modFilter == null || (ItemLoader.GetItem(type)?.Mod.Name ?? "Terraria") == _modFilter);
-        private void ToggleCraftable()
+        private void ShowRangeMenu()
         {
             if (IsAccess) return;
-            _range = (_range + 1) % 4;
-            _craftableButton.SetText(RangeLabel());
-            RebuildList();
+            UIChoiceMenu.Show(Window, _craftableButton, RangeChoices, (index, _) =>
+            {
+                if (_range == index) return;
+                _range = index; _craftableButton.SetText(RangeLabel()); RebuildList();
+            }, selectedIndex: _range);
         }
 
-        private string RangeLabel() => _range switch
+        private string RangeLabel() => RangeChoices[_range];
+
+        private void ShowSortMenu()
         {
-            0 => "已储存", 1 => "可合成", 2 => "储存＋可合成", _ => "全部配方"
-        };
+            UIChoiceMenu.Show(Window, _sortButton, new[] { "默认", "名称", "数量" }, (index, _) =>
+            {
+                if (_sortMode == index) return;
+                _sortMode = index; _sortButton.SetText(SortLabel()); RebuildList();
+            }, selectedIndex: _sortMode);
+        }
 
 		/// <summary>把网络里这个物品全部取出来。</summary>
 		private void WithdrawAll() { Withdraw(long.MaxValue); }

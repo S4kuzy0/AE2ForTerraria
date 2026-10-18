@@ -134,7 +134,7 @@ namespace AE2ForTerraria.UI
             _recipeTab = new UIUnderlineTab("配方", .75f);
             _recipeTab.OnLeftClick += (_, _) => SwitchCategory(Category.Recipes);
             Window.Append(_recipeTab);
-            Window.BackgroundColor = new Color(42, 54, 87);
+            Window.BackgroundColor = UITheme.WindowBg;
             _categories = new UIBrowserCategoryBar { Compact = true };
             _categories.Changed = () => { RequestLayout(); Refresh(); };
             Window.Append(_categories);

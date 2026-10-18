@@ -14,7 +14,7 @@ internal sealed class UIChoiceMenu : UIElement
     public static bool IsOpen => _active?.Parent != null;
     private string[] _choices;
     private UIElement _anchor, _host;
-    private int _scroll;
+    private int _scroll, _selectedIndex = -1;
     private bool _wasDown;
     private Rectangle _anchorBounds, _hostBounds;
     public static void Close()
@@ -24,13 +24,13 @@ internal sealed class UIChoiceMenu : UIElement
         if (menu.Parent?.Parent is MovableWindowState owner) owner.AfterChildUpdate(menu.Remove);
         else menu.Remove();
     }
-    public static void Show(UIElement host, UIElement anchor, string[] choices, Action<int, string> choose)
+    public static void Show(UIElement host, UIElement anchor, string[] choices, Action<int, string> choose, int selectedIndex = -1)
     {
         // The trigger belongs to its own popup. Toggle on click (release), never dismiss it on press.
         if (IsOpen && _active._anchor == anchor && _active._host == host) { Close(); return; }
         Close();
         if (choices == null || choices.Length == 0) return;
-        var menu = new UIChoiceMenu { _choices = choices, _anchor = anchor, _host = host, _wasDown = Main.mouseLeft };
+        var menu = new UIChoiceMenu { _choices = choices, _anchor = anchor, _host = host, _wasDown = Main.mouseLeft, _selectedIndex = selectedIndex };
         menu.OnLeftClick += (e, _) =>
         {
             float y = e.MousePosition.Y - menu.GetDimensions().Y - 4;
@@ -75,12 +75,13 @@ internal sealed class UIChoiceMenu : UIElement
     }
     protected override void DrawSelf(SpriteBatch batch)
     {
-        var d = GetDimensions(); UITheme.Fill(batch, d.ToRectangle(), new Color(26, 36, 60)); UITheme.Outline(batch, d.ToRectangle(), UITheme.BorderHot);
+        var d = GetDimensions(); UITheme.Fill(batch, d.ToRectangle(), UITheme.Panel); UITheme.Outline(batch, d.ToRectangle(), UITheme.BorderHot);
         int visible = Math.Max(1, (int)((d.Height - 8) / 30));
         for (int i = _scroll; i < Math.Min(_choices.Length, _scroll + visible); i++)
         {
             var rect = new Rectangle((int)d.X + 4, (int)d.Y + 4 + (i - _scroll) * 30, (int)d.Width - 8, 29);
-            if (rect.Contains(Main.MouseScreen.ToPoint())) UITheme.Fill(batch, rect, UITheme.BtnHot);
+            if (i == _selectedIndex) UITheme.Fill(batch, rect, UITheme.Accent);
+            else if (rect.Contains(Main.MouseScreen.ToPoint())) UITheme.Fill(batch, rect, UITheme.BtnHot);
             string label = _choices[i];
             while (label.Length > 1 && FontAssets.MouseText.Value.MeasureString(label).X * .75f > rect.Width - 12) label = label.Substring(0, label.Length - 1);
             Utils.DrawBorderString(batch, label, new Vector2(rect.X + 6, rect.Y + 7), UITheme.Text, .75f);

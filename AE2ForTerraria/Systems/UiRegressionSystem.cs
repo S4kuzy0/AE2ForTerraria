@@ -290,6 +290,7 @@ public sealed class UiRegressionSystem : ModSystem
                 long networkWood = UISystem.ActiveNetworkContents.Where(item => item.Key.Type == ItemID.Wood).Sum(item => item.Value);
                 Assert(owned.GetValueOrDefault(ItemID.Wood) == networkWood, "open readable terminal supplies the live network source for pinned material counts");
                 UISystem.Interface.SetState(null); FavoriteTreeHud.Update(new GameTime());
+                Assert(File.Exists(WindowLayoutTestPath), "closing the pinned-tree fixture exercises real layout persistence in its isolated file");
                 Assert(owned.GetValueOrDefault(ItemID.Wood) == networkWood,
                     "closing the terminal retains an authorized live network source for pinned material counts");
             }
@@ -381,17 +382,7 @@ public sealed class UiRegressionSystem : ModSystem
         Assert(Field<List<ItemKey>>(craft,"_filtered").Any(k=>k.Prefix!=0)
             && Field<UIItemGrid>(craft,"_grid").CountProvider(ItemKey.Crafted(ItemID.Wood))==321,
             "unified catalogue retains complete stored identities and their real network quantities");
-        Click(craft,"_craftableButton");
-        var recipes = Field<List<ItemKey>>(craft,"_filtered");
-        Assert(Field<int>(craft,"_range") == 3 && recipes.Count > 0
-            && recipes.All(k=>k.Prefix==0 && StorageSystem.Recipes.GetRecipesFor(k).Count>0),
-            "all recipes scope contains recipe outputs while the combined scope preserves stored prefixed products");
-        Click(craft,"_craftableButton");
-        Assert(Field<int>(craft,"_range")==0 && Field<List<ItemKey>>(craft,"_filtered").Any(k=>k.Prefix!=0),
-            "stored scope remains available in the crafting terminal");
-        Click(craft,"_craftableButton");
-        Assert(Field<int>(craft,"_range")==1 && Field<List<ItemKey>>(craft,"_filtered").All(k=>Field<TerminalCraftingAvailability>(craft,"_availability").Catalogue.IsCraftable(k.Type)),
-            "craftable scope contains only verified complete crafting trees");
+        ValidateTerminalMenus(craft);
         Assert(Field<UIElement>(craft,"_stationGrid").Parent != null && Field<UIElement>(craft,"_playerInventory").Parent == null,
             "recipe page contains the compact station grid without a duplicate backpack");
         ValidateTerminalClickWithoutTransfer();
@@ -428,6 +419,61 @@ public sealed class UiRegressionSystem : ModSystem
         ValidateCompactControls();
         ValidateRecipeReader();
         ValidateNativeTransferAndCaches();
+    }
+    private void ValidateTerminalMenus(TerminalUIState state)
+    {
+        state.Layout.X=60; state.Layout.Y=50; state.Layout.W=state.Layout.DefaultW; state.Layout.H=state.Layout.DefaultH;
+        state.OnActivate(); state.Recalculate();
+        var grid=Field<UIItemGrid>(state,"_grid");
+        int revision=grid.Revision;
+        var original=Field<List<ItemKey>>(state,"_filtered").ToArray();
+        Click(state,"_craftableButton"); var menu=ActiveChoice();
+        Assert(UIChoiceMenu.IsOpen && Field<int>(state,"_range")==2 && grid.Revision==revision,
+            "range click opens a dropdown without cycling or rebuilding the catalogue");
+        Assert(Field<string[]>(menu,"_choices").SequenceEqual(new[]{"已储存","可合成","已储存/可合成"})
+            && Field<int>(menu,"_selectedIndex")==2 && Field<UIButton>(state,"_craftableButton").Dropdown,
+            "range dropdown has exactly three requested choices and marks the current scope");
+        RenderProbe(state,"Terminal-range-dropdown");
+        Click(state,"_craftableButton");
+        Assert(!UIChoiceMenu.IsOpen && grid.Revision==revision,
+            "closing the range dropdown leaves the item list and its revision unchanged");
+        Click(state,"_craftableButton"); Choose(0);
+        Assert(Field<int>(state,"_range")==0 && Field<List<ItemKey>>(state,"_filtered").Any(k=>k.Prefix!=0)
+            && Field<List<ItemKey>>(state,"_filtered").All(k=>UISystem.GetStoredAmount(k)>0),
+            "stored dropdown choice retains real prefixed stock and excludes unowned recipe outputs");
+        var availability=Field<TerminalCraftingAvailability>(state,"_availability");
+        availability.Catalogue.Prioritize(new[]{(int)ItemID.Torch}); availability.Catalogue.Advance(128,100);
+        Click(state,"_craftableButton"); Choose(1);
+        Assert(Field<int>(state,"_range")==1 && Field<List<ItemKey>>(state,"_filtered").Any(k=>k.Type==ItemID.Torch)
+            && Field<List<ItemKey>>(state,"_filtered").All(k=>k.Prefix==0 && availability.Catalogue.IsCraftable(k.Type)),
+            "craftable dropdown choice includes a checked real recipe and only complete crafting trees");
+        Click(state,"_craftableButton"); Choose(2);
+        Assert(Field<UIButton>(state,"_craftableButton").Text=="已储存/可合成"
+            && original.All(key=>Field<List<ItemKey>>(state,"_filtered").Contains(key)),
+            "combined dropdown choice uses the requested name and restores all stored identities");
+        revision=grid.Revision;
+        Click(state,"_craftableButton"); Click(state,"_sortButton"); menu=ActiveChoice();
+        Assert(Field<UIElement>(menu,"_anchor")==Field<UIElement>(state,"_sortButton")
+            && Field<string[]>(menu,"_choices").SequenceEqual(new[]{"默认","名称","数量"})
+            && Field<int>(state,"_sortMode")==0 && grid.Revision==revision,
+            "sort click replaces the range popup without sorting until an option is selected");
+        RenderProbe(state,"Terminal-sort-dropdown"); Choose(2);
+        Assert(Field<int>(state,"_sortMode")==2 && Field<UIButton>(state,"_sortButton").Text.Contains("数量") && !UIChoiceMenu.IsOpen,
+            "quantity sort is chosen directly from the dropdown and closes it");
+        Click(state,"_sortButton"); Choose(1);
+        Assert(Field<int>(state,"_sortMode")==1 && Field<UIButton>(state,"_sortButton").Text.Contains("名称"),
+            "name sort can be selected directly without cycling through other modes");
+        Click(state,"_sortButton"); Choose(0);
+        Assert(WindowField<UIWindowPanel>(state,"<Window>k__BackingField").BackgroundColor==UITheme.WindowBg
+            && UITheme.WindowBg.B>UITheme.WindowBg.R && UITheme.ItemBorder==Color.Black,
+            "terminal uses the shared Terraria blue palette and retains thin black item borders");
+        Assert(UISystem.GetStoredAmount(ItemKey.Crafted(ItemID.Wood))==321,
+            "opening and selecting terminal dropdowns never transfers stored items");
+        void Choose(int index)
+        {
+            var popup=ActiveChoice(); var box=popup.GetDimensions();
+            popup.LeftClick(new UIMouseEvent(popup,new Vector2(box.X+12,box.Y+4+index*30+12)));
+        }
     }
     private void ValidateTerminalClickWithoutTransfer()
     {
@@ -1074,11 +1120,14 @@ public sealed class UiRegressionSystem : ModSystem
         }
     }
 
+    private static string WindowLayoutTestPath => Path.Combine(Main.SavePath,"AE2-Validation","menu-layout-test.txt");
     private void RenderChecks()
     {
         if (_done || Main.dedServ || !Main.gameMenu || !StorageSystem.Ready
             || Environment.GetEnvironmentVariable("AE2_UI_REGRESSION")!="1") return;
         _done=true;
+        Directory.CreateDirectory(Path.GetDirectoryName(WindowLayoutTestPath)!);
+        using var isolatedLayout=WindowLayout.IsolatePersistence(WindowLayoutTestPath);
         using var browserPreferences = BrowserPreferences.Isolate(Path.Combine(Main.SavePath, "AE2-Validation", "browser-" + Guid.NewGuid().ToString("N")));
         var restoreViewport=CaptureViewport();
         int width=Main.screenWidth,height=Main.screenHeight; float scale=Main.UIScaleWanted;

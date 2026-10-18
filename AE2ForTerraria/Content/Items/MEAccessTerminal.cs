@@ -8,6 +8,8 @@ namespace AE2ForTerraria.Content.Items
 	/// <summary>ME 访问终端:打开网络库存，并绑定远程访问入口。</summary>
 	public class MEAccessTerminal : ModItem
 	{
+        public override void SetStaticDefaults() => Item.ResearchUnlockCount = 0;
+
 		public override void SetDefaults()
 		{
 			Item.DefaultToPlaceableTile(ModContent.TileType<MEAccessTerminalTile2x2>());

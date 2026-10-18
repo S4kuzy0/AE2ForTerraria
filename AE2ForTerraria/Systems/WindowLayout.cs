@@ -29,11 +29,27 @@ namespace AE2ForTerraria.Systems
 
 		private static bool _loaded;
 		private static bool _dirty;
+        private static string _fileOverride;
+
+        /// <summary>Exercise real layout saves in a private test file, retaining the loaded personal defaults.</summary>
+        internal static System.IDisposable IsolatePersistence(string path)
+        {
+            Load();
+            string previous = _fileOverride;
+            _fileOverride = path;
+            return new PersistenceScope(previous);
+        }
+
+        private sealed class PersistenceScope(string previous) : System.IDisposable
+        {
+            public void Dispose() => _fileOverride = previous;
+        }
 
 		private static string FilePath
 		{
 			get
 			{
+                if (_fileOverride != null) return _fileOverride;
 				string root = Main.SavePath;
 				if (string.IsNullOrEmpty(root))
 				{

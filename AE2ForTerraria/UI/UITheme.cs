@@ -24,14 +24,14 @@ namespace AE2ForTerraria.UI
 	public static class UITheme
 	{
 		// —— 令牌 ——
-		public static readonly Color WindowBg = new Color(35, 42, 61);
-		public static readonly Color WindowBorder = new Color(58, 71, 99);
-		public static readonly Color TitleBar = new Color(46, 58, 87);
+		public static readonly Color WindowBg = new Color(63, 82, 151);
+		public static readonly Color WindowBorder = new Color(25, 37, 80);
+		public static readonly Color TitleBar = new Color(48, 67, 126);
 		public static readonly Color TitleBarHot = new Color(58, 74, 108);
-		public static readonly Color Panel = new Color(27, 33, 48);
-		public static readonly Color PanelAlt = new Color(31, 38, 54);
-		public static readonly Color Field = new Color(20, 26, 38);
-		public static readonly Color Slot = new Color(42, 50, 70);
+		public static readonly Color Panel = new Color(40, 58, 113);
+		public static readonly Color PanelAlt = new Color(48, 67, 126);
+		public static readonly Color Field = new Color(25, 39, 78);
+		public static readonly Color Slot = new Color(47, 65, 118);
 		public static readonly Color ItemBorder = Color.Black;
 		public static readonly Color SlotInner = new Color(72, 84, 118);
 		public static readonly Color Border = new Color(58, 71, 99);
@@ -41,9 +41,9 @@ namespace AE2ForTerraria.UI
 
 		public static readonly Color Accent = new Color(76, 134, 224);
 		public static readonly Color AccentHot = new Color(105, 162, 245);
-		public static readonly Color Btn = new Color(46, 58, 87);
-		public static readonly Color BtnHot = new Color(62, 78, 114);
-		public static readonly Color BtnDisabled = new Color(38, 44, 58);
+		public static readonly Color Btn = new Color(51, 72, 133);
+		public static readonly Color BtnHot = new Color(66, 88, 157);
+		public static readonly Color BtnDisabled = new Color(40, 49, 83);
 
 		public static readonly Color Text = new Color(232, 237, 247);
 		public static readonly Color TextDim = new Color(196, 208, 228);
@@ -321,7 +321,7 @@ namespace AE2ForTerraria.UI
 		{
 			for (int i = 0; i < 6; i++)
 			{
-				Fill(sb, new Rectangle(cx - i, cy + i, 1 + i * 2, 1), color);
+				Fill(sb, new Rectangle(cx - 5 + i, cy + i, 11 - i * 2, 1), color);
 			}
 		}
 
@@ -403,6 +403,7 @@ namespace AE2ForTerraria.UI
 		public bool Primary;
 		public bool Selected;
 		public bool Flat;
+        public bool Dropdown;
 		public bool Enabled = true;
 
 		private bool _hover;
@@ -470,9 +471,11 @@ namespace AE2ForTerraria.UI
 			UITheme.Outline(spriteBatch, rect, border, 1);
 
             float width=FontAssets.MouseText.Value.MeasureString(Text).X;
-            float scale=Math.Min(_labelScale,Math.Max(0.1f,(dims.Width-10f)/Math.Max(1f,width)));
-            Utils.DrawBorderString(spriteBatch,Text,new Vector2(dims.X+dims.Width/2f,dims.Y+(dims.Height-16f*scale)/2f),
+            float labelWidth=dims.Width-(Dropdown ? 18f : 0f);
+            float scale=Math.Min(_labelScale,Math.Max(0.1f,(labelWidth-10f)/Math.Max(1f,width)));
+            Utils.DrawBorderString(spriteBatch,Text,new Vector2(dims.X+labelWidth/2f,dims.Y+(dims.Height-16f*scale)/2f),
                 text,scale,0.5f,0f);
+            if (Dropdown) UITheme.DrawTriangleDown(spriteBatch,rect.Right-12,rect.Center.Y,text);
 
 		}
 	}

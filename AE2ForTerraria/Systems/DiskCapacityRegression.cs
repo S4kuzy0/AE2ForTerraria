@@ -97,7 +97,7 @@ public static class DiskCapacityRegression
             "digital singularity retains Int64 capacities and cannot be removed while its excess quantity is stored");
         CheckWire(check, ledger, wood);
         foreach (int hidden in new[] { ModContent.ItemType<MECraftingCpu>(), ModContent.ItemType<MEMolecularAssembler>(),
-            ModContent.ItemType<MEStorageUnit>() })
+            ModContent.ItemType<MEStorageUnit>(), ModContent.ItemType<MEAccessTerminal>() })
         {
             var item = new Item(hidden);
             check(LegacyContentVisibility.IsHiddenFromCatalog(hidden) && item.ResearchUnlockCount == 0
@@ -108,6 +108,10 @@ public static class DiskCapacityRegression
         check(!LegacyContentVisibility.IsHiddenFromCatalog(tiers[0])
             && !LegacyContentVisibility.IsHiddenFromCatalog(ItemID.Wood),
             "legacy catalogue filtering leaves disks and unrelated items visible");
+        int terminal=ModContent.ItemType<MECraftingTerminal>();
+        check(!LegacyContentVisibility.IsHiddenFromCatalog(terminal)
+            && Main.recipe.Take(Recipe.numRecipes).Any(r=>r!=null && !r.Disabled && r.createItem.type==terminal),
+            "unified crafting terminal remains obtainable after hiding the legacy access terminal");
     }
 
     private static void CheckWire(Action<bool, string> check, StorageLedger source, ItemKey key)
