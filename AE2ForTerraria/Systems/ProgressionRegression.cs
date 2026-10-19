@@ -36,6 +36,7 @@ internal static class ProgressionRegression
             check(live.GetTierIndex(ItemKey.Crafted(ItemID.FrogLeg))==0 && live.GetExplanation(ItemID.FrogLeg).Contains("钓鱼"),
                 "frog leg uses its direct pre-boss fishing source instead of a later Blood Moon drop or crafting route");
             CheckFishing(check, live, sourceAnchors);
+            CheckAuditGaps(check,live);
             CheckOtherSources(check,live);
             check(sourceAnchors.GetValueOrDefault(ItemKey.Crafted(ItemID.LifeCrystal),-1)==0,
                 "natural life crystals have a world-generation source before every boss independently of crafting recipes");
@@ -155,10 +156,35 @@ internal static class ProgressionRegression
                 typeof(ProgressionGraph).GetMethod("AnchorItemsFromBosses",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(graph,null);
                 check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==2,
                     "BossChecklist loot metadata cannot bypass the actual drop's additional Hardmode gate");
+                drops[NPCID.EyeofCthulhu]=new(){new DropRecord(ItemID.Torch,NPCID.EyeofCthulhu,0,1,1,1,
+                    new Terraria.GameContent.ItemDropRules.IItemDropRuleCondition[]{new OpaqueDropCondition()})};
+                graph=Graph();graph.Tiers[1].LootItems.Add(ItemID.Torch);
+                typeof(ProgressionGraph).GetMethod("AnchorItemsFromBosses",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(graph,null);
+                check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))<0,
+                    "unrecognised drop conditions remain unknown without executing their predicate or trusting flattened metadata");
             }
             finally {if(had)drops[NPCID.EyeofCthulhu]=prior;else drops.Remove(NPCID.EyeofCthulhu);}
         }
         finally {Main.recipe=recipes;Recipe.numRecipes=count;}
+    }
+    private static void CheckAuditGaps(Action<bool,string> check,ProgressionGraph graph)
+    {
+        int Tier(int type)=>graph.GetTierIndex(ItemKey.Crafted(type));
+        int hardmode=ProgressionSources.BossTier(graph,NPCID.WallofFlesh);
+        foreach(int type in new[]{ItemID.SoulofFlight,ItemID.MedusaHead,ItemID.TurtleShell,ItemID.FrozenTurtleShell,ItemID.DemonHeart})
+            check(Tier(type)==hardmode,"continued acquisition audit resolves the actual Hardmode source: "+ItemID.Search.GetName(type));
+        check(Tier(ItemID.FireFeather)==ProgressionSources.BossTier(graph,NPCID.Retinazer,NPCID.TheDestroyer,NPCID.SkeletronPrime),
+            "Red Devil loot retains the any-mechanical-boss spawn requirement");
+        int moonlord=ProgressionSources.BossTier(graph,NPCID.MoonLordCore);
+        foreach(int type in new[]{ItemID.WingsSolar,ItemID.WingsVortex,ItemID.WingsNebula,ItemID.WingsStardust})
+            check(Tier(type)==moonlord,"continued audit propagates proven material sources into lunar wings: "+ItemID.Search.GetName(type));
+    }
+    private sealed class OpaqueDropCondition : Terraria.GameContent.ItemDropRules.IItemDropRuleCondition
+    {
+        public bool CanDrop(Terraria.GameContent.ItemDropRules.DropAttemptInfo info) =>
+            throw new InvalidOperationException("Acquisition queries must never execute a drop predicate");
+        public bool CanShowItemDropInUI()=>true;
+        public string GetConditionDescription()=>"Unknown regression predicate";
     }
     private static void CheckOtherSources(Action<bool,string> check,ProgressionGraph graph)
     {

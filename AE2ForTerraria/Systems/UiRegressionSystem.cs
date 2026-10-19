@@ -1680,7 +1680,8 @@ public sealed class UiRegressionSystem : ModSystem
             device.SetRenderTargets(targets);
             using var fishingFile=File.Create(Path.Combine(directory,"AE-interface-layer-frog-tooltip-1280x720.png"));
             target.SaveAsPng(fishingFile,1280,720); Mod.Logger.Info("AE2 UI RENDERED: actual AE Frog Leg acquisition tooltip 1280x720");
-            foreach(int type in new[]{ItemID.SharkFin,ItemID.PinkGel,ItemID.LifeFruit,ItemID.AmberMosquito})
+            foreach(int type in new[]{ItemID.SharkFin,ItemID.PinkGel,ItemID.LifeFruit,ItemID.AmberMosquito,
+                ItemID.SoulofFlight,ItemID.TurtleShell,ItemID.DemonHeart,ItemID.WingsSolar})
             {
                 fishingItems.Clear(); fishingItems.Add(type); Invoke(fishingSearch,"Refresh");
                 fishingSearch.Update(new GameTime()); Main.mouseText=false; Main.HoverItem=new Item(); Main.hoverItemName="";
@@ -1688,7 +1689,8 @@ public sealed class UiRegressionSystem : ModSystem
                 device.SetRenderTarget(target); device.Clear(new Color(12,16,24));
                 Assert(layer.Draw() && Main.HoverItem.type==type,"actual acquisition grid maps the corrected source tooltip: "+ItemID.Search.GetName(type));
                 var lines=new List<TooltipLine>(); ModContent.GetInstance<ProgressionTooltip>().ModifyTooltips(Main.HoverItem,lines);
-                Assert(lines.Any(line=>line.Text.Contains(type==ItemID.LifeFruit ? "机械 Boss" : type==ItemID.AmberMosquito ? "提炼机" : "小怪掉落")),
+                Assert(lines.Any(line=>line.Text.Contains(type==ItemID.LifeFruit ? "机械 Boss" : type==ItemID.AmberMosquito ? "提炼机"
+                    : type==ItemID.DemonHeart ? "Boss / 事件掉落" : type==ItemID.WingsSolar ? "配方材料" : "小怪掉落")),
                     "native tooltip includes the audited non-fishing source: "+ItemID.Search.GetName(type));
                 device.SetRenderTargets(targets);
                 using var proof=File.Create(Path.Combine(directory,"AE-acquisition-"+ItemID.Search.GetName(type)+"-1280x720.png"));

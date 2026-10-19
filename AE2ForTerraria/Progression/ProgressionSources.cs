@@ -114,7 +114,10 @@ internal static class ProgressionSources
             NPCID.Mimic,NPCID.IceMimic,NPCID.BigMimicCorruption,NPCID.BigMimicCrimson,NPCID.BigMimicHallow,
             NPCID.Werewolf,NPCID.IceGolem,NPCID.SandElemental,NPCID.Mummy,NPCID.LightMummy,NPCID.DarkMummy,
             NPCID.Moth,NPCID.RainbowSlime,NPCID.EnchantedSword,NPCID.CursedHammer,NPCID.CrimsonAxe,
-            NPCID.RuneWizard,NPCID.Crimslime,NPCID.BlackRecluse,NPCID.GreenJellyfish}) spawnGates[npc] = hardmode;
+            NPCID.RuneWizard,NPCID.Crimslime,NPCID.BlackRecluse,NPCID.GreenJellyfish,
+            NPCID.GiantTortoise,NPCID.IceTortoise,NPCID.SeekerHead,NPCID.PigronCorruption,
+            NPCID.PigronHallow,NPCID.PigronCrimson,NPCID.AngryNimbus}) spawnGates[npc] = hardmode;
+        foreach(int npc in new[]{NPCID.RedDevil,NPCID.Lavabat}) spawnGates[npc] = Gate(graph,"DownedMechBossAny");
         foreach(int npc in new[]{NPCID.DungeonSpirit,NPCID.BlueArmoredBones,NPCID.RustyArmoredBonesAxe,NPCID.HellArmoredBones,
             NPCID.Necromancer,NPCID.RaggedCaster,NPCID.DiabolistRed,NPCID.Paladin}) spawnGates[npc] = BossTier(graph,NPCID.Plantera);
         foreach(var spawn in spawnGates)
@@ -157,16 +160,16 @@ internal static class ProgressionSources
         int tier=0;
         foreach(var condition in drop.Conditions)
         {
-            int gate = DropConditionTier(graph,condition.GetType());
+            int gate = DropConditionTier(graph,condition.GetType(),drop.NpcType);
             if(gate < 0) return -1;
             tier = Math.Max(tier,gate);
         }
         return tier;
     }
-    private static int DropConditionTier(ProgressionGraph graph,Type type)
+    private static int DropConditionTier(ProgressionGraph graph,Type type,int npc)
     {
-        // Audited Fargo predicates describe selectable difficulty only. Do not
-        // generalize this to its runtime/lambda or early-bird conditions.
+        // Fargo adaptations are version-bound. Runtime/lambda predicates and
+        // unreviewed early-bird conditions remain unknown.
         if(ModLoader.TryGetMod("FargowiltasSouls",out var fargo) && fargo.Version==new Version(1,7,3,9) && type.Assembly==fargo.Code)
         {
             if(type.FullName is "FargowiltasSouls.Core.ItemDropRules.Conditions.EModeDropCondition"
@@ -174,6 +177,13 @@ internal static class ProgressionSources
                 or "FargowiltasSouls.Core.ItemDropRules.Conditions.NotEModeDropCondition") return 0;
             if(type.FullName=="FargowiltasSouls.Core.ItemDropRules.Conditions.DownedEvilBossDropCondition")
                 return BossTier(graph,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu);
+            // In 1.7.3.9 this predicate is hardMode || !EternityMode.
+            // These native Hardmode enemies may spawn early in Eternity, but
+            // their ordinary rewards remain locked until Hardmode in that mode.
+            if(type.FullName=="FargowiltasSouls.Core.ItemDropRules.Conditions.EModeEarlyBirdLockDropCondition"
+                && npc is NPCID.WyvernHead or NPCID.SeekerHead or NPCID.PigronCorruption or NPCID.PigronHallow
+                    or NPCID.PigronCrimson or NPCID.AngryNimbus or NPCID.IchorSticker or NPCID.Medusa)
+                return BossTier(graph,NPCID.WallofFlesh);
         }
         if(type.Assembly != typeof(Terraria.GameContent.ItemDropRules.Conditions).Assembly) return -1;
         return type.Name switch
@@ -195,6 +205,7 @@ internal static class ProgressionSources
                 or "WindyEnoughForKiteDrops" or "IsChristmas" or "HalloweenGoodieBagDrop" or "HalloweenWeapons"
                 or "XmasPresentDrop" or "PumpkinMoonDropGatingChance" or "FrostMoonDropGatingChance"
                 or "PumpkinMoonDropGateForTrophies" or "FrostMoonDropGateForTrophies" or "FromCertainWaveAndAbove"
+                or "NotUsedDemonHeart"
                 => 0,
             _ => -1
         };
