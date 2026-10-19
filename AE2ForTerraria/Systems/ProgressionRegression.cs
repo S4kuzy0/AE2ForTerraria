@@ -20,6 +20,7 @@ internal static class ProgressionRegression
                 && stages.Exists(t=>t.IsDowned!=null),"actual BossChecklist API supplies the standard vanilla and mod timeline with live defeat callbacks");
         }
         GameDataIndex.EnsureBuilt();
+        AcquisitionAudit.Export();
         var live = StorageSystem.Progression;
         if(live != null)
         {
@@ -35,6 +36,7 @@ internal static class ProgressionRegression
             check(live.GetTierIndex(ItemKey.Crafted(ItemID.FrogLeg))==0 && live.GetExplanation(ItemID.FrogLeg).Contains("钓鱼"),
                 "frog leg uses its direct pre-boss fishing source instead of a later Blood Moon drop or crafting route");
             CheckFishing(check, live, sourceAnchors);
+            CheckOtherSources(check,live);
             check(sourceAnchors.GetValueOrDefault(ItemKey.Crafted(ItemID.LifeCrystal),-1)==0,
                 "natural life crystals have a world-generation source before every boss independently of crafting recipes");
             check(sourceAnchors.TryGetValue(ItemKey.Crafted(ItemID.Ectoplasm),out int ectoplasm)
@@ -127,6 +129,18 @@ internal static class ProgressionRegression
             check(!graph.HasUnlocks(1) && !graph.HasUnlocks(2) && graph.GetIntervalName(0)=="Boss 前",
                 "a timeline with no later unlocks omits every irrelevant boss instead of advertising an unrelated next boss");
             CheckContainers(check,Graph);
+            graph=Graph();graph.AnchorItem(ItemKey.Crafted(ItemID.SiltBlock),"start");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.AmberMosquito))<0,
+                "a processing input alone cannot bootstrap extractinator rewards without a machine");
+            graph=Graph(Recipe.Create(ItemID.Extractinator).AddIngredient(ItemID.Ruby),
+                Recipe.Create(ItemID.Torch).AddIngredient(ItemID.AmberMosquito));
+            graph.AnchorItem(ItemKey.Crafted(ItemID.SiltBlock),"start");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.AmberMosquito))==1 && graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==1,
+                "a later machine unlock propagates through extraction into dependent recipes");
+            graph=Graph(Recipe.Create(ItemID.Torch).AddIngredient(ItemID.AegisCrystal));
+            graph.AnchorItem(ItemKey.Crafted(ItemID.LifeCrystal),"bc_fixture_wall");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.AegisCrystal))==2 && graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==2,
+                "direct shimmer routes inherit the input stage and propagate into later crafting");
             var drops=(Dictionary<int,List<DropRecord>>)typeof(GameDataIndex).GetField("NpcDrops",BindingFlags.Static|BindingFlags.NonPublic)!.GetValue(null);
             bool had=drops.TryGetValue(NPCID.EyeofCthulhu,out var prior);
             try
@@ -135,10 +149,48 @@ internal static class ProgressionRegression
                 graph=Graph();
                 typeof(ProgressionGraph).GetMethod("AnchorItemsFromBosses",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(graph,null);
                 check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==1,"BossChecklist bc identifiers anchor real drop records by NPC identity");
+                drops[NPCID.EyeofCthulhu]=new(){new DropRecord(ItemID.Torch,NPCID.EyeofCthulhu,0,1,1,1,
+                    new Terraria.GameContent.ItemDropRules.IItemDropRuleCondition[]{new Terraria.GameContent.ItemDropRules.Conditions.IsHardmode()})};
+                graph=Graph();graph.Tiers[1].LootItems.Add(ItemID.Torch);
+                typeof(ProgressionGraph).GetMethod("AnchorItemsFromBosses",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(graph,null);
+                check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==2,
+                    "BossChecklist loot metadata cannot bypass the actual drop's additional Hardmode gate");
             }
             finally {if(had)drops[NPCID.EyeofCthulhu]=prior;else drops.Remove(NPCID.EyeofCthulhu);}
         }
         finally {Main.recipe=recipes;Recipe.numRecipes=count;}
+    }
+    private static void CheckOtherSources(Action<bool,string> check,ProgressionGraph graph)
+    {
+        int Tier(int type)=>graph.GetTierIndex(ItemKey.Crafted(type));
+        check(GameDataIndex.GetNpcDropRecords(NPCID.Pinky).Any(d=>d.ItemType==ItemID.PinkGel),
+            "negative-net-ID Pinky loot is indexed independently of regular blue-slime drops");
+        foreach(int type in new[]{ItemID.SharkFin,ItemID.PinkGel,ItemID.VileMushroom,ItemID.ViciousMushroom,
+            ItemID.JungleGrassSeeds,ItemID.AmberMosquito,ItemID.AegisCrystal,ItemID.ArcaneCrystal,
+            ItemID.Ambrosia,ItemID.GummyWorm,ItemID.GalaxyPearl})
+            check(Tier(type)==0,"verified non-fishing acquisition remains pre-boss in the actual pack: "+ItemID.Search.GetName(type));
+        int hardmode=ProgressionSources.BossTier(graph,NPCID.WallofFlesh);
+        foreach(int type in new[]{ItemID.JungleKey,ItemID.CorruptionKey,ItemID.CrimsonKey,ItemID.FrozenKey,ItemID.HallowedKey,ItemID.DungeonDesertKey})
+            check(Tier(type)==hardmode,"biome key drops require Hardmode without inheriting the later chest-opening gate: "+ItemID.Search.GetName(type));
+        int mech=ProgressionSources.BossTier(graph,NPCID.TheDestroyer,NPCID.Retinazer,NPCID.SkeletronPrime);
+        check(Tier(ItemID.LifeFruit)==mech && Tier(ItemID.AegisFruit)==mech,
+            "life fruit natural growth after any mechanical boss also unlocks its direct shimmer output");
+        int goblins=ProgressionSources.EventTier(graph,"GoblinArmy");
+        check(Tier(ItemID.TinkerersWorkshop)==goblins && Tier(ItemID.RocketBoots)==goblins,
+            "Goblin Tinkerer stock follows the editable Goblin Army event checkpoint");
+        check(Tier(ItemID.Meteorite)==ProgressionSources.BossTier(graph,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu),
+            "meteorite uses the evil-boss meteor source rather than a post-Plantera shop alternative");
+        check(Tier(ItemID.ShadowFlameKnife)>=hardmode,
+            "Hardmode Goblin Summoner drops cannot inherit the pre-Hardmode invasion checkpoint");
+        check(Tier(ItemID.SanguineStaff)>=hardmode && Tier(ItemID.DD2BetsyBow)>=ProgressionSources.BossTier(graph,NPCID.Golem),
+            "event member NPCs keep their own boss and spawn gates instead of inheriting the first event tier");
+        int moonlord=ProgressionSources.BossTier(graph,NPCID.MoonLordCore);
+        check(Tier(ItemID.RodOfHarmony)==moonlord && Tier(ItemID.Clentaminator2)==moonlord
+            && Tier(ItemID.BottomlessShimmerBucket)==moonlord,
+            "special shimmer upgrades retain the Moon Lord requirement even when their inputs are earlier");
+        var routes=ProgressionWorldSources.Routes(graph);
+        check(routes.Exists(r=>r.Output==ItemID.AmberMosquito && r.Inputs.Contains(ItemID.Extractinator) && r.Inputs.Contains(ItemID.SiltBlock)),
+            "extractinator progression requires both the processing material and a machine");
     }
     private static void CheckFishing(Action<bool,string> check, ProgressionGraph graph, Dictionary<ItemKey,int> anchors)
     {

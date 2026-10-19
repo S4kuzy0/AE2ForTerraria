@@ -21,6 +21,22 @@ internal static class ProgressionSources
         var tiers=graph.Tiers.Where(t=>t.NpcIds.Any(n=>npcs.Contains(n))).Select(t=>t.Index).ToArray();
         return tiers.Length>0 ? tiers.Min() : -1;
     }
+    internal static int EventTier(ProgressionGraph graph, string id) =>
+        graph.Tiers.FirstOrDefault(t => t.Id == "bc_Terraria " + id)?.Index ?? -1;
+    internal static int EventNpcGate(ProgressionGraph graph,int npc)
+    {
+        if(npc is NPCID.Clown or NPCID.GoblinSummoner or NPCID.BloodNautilus or NPCID.BloodSquid
+            or NPCID.GoblinShark or NPCID.BloodEelHead or NPCID.BloodEelBody or NPCID.BloodEelTail)
+            return BossTier(graph,NPCID.WallofFlesh);
+        if(npc==NPCID.DD2Betsy) return BossTier(graph,NPCID.Golem);
+        string name=npc>0 && npc<NPCID.Count ? NPCID.Search.GetName(npc) : "";
+        if(name?.StartsWith("DD2",StringComparison.Ordinal)==true)
+        {
+            if(name.EndsWith("T3",StringComparison.Ordinal)) return BossTier(graph,NPCID.Golem);
+            if(name.EndsWith("T2",StringComparison.Ordinal)) return BossTier(graph,NPCID.TheDestroyer,NPCID.Retinazer,NPCID.SkeletronPrime);
+        }
+        return 0;
+    }
     private static int Gate(ProgressionGraph graph,string name) => name switch
     {
         "Hardmode"=>BossTier(graph,NPCID.WallofFlesh),
@@ -76,36 +92,51 @@ internal static class ProgressionSources
         ProgressionWorldSources.Seed(graph,Add);
         int hardmode=Gate(graph,"Hardmode");
         foreach(int type in new[]{ItemID.Pearlwood,ItemID.CrystalShard}) Add(type,hardmode,"困难模式世界变化");
+        Add(ItemID.LifeFruit,Gate(graph,"DownedMechBossAny"),"击败任意机械 Boss 后，地下丛林自然生长");
         // Read declared drop rules; never execute CanDrop or temporarily mutate world flags.
         var spawnGates = new Dictionary<int,int>();
         foreach(int npc in new[]{NPCID.BlueSlime,NPCID.GreenSlime,NPCID.Zombie,NPCID.DemonEye,NPCID.Skeleton,NPCID.Piranha,
-            NPCID.Hornet,NPCID.JungleBat,NPCID.Demon,NPCID.Harpy,NPCID.AngryBones,NPCID.Vulture,NPCID.Antlion,
-            NPCID.Worm,NPCID.Goldfish,NPCID.Bunny,NPCID.Firefly}) spawnGates[npc] = 0;
+            NPCID.Hornet,NPCID.JungleBat,NPCID.Demon,NPCID.Harpy,NPCID.Vulture,NPCID.Antlion,
+            NPCID.Worm,NPCID.Goldfish,NPCID.Bunny,NPCID.Firefly,NPCID.Shark,NPCID.Pinky,NPCID.Crab,
+            NPCID.SeaSnail,NPCID.Squid,NPCID.ManEater,NPCID.JungleSlime,NPCID.SpikedJungleSlime,
+            NPCID.SpikedIceSlime,NPCID.UndeadMiner,NPCID.Tim,NPCID.FireImp,NPCID.BoneSerpentHead,
+            NPCID.VoodooDemon,NPCID.Hellbat,NPCID.CaveBat,NPCID.IceBat,NPCID.SnowFlinx,
+            NPCID.GiantWalkingAntlion,NPCID.GiantFlyingAntlion,NPCID.TombCrawlerHead,NPCID.GraniteGolem,
+            NPCID.GraniteFlyer,NPCID.GreekSkeleton,NPCID.Nymph,NPCID.Salamander,
+            NPCID.GiantShelly,NPCID.Crawdad,NPCID.GoblinScout,NPCID.EaterofSouls,NPCID.DevourerHead,
+            NPCID.Crimera,NPCID.FaceMonster,NPCID.BloodCrawler,NPCID.WallCreeper,
+            NPCID.BlueJellyfish,NPCID.PinkJellyfish}) spawnGates[npc] = 0;
+        foreach(int npc in new[]{NPCID.AngryBones,NPCID.DarkCaster,NPCID.CursedSkull})
+            spawnGates[npc] = BossTier(graph,NPCID.SkeletronHead);
         foreach(int npc in new[]{NPCID.Pixie,NPCID.Unicorn,NPCID.ChaosElemental,NPCID.WyvernHead,NPCID.GiantBat,
             NPCID.ArmoredSkeleton,NPCID.SkeletonArcher,NPCID.Wraith,NPCID.IchorSticker,NPCID.Clinger,
-            NPCID.AnglerFish,NPCID.Arapaima,NPCID.IceElemental,NPCID.Derpling,NPCID.MossHornet}) spawnGates[npc] = hardmode;
+            NPCID.AnglerFish,NPCID.Arapaima,NPCID.IceElemental,NPCID.Derpling,NPCID.MossHornet,NPCID.Medusa,
+            NPCID.Mimic,NPCID.IceMimic,NPCID.BigMimicCorruption,NPCID.BigMimicCrimson,NPCID.BigMimicHallow,
+            NPCID.Werewolf,NPCID.IceGolem,NPCID.SandElemental,NPCID.Mummy,NPCID.LightMummy,NPCID.DarkMummy,
+            NPCID.Moth,NPCID.RainbowSlime,NPCID.EnchantedSword,NPCID.CursedHammer,NPCID.CrimsonAxe,
+            NPCID.RuneWizard,NPCID.Crimslime,NPCID.BlackRecluse,NPCID.GreenJellyfish}) spawnGates[npc] = hardmode;
         foreach(int npc in new[]{NPCID.DungeonSpirit,NPCID.BlueArmoredBones,NPCID.RustyArmoredBonesAxe,NPCID.HellArmoredBones,
             NPCID.Necromancer,NPCID.RaggedCaster,NPCID.DiabolistRed,NPCID.Paladin}) spawnGates[npc] = BossTier(graph,NPCID.Plantera);
         foreach(var spawn in spawnGates)
             foreach(var drop in GameDataIndex.GetNpcDropRecords(spawn.Key))
             {
-                int tier = spawn.Value;
-                foreach(var condition in drop.Conditions)
-                {
-                    int gate = DropConditionTier(graph, condition.GetType());
-                    if(gate < 0) { tier = -1; break; }
-                    tier = Math.Max(tier,gate);
-                }
+                int gate = DropTier(graph,drop);
+                int tier = gate < 0 || spawn.Value < 0 ? -1 : Math.Max(spawn.Value,gate);
                 Add(drop.ItemType,tier,"世界 / 小怪掉落：" + Lang.GetNPCNameValue(spawn.Key));
             }
         foreach(var shop in NPCShopDatabase.AllShops.OfType<NPCShop>())
         {
             int arrival=shop.NpcType switch
             {
-                NPCID.Merchant or NPCID.Guide or NPCID.Nurse or NPCID.ArmsDealer or NPCID.Demolitionist or NPCID.Stylist or NPCID.Painter=>0,
+                NPCID.Merchant or NPCID.Guide or NPCID.Nurse or NPCID.ArmsDealer or NPCID.Demolitionist or NPCID.Stylist or NPCID.Painter
+                    or NPCID.DyeTrader or NPCID.Golfer or NPCID.BestiaryGirl or NPCID.PartyGirl or NPCID.TravellingMerchant=>0,
+                NPCID.GoblinTinkerer=>EventTier(graph,"GoblinArmy"),
+                NPCID.DD2Bartender=>BossTier(graph,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu),
+                NPCID.WitchDoctor=>BossTier(graph,NPCID.QueenBee),
                 NPCID.Dryad=>BossTier(graph,NPCID.EyeofCthulhu,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu,NPCID.SkeletronHead),
                 NPCID.Clothier or NPCID.Mechanic=>BossTier(graph,NPCID.SkeletronHead),
-                NPCID.Wizard=>hardmode,
+                NPCID.Wizard or NPCID.Truffle or NPCID.TaxCollector=>hardmode,
+                NPCID.Pirate=>EventTier(graph,"PirateInvasion"),
                 NPCID.Steampunker=>Gate(graph,"DownedMechBossAny"),
                 NPCID.Cyborg=>BossTier(graph,NPCID.Plantera),
                 _=>-1
@@ -134,13 +165,37 @@ internal static class ProgressionSources
     }
     private static int DropConditionTier(ProgressionGraph graph,Type type)
     {
+        // Audited Fargo predicates describe selectable difficulty only. Do not
+        // generalize this to its runtime/lambda or early-bird conditions.
+        if(ModLoader.TryGetMod("FargowiltasSouls",out var fargo) && fargo.Version==new Version(1,7,3,9) && type.Assembly==fargo.Code)
+        {
+            if(type.FullName is "FargowiltasSouls.Core.ItemDropRules.Conditions.EModeDropCondition"
+                or "FargowiltasSouls.Core.ItemDropRules.Conditions.EModeNotMasterDropCondition"
+                or "FargowiltasSouls.Core.ItemDropRules.Conditions.NotEModeDropCondition") return 0;
+            if(type.FullName=="FargowiltasSouls.Core.ItemDropRules.Conditions.DownedEvilBossDropCondition")
+                return BossTier(graph,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu);
+        }
         if(type.Assembly != typeof(Terraria.GameContent.ItemDropRules.Conditions).Assembly) return -1;
         return type.Name switch
         {
-            "IsHardmode" or "SoulOfLight" or "SoulOfNight" => BossTier(graph,NPCID.WallofFlesh),
-            "DownedAllMechBosses" => Gate(graph,"DownedMechBossAll"),
+            "IsHardmode" or "SoulOfLight" or "SoulOfNight" or "LivingFlames" or "PirateMap"
+                or "JungleKeyCondition" or "CorruptKeyCondition" or "CrimsonKeyCondition" or "FrozenKeyCondition"
+                or "HallowKeyCondition" or "DesertKeyCondition" or "YoyosAmarok" or "YoyosHelFire"
+                or "RemixSeedHardmode" => BossTier(graph,NPCID.WallofFlesh),
+            "BeatAnyMechBoss" or "YoyosYelets" => Gate(graph,"DownedMechBossAny"),
+            "YoyoCascade" => BossTier(graph,NPCID.SkeletronHead),
+            "YoyosKraken" => BossTier(graph,NPCID.Plantera),
+            "DownedAllMechBosses" or "MechdusaKill" => Gate(graph,"DownedMechBossAll"),
             "DownedPlantera" => BossTier(graph,NPCID.Plantera),
-            "NotExpert" or "IsExpert" or "IsMasterMode" or "NotRemixSeed" or "RemixSeed" or "NotFromStatue" => 0,
+            "NotExpert" or "IsExpert" or "IsMasterMode" or "NotMasterMode" or "NotRemixSeed" or "RemixSeed" or "NotFromStatue"
+                or "IsPreHardmode" or "RemixSeedEasymode" or "MechanicalBossesDummyCondition"
+                or "IsCorruptionAndNotExpert" or "IsCrimsonAndNotExpert" or "LegacyHack_IsABoss"
+                or "LegacyHack_IsBossAndNotExpert" or "MissingTwin" or "EmpressOfLightIsGenuinelyEnraged"
+                or "DontStarveIsNotUp" or "DontStarveIsUp" or "TenthAnniversaryIsNotUp" or "TenthAnniversaryIsUp"
+                or "WindyEnoughForKiteDrops" or "IsChristmas" or "HalloweenGoodieBagDrop" or "HalloweenWeapons"
+                or "XmasPresentDrop" or "PumpkinMoonDropGatingChance" or "FrostMoonDropGatingChance"
+                or "PumpkinMoonDropGateForTrophies" or "FrostMoonDropGateForTrophies" or "FromCertainWaveAndAbove"
+                => 0,
             _ => -1
         };
     }
@@ -155,6 +210,7 @@ internal static class ProgressionSources
         var result = new List<MiningRoute>
         {
             new(ItemID.DemoniteOre,0,55,"天然矿脉"),new(ItemID.CrimtaneOre,0,55,"天然矿脉"),
+            new(ItemID.Meteorite,BossTier(graph,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu),50,"邪恶 Boss 后陨石坠落矿脉"),
             new(ItemID.Hellstone,0,65,"地狱矿脉"),
             new(ItemID.CobaltOre,hardmode,100,"困难模式矿脉"),new(ItemID.PalladiumOre,hardmode,100,"困难模式矿脉"),
             new(ItemID.MythrilOre,mythrilGate,110,rework == true ? "灾厄重做：首个机械 Boss 解锁矿脉" : "困难模式祭坛矿脉"),

@@ -159,6 +159,7 @@ namespace AE2ForTerraria.Progression
 				return false;
 			}
 
+
 			foreach (ProgressionTier tier in Tiers)
 			{
 				string have = Normalize(tier.DisplayName);
@@ -606,6 +607,9 @@ namespace AE2ForTerraria.Progression
 			int anchoredItems = 0;
 			var unmatched = new List<string>();
 
+            var npcCheckpoints=Tiers.Where(t=>t.Source!="inferred").SelectMany(t=>t.NpcIds.Select(npc=>(npc,t)))
+                .GroupBy(pair=>pair.npc).ToDictionary(group=>group.Key,
+                    group=>group.OrderBy(pair=>pair.t.NpcIds.Count).ThenBy(pair=>pair.t.Index).First().t.Index);
 			foreach (ProgressionTier tier in Tiers)
 			{
 				if (tier.Id == "start" || tier.NpcIds.Count==0 && !(tier.Id?.StartsWith("boss_") ?? false))
@@ -632,36 +636,41 @@ namespace AE2ForTerraria.Progression
 				}
 
 				matchedBosses++;
-                if (tier.TreasureBag>0)
+                void AnchorDrop(int type, int gate, int checkpoint=-1)
                 {
-                    _bossAnchored[ItemKey.Crafted(tier.TreasureBag)]=tier.Index;
-                    foreach(var drop in GameDataIndex.GetContainerDrops(tier.TreasureBag))
-                        if (!_bossAnchored.TryGetValue(ItemKey.Crafted(drop.ItemType),out int old) || tier.Index<old)
-                            _bossAnchored[ItemKey.Crafted(drop.ItemType)]=tier.Index;
+                    if(type <= 0 || gate < 0) return;
+                    var key=ItemKey.Crafted(type);
+                    if(checkpoint<0) checkpoint=tier.Index;
+                    int available=Math.Max(checkpoint,gate);
+                    if(_explicitItemTier.ContainsKey(key)
+                        || _bossAnchored.TryGetValue(key,out int old) && old<=available) return;
+                    _bossAnchored[key]=available;
+                    SourceReason(type,"Boss / 事件掉落：" + Tiers[checkpoint].DisplayName
+                        + (gate>checkpoint ? "；附加解锁条件："+Tiers[gate].DisplayName : ""));
+                    anchoredItems++;
                 }
-                foreach(int type in tier.LootItems)
-                    if(type>0 && (!_bossAnchored.TryGetValue(ItemKey.Crafted(type),out int prior) || tier.Index<prior))
-                        _bossAnchored[ItemKey.Crafted(type)]=tier.Index;
+                var reported=new HashSet<int>();
+                if(tier.TreasureBag>0)
+                {
+                    AnchorDrop(tier.TreasureBag,0);
+                    foreach(var drop in GameDataIndex.GetContainerDrops(tier.TreasureBag))
+                    {
+                        reported.Add(drop.ItemType);
+                        AnchorDrop(drop.ItemType,ProgressionSources.DropTier(this,drop));
+                    }
+                }
+                foreach(int npcType in npcs)
+                    foreach(var drop in GameDataIndex.GetNpcDropRecords(npcType))
+                    {
+                        reported.Add(drop.ItemType);
+                        int gate=ProgressionSources.DropTier(this,drop), spawn=ProgressionSources.EventNpcGate(this,npcType);
+                        AnchorDrop(drop.ItemType,gate<0 || spawn<0 ? -1 : Math.Max(gate,spawn),
+                            npcCheckpoints.GetValueOrDefault(npcType,tier.Index));
+                    }
+                // Checklist metadata lacks per-drop conditions. It must not bypass
+                // a gate (or an opaque predicate) already reported by the real loot table.
+                foreach(int type in tier.LootItems.Where(type=>!reported.Contains(type))) AnchorDrop(type,0);
 
-				foreach (int npcType in npcs)
-				{
-					foreach ((int item, float rate) in GameDataIndex.GetDrops(npcType))
-					{
-						if (item <= 0)
-						{
-							continue;
-						}
-
-						var key = ItemKey.Crafted(item);
-						if (_explicitItemTier.ContainsKey(key) || _bossAnchored.ContainsKey(key))
-						{
-							continue;
-						}
-
-						_bossAnchored[key] = tier.Index;
-						anchoredItems++;
-					}
-				}
 			}
 
 			if (matchedBosses > 0)
@@ -903,23 +912,22 @@ namespace AE2ForTerraria.Progression
                     {if(!stationUsers.TryGetValue(tile,out var list)) stationUsers[tile]=list=new();list.Add(index);}
                 Enqueue(index);
             }
-            var containerRoutes = ProgressionWorldSources.Containers(this);
-            var containersUsingKey = new Dictionary<int,List<int>>();
-            foreach(var container in containerRoutes)
-                foreach(int key in container.Value.Select(r=>r.Key).Where(k=>k>0).Distinct())
+            var acquisitionRoutes = ProgressionWorldSources.Routes(this);
+            var sourceUsers = new Dictionary<int,List<ProgressionWorldSources.AcquisitionRoute>>();
+            foreach(var route in acquisitionRoutes)
+                foreach(int input in route.Inputs.Distinct())
                 {
-                    if(!containersUsingKey.TryGetValue(key,out var users)) containersUsingKey[key] = users = new();
-                    users.Add(container.Key);
+                    if(!sourceUsers.TryGetValue(input,out var users)) sourceUsers[input]=users=new();
+                    users.Add(route);
                 }
             var sourceQueue = new Queue<int>(); var sourceQueued = new HashSet<int>();
             void EnqueueSource(int type)
             {
-                if(containerRoutes.ContainsKey(type) && sourceQueued.Add(type)) sourceQueue.Enqueue(type);
+                if(sourceUsers.ContainsKey(type) && sourceQueued.Add(type)) sourceQueue.Enqueue(type);
             }
             void Notify(int type)
             {
                 EnqueueSource(type);
-                if(containersUsingKey.TryGetValue(type,out var containers)) foreach(int user in containers) EnqueueSource(user);
                 foreach(int dependent in _recipes.GetRecipesUsing(type)) Enqueue(dependent);
                 if(ContentSamples.ItemsByType.TryGetValue(type,out var item)
                     && stationUsers.TryGetValue(item.createTile,out var consumers))
@@ -951,22 +959,19 @@ namespace AE2ForTerraria.Progression
                 if(sourceQueue.Count>0)
                 {
                     int source=sourceQueue.Dequeue();sourceQueued.Remove(source);
-                    if(!_inferredCache.TryGetValue(ItemKey.Crafted(source),out int available)) continue;
-                    foreach(var route in containerRoutes[source])
+                    foreach(var route in sourceUsers[source])
                     {
                         var key=ItemKey.Crafted(route.Output);
-                        if(_explicitItemTier.ContainsKey(key)) continue;
-                        int gate=route.Gate;
-                        if(route.Key>0)
+                        if(_explicitItemTier.ContainsKey(key) || route.Gate<0) continue;
+                        int available=route.Gate;
+                        foreach(int input in route.Inputs)
                         {
-                            if(!_inferredCache.TryGetValue(ItemKey.Crafted(route.Key),out int keyTier)) continue;
-                            gate=Math.Max(gate,keyTier);
+                            if(!_inferredCache.TryGetValue(ItemKey.Crafted(input),out int inputTier)) { available=-1; break; }
+                            available=Math.Max(available,inputTier);
                         }
-                        int openedTier=Math.Max(available,gate);
-                        if(_inferredCache.TryGetValue(key,out int prior) && prior<=openedTier) continue;
-                        _inferredCache[key]=openedTier;
-                        _reasons[key.Type]="开启："+Lang.GetItemNameValue(source)+(route.Key>0 ? "；钥匙："+Lang.GetItemNameValue(route.Key) : "")
-                            + "；" + _reasons.GetValueOrDefault(source,"已知容器来源");
+                        if(available<0 || _inferredCache.TryGetValue(key,out int prior) && prior<=available) continue;
+                        _inferredCache[key]=available;
+                        _reasons[key.Type]=route.Reason+"："+string.Join("、",route.Inputs.Select(Lang.GetItemNameValue));
                         Notify(key.Type);
                         if(ContentSamples.ItemsByType.TryGetValue(key.Type,out var outputItem) && outputItem.pick>0) UpdateMining();
                     }

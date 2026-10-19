@@ -52,6 +52,7 @@ namespace AE2ForTerraria.Systems
 
 		public static string GetName(int npcType)
 		{
+			if(npcType<0 && Terraria.ID.ContentSamples.NpcsByNetId.TryGetValue(npcType,out var variant)) return variant.FullName;
 			try
 			{
 				return Lang.GetNPCNameValue(npcType);

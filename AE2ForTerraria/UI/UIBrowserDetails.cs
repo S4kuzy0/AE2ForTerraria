@@ -360,9 +360,11 @@ internal sealed class UIBrowserDetails : UIElement
     }
     private void AddDrop(DropRecord drop, bool source)
     {
-        string label = source ? drop.NpcType > 0 ? "掉落：" + NpcIndex.GetName(drop.NpcType)
+        string label = source ? drop.NpcType != 0 ? "掉落：" + NpcIndex.GetName(drop.NpcType)
             : "开启：" + Lang.GetItemNameValue(drop.ContainerType) : Lang.GetItemNameValue(drop.ItemType);
-        Add(label + "  " + drop.Summary, source ? drop.ContainerType : drop.ItemType, source ? drop.NpcType : 0);
+        // Variant net IDs are source records, not catalogue NPC identities.
+        // Keep their proper name without sending negative IDs to texture/history APIs.
+        Add(label + "  " + drop.Summary, source ? drop.ContainerType : drop.ItemType, source ? Math.Max(0,drop.NpcType) : 0);
         if (drop.Conditions.Count == 0) return;
         bool expanded = _expandedConditions.Contains(drop);
         _rows.Add(new Row((expanded ? "▾ " : "▸ ") + "条件（" + drop.Conditions.Count + "）", Color: UITheme.Warn, Indent: 1,

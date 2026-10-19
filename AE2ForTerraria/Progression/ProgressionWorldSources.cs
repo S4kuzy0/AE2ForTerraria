@@ -17,7 +17,14 @@ internal static class ProgressionWorldSources
         ItemID.Moonglow, ItemID.MoonglowSeeds, ItemID.Deathweed, ItemID.DeathweedSeeds,
         ItemID.Waterleaf, ItemID.WaterleafSeeds, ItemID.Fireblossom, ItemID.FireblossomSeeds,
         ItemID.Shiverthorn, ItemID.ShiverthornSeeds, ItemID.Cactus, ItemID.Coral, ItemID.Acorn,
-        ItemID.FallenStar, ItemID.SiltBlock, ItemID.SlushBlock, ItemID.DesertFossil
+        ItemID.FallenStar, ItemID.SiltBlock, ItemID.SlushBlock, ItemID.DesertFossil,
+        ItemID.VileMushroom, ItemID.ViciousMushroom, ItemID.JungleGrassSeeds,
+        ItemID.Apple, ItemID.Apricot, ItemID.Grapefruit, ItemID.Lemon, ItemID.Peach,
+        ItemID.Cherry, ItemID.Plum, ItemID.BlackCurrant, ItemID.Elderberry, ItemID.BloodOrange,
+        ItemID.Rambutan, ItemID.Mango, ItemID.Pineapple, ItemID.Banana, ItemID.Coconut,
+        ItemID.GoldWorm, ItemID.GoldBird, ItemID.GoldBunny, ItemID.GoldButterfly,
+        ItemID.GoldFrog, ItemID.GoldGrasshopper, ItemID.GoldMouse, ItemID.GoldGoldfish,
+        ItemID.GoldLadyBug, ItemID.GoldDragonfly, ItemID.GoldWaterStrider
     };
     private static readonly int[] EarlyChestItems =
     {
@@ -38,6 +45,41 @@ internal static class ProgressionWorldSources
         foreach(int type in NaturalItems) add(type,0,"世界自然生成 / 采集");
         foreach(int type in EarlyChestItems) add(type,0,"世界生成的地表、地下或生物群系宝箱");
         ProgressionFishingSources.Seed(graph, add);
+    }
+    internal sealed record AcquisitionRoute(int Output,int Gate,int[] Inputs,string Reason);
+    internal static List<AcquisitionRoute> Routes(ProgressionGraph graph)
+    {
+        var result=new List<AcquisitionRoute>();
+        foreach(var container in Containers(graph))
+            foreach(var route in container.Value)
+                result.Add(new(route.Output,route.Gate,route.Key>0 ? new[]{container.Key,route.Key} : new[]{container.Key},"开启容器"));
+
+        // Direct vanilla transmutations only. Decrafting and arbitrary mod
+        // CanShimmer callbacks cannot be proven from the transformation table.
+        for(int input=1;input<ItemID.Count;input++)
+        {
+            int output=ItemID.Sets.ShimmerTransformToItem[input];
+            if(output>0) result.Add(new(output,0,new[]{input},"微光直接转换"));
+        }
+        int moonlord=ProgressionSources.BossTier(graph,NPCID.MoonLordCore);
+        foreach(var pair in new[]{(ItemID.RodofDiscord,ItemID.RodOfHarmony),(ItemID.Clentaminator,ItemID.Clentaminator2),
+            (ItemID.BottomlessBucket,ItemID.BottomlessShimmerBucket),(ItemID.BottomlessShimmerBucket,ItemID.BottomlessBucket)})
+        {
+            result.RemoveAll(r=>r.Reason=="微光直接转换" && r.Inputs[0]==pair.Item1);
+            result.Add(new(pair.Item2,moonlord,new int[]{pair.Item1},"月亮领主后微光转换"));
+        }
+        int[] extractOutputs={ItemID.CopperOre,ItemID.TinOre,ItemID.IronOre,ItemID.LeadOre,
+            ItemID.SilverOre,ItemID.TungstenOre,ItemID.GoldOre,ItemID.PlatinumOre,ItemID.Amethyst,
+            ItemID.Topaz,ItemID.Sapphire,ItemID.Emerald,ItemID.Ruby,ItemID.Diamond,ItemID.Amber,ItemID.AmberMosquito};
+        foreach(int input in new[]{ItemID.SiltBlock,ItemID.SlushBlock,ItemID.DesertFossil})
+            foreach(int machine in new[]{ItemID.Extractinator,ItemID.ChlorophyteExtractinator})
+            {
+                foreach(int output in extractOutputs) result.Add(new(output,0,new[]{input,machine},"提炼机处理"));
+                if(input==ItemID.DesertFossil) result.Add(new(ItemID.FossilOre,0,new[]{input,machine},"沙漠化石提炼"));
+            }
+        foreach(int output in new[]{ItemID.WhitePearl,ItemID.BlackPearl,ItemID.PinkPearl,ItemID.ShuckedOyster})
+            result.Add(new(output,0,new int[]{ItemID.Oyster},"开启牡蛎"));
+        return result;
     }
     internal readonly record struct ContainerRoute(int Output,int Gate,int Key);
     internal static Dictionary<int,List<ContainerRoute>> Containers(ProgressionGraph graph)

@@ -179,9 +179,12 @@ namespace AE2ForTerraria.Systems
 		{
 			int total = NPCLoader.NPCCount;
 
-			for (int npcType = 1; npcType < total; npcType++)
+            // Vanilla variants such as Pinky have negative net IDs and their
+            // own loot rules. Enumerating positive NPC types silently loses them.
+			foreach (int npcType in Enumerable.Range(1,total-1).Concat(ContentSamples.NpcsByNetId.Keys.Where(id=>id<0)))
 			{
-				string npcName = NpcIndex.GetName(npcType);
+                string npcName = npcType<0 && ContentSamples.NpcsByNetId.TryGetValue(npcType,out var variant)
+                    ? variant.FullName : NpcIndex.GetName(npcType);
 				if (string.IsNullOrWhiteSpace(npcName))
 				{
 					continue;
