@@ -1,6 +1,6 @@
 # 设计与数据说明
 
-适用源码：0.27.7；核对日期：2026-10-19（北京时间）。源码根目录为 `AE2ForTerraria/`。本文件记录模块边界与关键数据流，不逐个解释简单函数。历史架构记录见 [ARCHITECTURE-0.22.md](ARCHITECTURE-0.22.md)。
+适用源码：0.27.8；核对日期：2026-10-19（北京时间）。源码根目录为 `AE2ForTerraria/`。本文件记录模块边界与关键数据流，不逐个解释简单函数。历史架构记录见 [ARCHITECTURE-0.22.md](ARCHITECTURE-0.22.md)。
 
 ## 技术与模块边界
 
@@ -128,3 +128,7 @@ Boss 顺序的默认记录保留 NPC、掉落和击败回调。个人顺序只�
 最后一次性统计所有已知物品最早阶段与所有已知配方首次可制作阶段，合并为有效检查点。纯掉落新物品独立保留；没有两类新增内容的检查点仅从网格分组和下一检查点说明略过，原时间轴、NPC 资料、个人顺序和实际来源索引保留。统计不读取当前筛选列表，正倒序都用同一份有效节点索引。
 
 核对依据沿用实际 tModLoader 和 BossChecklist API，并复核 [tModLoader TileLoader 官方实现](https://github.com/tModLoader/tModLoader/blob/1.4.4/patches/tModLoader/Terraria/ModLoader/TileLoader.cs) 与 [Recipe Browser](https://github.com/JavidPack/RecipeBrowser)。TileLoader 的类型／样式掉落查询不提供“世界自然生成”证明，因此沿用明确来源声明及现有索引，不增加外部依赖或复制第三方实现。尚无统一公开资料的第三方世界生成或容器条件继续保持未知。
+
+## 0.27.8：钓鱼来源
+
+`ProgressionFishingSources` 使用经 Wiki 与实际游戏版本核对的原版来源，按普通水域、生物群系、熔岩、宝匣和渔夫奖励声明门槛，由 `ProgressionWorldSources.Seed` 接入已有最早路线传播。较晚的事件掉落和模组配方不会覆盖更早的钓鱼来源；地牢匣同时要求骷髅王和对应模式，黑曜石剑鱼保持困难模式检查。统计仍按全体内容，未知第三方钓鱼回调不执行模拟。版本及证据维护在[来源核对](acquisition-sources.md)。

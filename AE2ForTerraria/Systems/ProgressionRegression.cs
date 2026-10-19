@@ -30,6 +30,11 @@ internal static class ProgressionRegression
                 + "; plantera=" + ProgressionSources.BossTier(live,NPCID.Plantera));
             AE2ForTerraria.Instance.Logger.Info("AE2 EARLIEST SOURCE: LifeCrystal=" + live.GetTierIndex(ItemKey.Crafted(ItemID.LifeCrystal))
                 + "; source=" + live.GetExplanation(ItemID.LifeCrystal));
+            AE2ForTerraria.Instance.Logger.Info("AE2 EARLIEST FISHING: FrogLeg=" + live.GetTierIndex(ItemKey.Crafted(ItemID.FrogLeg))
+                + "; source=" + live.GetExplanation(ItemID.FrogLeg));
+            check(live.GetTierIndex(ItemKey.Crafted(ItemID.FrogLeg))==0 && live.GetExplanation(ItemID.FrogLeg).Contains("钓鱼"),
+                "frog leg uses its direct pre-boss fishing source instead of a later Blood Moon drop or crafting route");
+            CheckFishing(check, live, sourceAnchors);
             check(sourceAnchors.GetValueOrDefault(ItemKey.Crafted(ItemID.LifeCrystal),-1)==0,
                 "natural life crystals have a world-generation source before every boss independently of crafting recipes");
             check(sourceAnchors.TryGetValue(ItemKey.Crafted(ItemID.Ectoplasm),out int ectoplasm)
@@ -72,6 +77,10 @@ internal static class ProgressionRegression
             check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==1,"crafted progression inherits a material's explicit boss unlock");
             graph=Graph(Recipe.Create(ItemID.Torch).AddIngredient(ItemID.Ruby),Recipe.Create(ItemID.Torch).AddIngredient(ItemID.StoneBlock));
             check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==0,"multiple recipes choose the earliest obtainable progression route");
+            graph=Graph(Recipe.Create(ItemID.Torch).AddIngredient(ItemID.FrogLeg),Recipe.Create(ItemID.Torch).AddIngredient(ItemID.Ruby));
+            graph.AnchorItem(ItemKey.Crafted(ItemID.FrogLeg),"start");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==0,
+                "an early fishing material lowers dependent recipe stages instead of being only a tooltip correction");
             graph=Graph(Recipe.Create(ItemID.Emerald).AddIngredient(ItemID.Sapphire),Recipe.Create(ItemID.Emerald).AddIngredient(ItemID.Wood),
                 Recipe.Create(ItemID.Sapphire).AddIngredient(ItemID.Emerald),Recipe.Create(ItemID.Sapphire).AddIngredient(ItemID.Ruby));
             check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Emerald))==0 && graph.GetTierIndex(ItemKey.Crafted(ItemID.Sapphire))==0,
@@ -130,6 +139,40 @@ internal static class ProgressionRegression
             finally {if(had)drops[NPCID.EyeofCthulhu]=prior;else drops.Remove(NPCID.EyeofCthulhu);}
         }
         finally {Main.recipe=recipes;Recipe.numRecipes=count;}
+    }
+    private static void CheckFishing(Action<bool,string> check, ProgressionGraph graph, Dictionary<ItemKey,int> anchors)
+    {
+        foreach (int type in new[] { ItemID.BalloonPufferfish, ItemID.ZephyrFish, ItemID.ReaverShark,
+            ItemID.ArmoredCavefish, ItemID.Honeyfin, ItemID.Obsidifish, ItemID.LavaCrate,
+            ItemID.FloatingIslandFishingCrate, ItemID.GoldenFishingRod, ItemID.GoldenBugNet,
+            ItemID.BottomlessBucket, ItemID.SuperAbsorbantSponge, ItemID.BottomlessHoneyBucket })
+            check(anchors.GetValueOrDefault(ItemKey.Crafted(type),-1)==0 && graph.GetTierIndex(ItemKey.Crafted(type))==0,
+                "verified pre-boss fishing or Angler route remains early in the loaded pack: " + ItemID.Search.GetName(type));
+        int hardmode=ProgressionSources.BossTier(graph,NPCID.WallofFlesh);
+        foreach (int type in new[] { ItemID.CrystalSerpent, ItemID.Toxikarp, ItemID.Bladetongue,
+            ItemID.ScalyTruffle, ItemID.ObsidianSwordfish, ItemID.GreenJellyfish,
+            ItemID.HotlineFishingHook, ItemID.FinWings, ItemID.GoldenCrateHard })
+            check(anchors.GetValueOrDefault(ItemKey.Crafted(type),-1)==hardmode,
+                "verified fishing source keeps its explicit Hardmode gate: " + ItemID.Search.GetName(type));
+        int skeletron=ProgressionSources.BossTier(graph,NPCID.SkeletronHead);
+        check(anchors.GetValueOrDefault(ItemKey.Crafted(ItemID.DungeonFishingCrate),-1)==skeletron
+            && anchors.GetValueOrDefault(ItemKey.Crafted(ItemID.DungeonFishingCrateHard),-1)==Math.Max(hardmode,skeletron),
+            "Dungeon crates respect Skeletron and Hardmode together rather than treating every biome crate as pre-boss");
+        check(graph.GetTierIndex(ItemKey.Crafted(ItemID.LuckyHorseshoe))==0
+            && graph.GetTierIndex(ItemKey.Crafted(ItemID.SailfishBoots))==0,
+            "new fishing-crate sources feed the real container index and preserve early exploration alternatives");
+        var fishing = new HashSet<int>();
+        ProgressionFishingSources.Seed(graph, (type, tier, reason) => fishing.Add(type));
+        check(fishing.Contains(ItemID.FishingSeaweed) && !fishing.Contains(ItemID.Seaweed),
+            "fishing trash uses the actual catch identity rather than the similarly named turtle pet");
+        if (Terraria.ModLoader.ModLoader.TryGetMod("CalamityMod",out var calamity) && calamity.Version==new Version(2,2,4))
+            check(anchors.GetValueOrDefault(ItemKey.Crafted(ItemID.Sundial),-1)==0
+                && graph.GetTierIndex(ItemKey.Crafted(ItemID.Sundial))==0,
+                "installed Calamity 2.2.4 makes Enchanted Sundial an early guaranteed Angler reward without importing obsolete Hotline gates");
+        bool hard=Main.hardMode, downed=NPC.downedBoss3;
+        ProgressionSources.Anchor(graph,new Dictionary<ItemKey,int>());
+        check(Main.hardMode==hard && NPC.downedBoss3==downed,
+            "fishing acquisition lookup does not run catches, quests or mutate world progression");
     }
     private static void CheckContainers(Action<bool,string> check,Func<Recipe[],ProgressionGraph> graphFactory)
     {

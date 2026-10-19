@@ -37,11 +37,7 @@ internal static class ProgressionWorldSources
     {
         foreach(int type in NaturalItems) add(type,0,"世界自然生成 / 采集");
         foreach(int type in EarlyChestItems) add(type,0,"世界生成的地表、地下或生物群系宝箱");
-        foreach(int type in new int[]{ItemID.WoodenCrate,ItemID.IronCrate,ItemID.GoldenCrate})
-            add(type,0,"钓鱼：困难模式前的板条箱");
-        int hardmode = ProgressionSources.BossTier(graph,NPCID.WallofFlesh);
-        foreach(int type in new int[]{ItemID.WoodenCrateHard,ItemID.IronCrateHard,ItemID.GoldenCrateHard})
-            add(type,hardmode,"钓鱼：困难模式板条箱");
+        ProgressionFishingSources.Seed(graph, add);
     }
     internal readonly record struct ContainerRoute(int Output,int Gate,int Key);
     internal static Dictionary<int,List<ContainerRoute>> Containers(ProgressionGraph graph)

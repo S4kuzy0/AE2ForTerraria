@@ -90,7 +90,7 @@ public sealed class UiRegressionSystem : ModSystem
         SetViewport(1280,720,1f);
         var state = NewSearch(); state.Layout.X=24;state.Layout.Y=24;state.Layout.W=760;state.Layout.H=600;
         state.FitToScreen(); Invoke(state,"ApplyLayout");
-        var all = Field<List<int>>(state,"_allItems"); all.Clear(); all.AddRange(new int[]{ItemID.Wood,ItemID.StoneBlock,ItemID.LifeCrystal,ItemID.MagicMirror,ItemID.Torch,ItemID.Ectoplasm,ItemID.CobaltOre,ItemID.ChlorophyteOre,ItemID.LunarBar});
+        var all = Field<List<int>>(state,"_allItems"); all.Clear(); all.AddRange(new int[]{ItemID.Wood,ItemID.StoneBlock,ItemID.LifeCrystal,ItemID.MagicMirror,ItemID.FrogLeg,ItemID.ReaverShark,ItemID.GoldenFishingRod,ItemID.CrystalSerpent,ItemID.DungeonFishingCrate,ItemID.Torch,ItemID.Ectoplasm,ItemID.CobaltOre,ItemID.ChlorophyteOre,ItemID.LunarBar});
         try
         {
             void Choose(string label)
@@ -1649,6 +1649,37 @@ public sealed class UiRegressionSystem : ModSystem
             device.SetRenderTargets(targets);
             using var armorFile = File.Create(Path.Combine(directory, "AE-interface-layer-armor-tooltip-1280x720.png"));
             target.SaveAsPng(armorFile, 1280, 720); Mod.Logger.Info("AE2 UI RENDERED: actual AE armor category and set tooltip 1280x720");
+            var fishingSearch = NewSearch();
+            fishingSearch.Layout.X=40; fishingSearch.Layout.Y=40; fishingSearch.Layout.W=750; fishingSearch.Layout.H=480;
+            fishingSearch.OnActivate();
+            var fishingItems=Field<List<int>>(fishingSearch,"_allItems"); fishingItems.Clear(); fishingItems.Add(ItemID.FrogLeg);
+            Click(fishingSearch,"_sortButton"); var fishingSort=ActiveChoice();
+            int fishingSortIndex=Array.FindIndex(Field<string[]>(fishingSort,"_choices"),value=>value.StartsWith("获取阶段",StringComparison.Ordinal));
+            Assert(fishingSortIndex>=0,"Frog Leg tooltip fixture selects acquisition sorting through the real dropdown");
+            SetField(fishingSort,"_scroll",fishingSortIndex); var fishingSortBounds=fishingSort.GetDimensions();
+            fishingSort.LeftClick(new UIMouseEvent(fishingSort,new Vector2(fishingSortBounds.X+15,fishingSortBounds.Y+15)));
+            var fishingGrid=Field<UIItemGrid>(fishingSearch,"_grid"); var fishingBounds=fishingGrid.GetDimensions();
+            point=new Vector2(fishingBounds.X+fishingGrid.CellSize/2,fishingBounds.Y+fishingGrid.CellSize*1.5f);
+            var fishingInterface=new UserInterface(); fishingInterface.SetState(fishingSearch);
+            typeof(UISystem).GetProperty(nameof(UISystem.Interface))!.SetValue(null,fishingInterface);
+            foreach(string name in new[]{"_originalMouseX","_originalLastMouseX"}) zoomFields[name].SetValue(null,(int)point.X);
+            foreach(string name in new[]{"_originalMouseY","_originalLastMouseY"}) zoomFields[name].SetValue(null,(int)point.Y);
+            Main.mouseX=(int)point.X; Main.mouseY=(int)point.Y;
+            Terraria.GameInput.PlayerInput.MouseInfo=new Microsoft.Xna.Framework.Input.MouseState((int)point.X,(int)point.Y,0,
+                Microsoft.Xna.Framework.Input.ButtonState.Released,Microsoft.Xna.Framework.Input.ButtonState.Released,Microsoft.Xna.Framework.Input.ButtonState.Released,
+                Microsoft.Xna.Framework.Input.ButtonState.Released,Microsoft.Xna.Framework.Input.ButtonState.Released);
+            fishingSearch.Update(new GameTime()); Main.mouseText=false; Main.HoverItem=new Item(); Main.hoverItemName="";
+            mouseCache.SetValue(Main.instance,Activator.CreateInstance(mouseCache.FieldType));
+            device.SetRenderTarget(target); device.Clear(new Color(12,16,24));
+            Assert(layer.Draw() && Main.HoverItem.type==ItemID.FrogLeg,
+                "actual acquisition-sorted AE grid hovers Frog Leg through its grouped row mapping");
+            var fishingLines=new List<TooltipLine>();
+            ModContent.GetInstance<ProgressionTooltip>().ModifyTooltips(Main.HoverItem,fishingLines);
+            Assert(fishingLines.Any(line=>line.Text.Contains("Boss 前")) && fishingLines.Any(line=>line.Text.Contains("钓鱼")),
+                "native Frog Leg tooltip shows the pre-boss fishing explanation instead of the Blood Moon phase");
+            device.SetRenderTargets(targets);
+            using var fishingFile=File.Create(Path.Combine(directory,"AE-interface-layer-frog-tooltip-1280x720.png"));
+            target.SaveAsPng(fishingFile,1280,720); Mod.Logger.Info("AE2 UI RENDERED: actual AE Frog Leg acquisition tooltip 1280x720");
         }
         finally
         {
