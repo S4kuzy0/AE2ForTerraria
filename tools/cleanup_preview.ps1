@@ -1,7 +1,7 @@
 # Removes the throwaway preview files created while checking the source browser.
 $ErrorActionPreference = 'Stop'
 
-$tools = 'C:\Users\ROG\Documents\ChatGPT\ae2 for tr\tools'
+$tools = [IO.Path]::GetFullPath($PSScriptRoot)
 
 $files = @(
     '_preview.html',
@@ -25,7 +25,7 @@ foreach ($name in $files) {
 $profile = Join-Path $tools '_chromeprofile'
 if (Test-Path -LiteralPath $profile) {
     $resolved = (Resolve-Path -LiteralPath $profile).Path
-    if (-not $resolved.StartsWith($tools, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $resolved.StartsWith(($tools + [IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "refusing to delete outside tools: $resolved"
     }
 

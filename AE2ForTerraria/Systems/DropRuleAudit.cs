@@ -46,7 +46,8 @@ public sealed class DropRuleAudit : ModSystem
                 }
             }
         }
-        string path = @"C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\drop-rule-audit.json";
+        Directory.CreateDirectory(RegressionPaths.Root);
+        string path = Path.Combine(RegressionPaths.Root, "drop-rule-audit.json");
         File.WriteAllText(path, JsonSerializer.Serialize(new { version = Mod.Version.ToString(),
             npcTypes = NPCLoader.NPCCount, rows, conditional, zero, abnormal, errors, examples }, new JsonSerializerOptions { WriteIndented = true }));
         Mod.Logger.Info($"AE2 DROP AUDIT: rows={rows} conditional={conditional} zero={zero} abnormal={abnormal} errors={errors}; {path}");

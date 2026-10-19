@@ -1,23 +1,33 @@
 param(
     [Parameter(Mandatory)][ValidatePattern('^[a-z0-9-]{1,40}$')][string]$Run,
     [ValidateSet('core','journey','interactions')][string]$Mode = 'core',
-    [string]$SourceWorld
+    [string]$SourceWorld,
+    [string]$TmlInstall = $env:TML_INSTALL,
+    [string]$SaveRoot = (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'My Games/Terraria/tModLoader'),
+    [string]$ValidationRoot = ''
 )
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path $PSScriptRoot -Parent
-$tml = 'D:\SteamLibrary\steamapps\common\tModLoader'
-$saveRoot = 'C:\Users\ROG\Documents\My Games\Terraria\tModLoader'
+if (-not $TmlInstall) { throw 'Specify -TmlInstall or TML_INSTALL.' }
+$tml = (Resolve-Path -LiteralPath $TmlInstall).Path
+$saveRoot = (Resolve-Path -LiteralPath $SaveRoot).Path
+if (-not (Test-Path -LiteralPath (Join-Path $tml 'tModLoader.dll'))) { throw 'Invalid tModLoader installation.' }
 $running = Get-CimInstance Win32_Process | Where-Object {
     $_.Name -eq 'dotnet.exe' -and $_.CommandLine -match 'tModLoader.dll' -and $_.CommandLine -notmatch '-terrariasteamclient'
 }
 if ($running) { throw 'An existing tModLoader process is running. Preserve that session before validation.' }
-$outputRoot = Join-Path $workspace 'validation'
+if (-not $ValidationRoot) { $ValidationRoot = Join-Path $workspace 'work/validation' }
+$outputRoot = [IO.Path]::GetFullPath($ValidationRoot)
+New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 if ($Mode -ne 'core') {
     $journeyRoot = Join-Path $outputRoot 'player-journey'
     $runRoot = Join-Path $journeyRoot $Run
     if (Test-Path -LiteralPath $runRoot) { throw 'Use a fresh run name; existing test artifacts are preserved.' }
     New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
-    $source = Join-Path $outputRoot 'stage1\live\core-20261003\AE2ValidationCore20261003'
+    if (-not $SourceWorld) { throw 'Journey modes require an explicit existing fixture .wld via -SourceWorld.' }
+    $fixture = (Resolve-Path -LiteralPath $SourceWorld).Path
+    if ([IO.Path]::GetExtension($fixture) -ne '.wld') { throw 'SourceWorld must be a .wld file.' }
+    $source = $fixture.Substring(0, $fixture.Length - 4)
     if ($Mode -eq 'interactions') {
         if (-not $SourceWorld) { throw 'Copied-world interactions require an explicit source .wld.' }
         $sourceFile = (Resolve-Path -LiteralPath $SourceWorld).Path
@@ -47,6 +57,7 @@ $start.ArgumentList.Add($saveRoot)
 foreach ($key in @($start.Environment.Keys | Where-Object { $_ -like 'AE2_*' })) {
     $start.Environment.Remove($key) | Out-Null
 }
+$start.Environment['AE2_VALIDATION_ROOT'] = $outputRoot
 if ($Mode -eq 'core') {
     $start.Environment['AE2_RUN_REGRESSION'] = '1'
     $start.Environment['AE2_UI_REGRESSION'] = '1'

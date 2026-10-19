@@ -11,6 +11,7 @@
     <Compile Include="../../../AE2ForTerraria/Core/RecipeIndex.cs" />
     <Compile Include="../../../AE2ForTerraria/Core/ItemKey.cs" />
     <Compile Include="../../../AE2ForTerraria/Core/StorageLedger.cs" />
+    <Compile Include="../../../AE2ForTerraria/Core/StorageAmounts.cs" />
     <Compile Include="../PlannerRegression.cs" />
     <Compile Include="Stubs.cs" />
     <Compile Include="Program.cs" />

@@ -35,7 +35,7 @@ namespace AE2ForTerraria.Systems;
 /// </summary>
 public sealed class PlayerJourneyRegression : ModSystem
 {
-    private const string Root = @"C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\player-journey";
+    private static string Root => Path.Combine(RegressionPaths.Root, "player-journey");
     private const string FixtureWorld = "AE2ValidationCore20261003";
     private const string FixturePlayer = "AE2JourneyActor";
     private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;

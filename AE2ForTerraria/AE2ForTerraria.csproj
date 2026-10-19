@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="D:\SteamLibrary\steamapps\common\tModLoader\tMLMod.targets" />
+  <PropertyGroup>
+    <TmlInstall Condition="'$(TmlInstall)' == ''">$(TML_INSTALL)</TmlInstall>
+    <TmlTargets Condition="'$(TmlTargets)' == '' and '$(TmlInstall)' != ''">$(TmlInstall)/tMLMod.targets</TmlTargets>
+    <TmlTargets Condition="'$(TmlTargets)' == ''">$(MSBuildProjectDirectory)/../tModLoader.targets</TmlTargets>
+  </PropertyGroup>
+  <Import Project="$(TmlTargets)" Condition="Exists('$(TmlTargets)')" />
   <PropertyGroup>
     <AssemblyName>AE2ForTerraria</AssemblyName>
     <RootNamespace>AE2ForTerraria</RootNamespace>
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>12.0</LangVersion>
   </PropertyGroup>
+  <Target Name="ValidateTmlInstallation" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(TmlTargets)')" Text="Set TML_INSTALL or -p:TmlInstall to the tModLoader installation containing tMLMod.targets." />
+  </Target>
 </Project>
