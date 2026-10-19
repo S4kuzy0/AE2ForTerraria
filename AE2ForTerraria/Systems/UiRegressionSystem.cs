@@ -116,6 +116,15 @@ public sealed class UiRegressionSystem : ModSystem
             Assert(grid.GroupOf != null && grid.ProgressionTooltip && grid.GroupLabel(0).Contains("Boss 前"),
                 "acquisition sort enables timeline headers and native tooltip explanations");
             RenderProbe(state,"Search-stage-groups");
+            var headerPoint=new Vector2(grid.GetDimensions().X+12,grid.GetDimensions().Y+12);
+            int expandedRows=grid.TotalRows;
+            grid.LeftClick(new UIMouseEvent(grid,headerPoint));
+            state.Update(new GameTime());
+            Assert(grid.TotalRows<expandedRows && !Field<UIBrowserDetails>(state,"_details").IsOpen,
+                "actual catalogue header collapses its group without opening an item detail");
+            RenderProbe(state,"Search-stage-collapsed");
+            grid.LeftClick(new UIMouseEvent(grid,headerPoint));
+            Assert(grid.TotalRows==expandedRows,"actual catalogue stage reopens after complete window update");
             Choose("调整 Boss 顺序");
             var panel = (UIBossOrderPanel)typeof(UIBossOrderPanel).GetField("_active",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static)!.GetValue(null);
             var draft = Field<List<global::AE2ForTerraria.Progression.ProgressionTier>>(panel,"_draft");
@@ -123,6 +132,33 @@ public sealed class UiRegressionSystem : ModSystem
             Assert(UIBossOrderPanel.IsOpen && grid.InputBlocked(),"boss order subpage blocks catalogue input");
             panel.LeftClick(new UIMouseEvent(panel,new Vector2(bounds.X+bounds.Width-15,bounds.Y+70)));
             Assert(ReferenceEquals(draft[0],second) && graph.Tiers[1].Id == prior[1],"draft down-arrow changes order without changing the live graph");
+            panel.LeftClick(new UIMouseEvent(panel,new Vector2(bounds.X+bounds.Width-90,bounds.Y+100)));
+            Assert(ReferenceEquals(draft[0],first), "up button moves a stage to the previous rank");
+            panel.LeftClick(new UIMouseEvent(panel,new Vector2(bounds.X+bounds.Width-90,bounds.Y+70)));
+            Assert(ReferenceEquals(draft[0],first), "first rank cannot move above the list");
+            var torch = draft.Single(t=>t.NpcIds.Contains(Terraria.ID.NPCID.TorchGod));
+            int torchIndex=draft.IndexOf(torch);
+            SetField(panel,"_scroll",Math.Max(0,torchIndex-1));
+            panel.LeftClick(new UIMouseEvent(panel,new Vector2(bounds.X+bounds.Width-90,bounds.Y+100)));
+            Assert(draft.IndexOf(torch)==torchIndex-1,"Torch God up button lowers its rank number exactly once");
+            panel.LeftClick(new UIMouseEvent(panel,new Vector2(bounds.X+bounds.Width-15,bounds.Y+70)));
+            Assert(draft.IndexOf(torch)==torchIndex,"Torch God down button increases its rank number exactly once");
+            SetField(panel,"_scroll",0);
+            int savedX=Main.mouseX,savedY=Main.mouseY;bool savedLeft=Main.mouseLeft;
+            try
+            {
+                Vector2 press=new(bounds.X+70,bounds.Y+70);
+                panel.LeftMouseDown(new UIMouseEvent(panel,press));
+                Main.mouseLeft=true;Main.mouseX=(int)press.X;Main.mouseY=(int)bounds.Y+118;
+                panel.Update(new GameTime());
+                Assert(Field<bool>(panel,"_dragging"),"holding and moving a boss row starts a captured reorder drag");
+                RenderProbe(state,"Boss-order-drag");
+                Main.mouseLeft=false;panel.Update(new GameTime());
+                panel.LeftClick(new UIMouseEvent(panel,new Vector2(bounds.X+bounds.Width-15,bounds.Y+100)));
+                Assert(ReferenceEquals(draft[0],second) && ReferenceEquals(draft[1],first),
+                    "releasing a dragged row inserts it at the visible marker without changing live order");
+            }
+            finally {Main.mouseX=savedX;Main.mouseY=savedY;Main.mouseLeft=savedLeft;}
             RenderProbe(state,"Boss-order-editor");
             panel.Children.ElementAt(2).LeftClick(new UIMouseEvent(panel,panel.Children.ElementAt(2).GetDimensions().Center()));
             Assert(!UIBossOrderPanel.IsOpen && graph.Tiers[1].Id == second.Id && ReferenceEquals(graph.Tiers[2],first)
@@ -164,6 +200,13 @@ public sealed class UiRegressionSystem : ModSystem
         grouped.SetItems(new(){ItemID.Wood,ItemID.StoneBlock,ItemID.Torch}); var area = grouped.GetDimensions();
         Assert(grouped.TotalRows == 4 && !grouped.HasEntryAt(new Vector2(area.X+10,area.Y+12))
             && grouped.HasEntryAt(new Vector2(area.X+10,area.Y+54)),"group headers consume a row and cannot be mistaken for an item");
+        grouped.LeftClick(new UIMouseEvent(grouped,new Vector2(area.X+10,area.Y+12)));
+        Assert(grouped.TotalRows==3 && grouped.HeaderClickHandled && grouped.HasContentAt(new Vector2(area.X+10,area.Y+12))
+            && !grouped.HasEntryAt(new Vector2(area.X+10,area.Y+12)),
+            "clicking a stage header collapses its items while retaining an interactive header");
+        grouped.LeftClick(new UIMouseEvent(grouped,new Vector2(area.X+10,area.Y+12)));
+        Assert(grouped.TotalRows==4 && grouped.HasEntryAt(new Vector2(area.X+10,area.Y+54)),
+            "clicking the collapsed stage restores its items and hit-test mapping");
         grouped.ScrollRows(2);
         Assert(!grouped.HasEntryAt(new Vector2(area.X+10,area.Y+12)) && grouped.HasEntryAt(new Vector2(area.X+10,area.Y+54))
             && !grouped.HasEntryAt(new Vector2(area.X+54,area.Y+54)),"scrolling grouped rows keeps header and empty-column hit tests correct");
@@ -1680,20 +1723,24 @@ public sealed class UiRegressionSystem : ModSystem
             device.SetRenderTargets(targets);
             using var fishingFile=File.Create(Path.Combine(directory,"AE-interface-layer-frog-tooltip-1280x720.png"));
             target.SaveAsPng(fishingFile,1280,720); Mod.Logger.Info("AE2 UI RENDERED: actual AE Frog Leg acquisition tooltip 1280x720");
-            foreach(int type in new[]{ItemID.SharkFin,ItemID.PinkGel,ItemID.LifeFruit,ItemID.AmberMosquito,
-                ItemID.SoulofFlight,ItemID.TurtleShell,ItemID.DemonHeart,ItemID.WingsSolar})
+            var auditedTypes=new List<int> {ItemID.SharkFin,ItemID.PinkGel,ItemID.LifeFruit,ItemID.AmberMosquito,
+                ItemID.SoulofFlight,ItemID.TurtleShell,ItemID.DemonHeart,ItemID.WingsSolar,ItemID.Squirrel,ItemID.AshWood};
+            if(Terraria.ModLoader.ModLoader.TryGetMod("FargowiltasSouls",out var soulsMod)
+                && soulsMod.TryFind<ModItem>("WoodEnchant",out var woodEnchant)) auditedTypes.Add(woodEnchant.Type);
+            foreach(int type in auditedTypes)
             {
                 fishingItems.Clear(); fishingItems.Add(type); Invoke(fishingSearch,"Refresh");
                 fishingSearch.Update(new GameTime()); Main.mouseText=false; Main.HoverItem=new Item(); Main.hoverItemName="";
                 mouseCache.SetValue(Main.instance,Activator.CreateInstance(mouseCache.FieldType));
                 device.SetRenderTarget(target); device.Clear(new Color(12,16,24));
-                Assert(layer.Draw() && Main.HoverItem.type==type,"actual acquisition grid maps the corrected source tooltip: "+ItemID.Search.GetName(type));
+                Assert(layer.Draw() && Main.HoverItem.type==type,"actual acquisition grid maps the corrected source tooltip: "+type);
                 var lines=new List<TooltipLine>(); ModContent.GetInstance<ProgressionTooltip>().ModifyTooltips(Main.HoverItem,lines);
                 Assert(lines.Any(line=>line.Text.Contains(type==ItemID.LifeFruit ? "机械 Boss" : type==ItemID.AmberMosquito ? "提炼机"
-                    : type==ItemID.DemonHeart ? "Boss / 事件掉落" : type==ItemID.WingsSolar ? "配方材料" : "小怪掉落")),
-                    "native tooltip includes the audited non-fishing source: "+ItemID.Search.GetName(type));
+                    : type==ItemID.DemonHeart ? "Boss / 事件掉落" : type==ItemID.WingsSolar || type>=ItemID.Count ? "配方材料"
+                    : type==ItemID.Squirrel ? "捕捉" : type==ItemID.AshWood ? "自然" : "小怪掉落")),
+                    "native tooltip includes the audited non-fishing source: "+type);
                 device.SetRenderTargets(targets);
-                using var proof=File.Create(Path.Combine(directory,"AE-acquisition-"+ItemID.Search.GetName(type)+"-1280x720.png"));
+                using var proof=File.Create(Path.Combine(directory,"AE-acquisition-"+(type<ItemID.Count ? ItemID.Search.GetName(type) : "WoodEnchant")+"-1280x720.png"));
                 target.SaveAsPng(proof,1280,720); Mod.Logger.Info("AE2 UI RENDERED: audited acquisition tooltip "+ItemID.Search.GetName(type));
             }
         }

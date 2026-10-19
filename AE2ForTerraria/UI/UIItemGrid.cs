@@ -28,10 +28,13 @@ namespace AE2ForTerraria.UI
         public Func<ItemKey, bool> IsFavorite;
         public Func<ItemKey, bool> IsCraftable;
         public int Revision { get; private set; }
+        public bool HeaderClickHandled { get; private set; }
         public Func<int,int> GroupOf;
         public Func<int,string> GroupLabel;
+        public Func<int,string> GroupIdentity;
         public bool ProgressionTooltip;
         private readonly List<(int first,int count,int group)> _rows = new();
+        private readonly HashSet<string> _collapsedGroups = new();
         private int[] _entryRows = Array.Empty<int>();
         private int _rowsRevision = -1, _rowsColumns;
         private Func<int,int> _rowsGroup;
@@ -40,7 +43,7 @@ namespace AE2ForTerraria.UI
         {
             if(GroupOf == null) return Math.Min(EntryCount - 1, row * Columns);
             for(int i = row; i < _rows.Count; i++) if(_rows[i].count > 0) return _rows[i].first;
-            return EntryCount - 1;
+            return -1;
         }
 
 		private readonly List<int> _items = new List<int>();
@@ -102,6 +105,10 @@ namespace AE2ForTerraria.UI
 
 			OnLeftClick += (evt, element) =>
 			{
+                HeaderClickHandled = false;
+                if (InputBlocked?.Invoke() == true) return;
+                if (ToggleHeaderAt(evt.MousePosition)) { HeaderClickHandled = true; return; }
+                if (!HasEntryAt(evt.MousePosition)) return;
                 if (FavoriteInput.IsDown) { _lastClickKey = ItemKey.None; _lastClickTime = -10; return; }
 				ItemKey key = ActiveKey;
 
@@ -348,6 +355,12 @@ namespace AE2ForTerraria.UI
                 while(index < EntryCount)
                 {
                     int group = GroupOf(TypeAt(index)); _rows.Add((-1,0,group));
+                    if (_collapsedGroups.Contains(GroupId(group)))
+                    {
+                        while (index < EntryCount && GroupOf(TypeAt(index)) == group)
+                            _entryRows[index++] = _rows.Count - 1;
+                        continue;
+                    }
                     while(index < EntryCount && GroupOf(TypeAt(index)) == group)
                     {
                         int first = index, count = 0;
@@ -406,6 +419,31 @@ namespace AE2ForTerraria.UI
 				CursorIndex = index;
 			}
 		}
+
+        private string GroupId(int group) => GroupIdentity?.Invoke(group) ?? group.ToString();
+
+        public bool HasContentAt(Vector2 point) => HasEntryAt(point) || HeaderRowAt(point) >= 0;
+
+        private int HeaderRowAt(Vector2 point)
+        {
+            if (GroupOf == null || !ContainsPoint(point)) return -1;
+            RecalcLayout();
+            int row = _rowOffset + (int)((point.Y - GetDimensions().Y) / CellHeight);
+            return row >= 0 && row < _rows.Count && _rows[row].count == 0 ? row : -1;
+        }
+
+        private bool ToggleHeaderAt(Vector2 point)
+        {
+            int row = HeaderRowAt(point);
+            if (row < 0) return false;
+            string group = GroupId(_rows[row].group);
+            if (!_collapsedGroups.Add(group)) _collapsedGroups.Remove(group);
+            _rowsRevision = -1;
+            CursorIndex = -1; HoveredType = -1; HoveredKey = ItemKey.None;
+            _lastClickKey = ItemKey.None; _lastClickTime = -10;
+            RecalcLayout();
+            return true;
+        }
 
 		/// <summary>Hit-test current layout rather than last frame's hover state (also used for blank-area dragging).</summary>
 		public bool HasEntryAt(Vector2 point) => EntryIndexAt(point) >= 0;
@@ -518,8 +556,16 @@ namespace AE2ForTerraria.UI
 		/// <summary>光标越界时自动翻页(走到一页末尾按 → 就翻到下一页)。</summary>
 		private void ClampCursor()
 		{
-			CursorIndex = Math.Clamp(CursorIndex, 0, Math.Max(0, EntryCount - 1));
-			EnsureCursorVisible();
+            CursorIndex = Math.Clamp(CursorIndex, 0, Math.Max(0, EntryCount - 1));
+            if (GroupOf != null && EntryCount > 0 && _rows[_entryRows[CursorIndex]].count == 0)
+            {
+                int row = _entryRows[CursorIndex];
+                CursorIndex = FirstInRow(row);
+                if (CursorIndex < 0)
+                    for (int i = row - 1; i >= 0; i--)
+                        if (_rows[i].count > 0) { CursorIndex = _rows[i].first; break; }
+            }
+            EnsureCursorVisible();
 		}
 
 		/// <summary>把光标放到当前屏幕的第一行(PgUp/PgDn 之后用)。</summary>
@@ -566,8 +612,9 @@ namespace AE2ForTerraria.UI
                     if(count == 0)
                     {
                         var band = new Rectangle((int)dims.X + 2,(int)dims.Y + (row - _rowOffset) * CellHeight + 8,(int)dims.Width - 4,25);
-                        UITheme.Fill(spriteBatch,band,UITheme.Field);
-                        string label = GroupLabel?.Invoke(group) ?? group.ToString();
+                        UITheme.Fill(spriteBatch,band,band.Contains(Main.MouseScreen.ToPoint()) ? UITheme.BtnHot : UITheme.Field);
+                        UITheme.Outline(spriteBatch,band,UITheme.BorderHot);
+                        string label = (_collapsedGroups.Contains(GroupId(group)) ? "+ " : "− ") + (GroupLabel?.Invoke(group) ?? group.ToString());
                         while(label.Length > 1 && FontAssets.MouseText.Value.MeasureString(label).X * .65f > band.Width - 12) label = label[..^1];
                         Utils.DrawBorderString(spriteBatch,label,new Vector2(band.X + 5,band.Y + 5),UITheme.Text,.65f);
                         continue;

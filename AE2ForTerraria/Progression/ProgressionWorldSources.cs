@@ -22,9 +22,7 @@ internal static class ProgressionWorldSources
         ItemID.Apple, ItemID.Apricot, ItemID.Grapefruit, ItemID.Lemon, ItemID.Peach,
         ItemID.Cherry, ItemID.Plum, ItemID.BlackCurrant, ItemID.Elderberry, ItemID.BloodOrange,
         ItemID.Rambutan, ItemID.Mango, ItemID.Pineapple, ItemID.Banana, ItemID.Coconut,
-        ItemID.GoldWorm, ItemID.GoldBird, ItemID.GoldBunny, ItemID.GoldButterfly,
-        ItemID.GoldFrog, ItemID.GoldGrasshopper, ItemID.GoldMouse, ItemID.GoldGoldfish,
-        ItemID.GoldLadyBug, ItemID.GoldDragonfly, ItemID.GoldWaterStrider
+        ItemID.AshWood, ItemID.SpicyPepper
     };
     private static readonly int[] EarlyChestItems =
     {
@@ -50,6 +48,7 @@ internal static class ProgressionWorldSources
     internal static List<AcquisitionRoute> Routes(ProgressionGraph graph)
     {
         var result=new List<AcquisitionRoute>();
+        AddCritterRoutes(graph, result);
         foreach(var container in Containers(graph))
             foreach(var route in container.Value)
                 result.Add(new(route.Output,route.Gate,route.Key>0 ? new[]{container.Key,route.Key} : new[]{container.Key},"开启容器"));
@@ -80,6 +79,28 @@ internal static class ProgressionWorldSources
         foreach(int output in new[]{ItemID.WhitePearl,ItemID.BlackPearl,ItemID.PinkPearl,ItemID.ShuckedOyster})
             result.Add(new(output,0,new int[]{ItemID.Oyster},"开启牡蛎"));
         return result;
+    }
+    // Native catchItem is authoritative for the captured item, not an NPC's loot table.
+    // Only native critters are covered: mod spawn/capture callbacks need separate evidence.
+    private static void AddCritterRoutes(ProgressionGraph graph, List<AcquisitionRoute> result)
+    {
+        // Butterfly species share a single NPC type; catchItem varies with its AI variant.
+        foreach (int item in new[] { ItemID.MonarchButterfly, ItemID.PurpleEmperorButterfly, ItemID.RedAdmiralButterfly,
+            ItemID.UlyssesButterfly, ItemID.SulphurButterfly, ItemID.TreeNymphButterfly, ItemID.ZebraSwallowtailButterfly, ItemID.JuliaButterfly })
+            result.Add(new(item, 0, new int[] { ItemID.BugNet }, "捕虫网捕捉：自然蝴蝶变体"));
+        int hardmode = ProgressionSources.BossTier(graph, NPCID.WallofFlesh);
+        int plantera = ProgressionSources.BossTier(graph, NPCID.Plantera);
+        foreach (var npc in ContentSamples.NpcsByNetId.Values)
+        {
+            if (npc.type <= 0 || npc.type >= NPCID.Count || npc.catchItem <= 0
+                || !NPCID.Sets.CountsAsCritter[npc.type]) continue;
+            int gate = npc.catchItem == ItemID.TruffleWorm ? hardmode
+                : npc.catchItem == ItemID.EmpressButterfly ? plantera
+                : 0;
+            bool lava = npc.catchItem is ItemID.Lavafly or ItemID.HellButterfly or ItemID.MagmaSnail;
+            foreach (int net in lava ? new[] { ItemID.FireproofBugNet, ItemID.GoldenBugNet } : new[] { ItemID.BugNet })
+                result.Add(new(npc.catchItem, gate, new[] { net }, "捕虫网捕捉：" + npc.FullName));
+        }
     }
     internal readonly record struct ContainerRoute(int Output,int Gate,int Key);
     internal static Dictionary<int,List<ContainerRoute>> Containers(ProgressionGraph graph)

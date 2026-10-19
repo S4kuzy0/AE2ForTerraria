@@ -35,6 +35,19 @@ internal static class ProgressionRegression
                 + "; source=" + live.GetExplanation(ItemID.FrogLeg));
             check(live.GetTierIndex(ItemKey.Crafted(ItemID.FrogLeg))==0 && live.GetExplanation(ItemID.FrogLeg).Contains("钓鱼"),
                 "frog leg uses its direct pre-boss fishing source instead of a later Blood Moon drop or crafting route");
+            check(live.Tiers.Count(t=>t.NpcIds.Contains(NPCID.TorchGod)) == 1,
+                "Torch God has one canonical checkpoint rather than a translated duplicate inferred stage");
+            foreach (int item in new[] { ItemID.Squirrel, ItemID.Bunny, ItemID.Bird, ItemID.Frog, ItemID.Worm, ItemID.GoldWorm, ItemID.FairyCritterPink, ItemID.TreeNymphButterfly, ItemID.PurpleEmperorButterfly })
+                check(live.GetTierIndex(ItemKey.Crafted(item)) == 0, "capturable native critter has a pre-boss Bug Net route: " + item);
+            check(live.GetTierIndex(ItemKey.Crafted(ItemID.TruffleWorm)) == ProgressionSources.BossTier(live,NPCID.WallofFlesh),
+                "Truffle Worm capture remains hardmode instead of treating every critter as pre-boss");
+            check(ProgressionWorldSources.Routes(live).Where(r=>r.Output==ItemID.EmpressButterfly && r.Reason.StartsWith("捕虫网捕捉")).All(r=>r.Gate==ProgressionSources.BossTier(live,NPCID.Plantera)),
+                "native Prismatic Lacewing capture keeps Plantera gate without overriding earlier loaded-mod sources");
+            check(live.GetTierIndex(ItemKey.Crafted(ItemID.AshWood))==0 && live.GetTierIndex(ItemKey.Crafted(ItemID.SpicyPepper))==0,
+                "natural ash trees and shaken peppers unlock their early ash-wood recipes");
+            if(Terraria.ModLoader.ModLoader.TryGetMod("FargowiltasSouls", out var souls) && souls.TryFind<Terraria.ModLoader.ModItem>("WoodEnchant", out var wood))
+                check(live.GetTierIndex(ItemKey.Crafted(wood.Type)) == 0 && live.GetExplanation(ItemID.Squirrel).Contains("捕捉"),
+                    "real Wood Enchantment inherits natural Squirrel capture instead of Trojan Squirrel boss loot");
             CheckFishing(check, live, sourceAnchors);
             CheckAuditGaps(check,live);
             CheckOtherSources(check,live);

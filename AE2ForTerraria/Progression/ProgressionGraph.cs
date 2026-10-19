@@ -124,7 +124,7 @@ namespace AE2ForTerraria.Progression
 			foreach ((int npc, float score) in extras)
 			{
 				string name = NpcIndex.GetName(npc);
-				if (string.IsNullOrWhiteSpace(name) || MatchedByExistingTier(name))
+				if (string.IsNullOrWhiteSpace(name) || Tiers.Any(t => t.NpcIds.Contains(npc)) || MatchedByExistingTier(name))
 				{
 					continue;
 				}

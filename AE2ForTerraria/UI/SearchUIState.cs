@@ -231,7 +231,7 @@ namespace AE2ForTerraria.UI
 			Window.Append(_grid);
 			AddDragTarget(_categories);
 			Window.AdditionalDragTarget = (target, point) => target == _grid
-				&& _grid.InputBlocked?.Invoke() != true && !_grid.HasEntryAt(point);
+				&& _grid.InputBlocked?.Invoke() != true && !_grid.HasContentAt(point);
 
 			// 细滚动条:网格右边可以拖
 			_scrollBar = new UIGridScrollBar { Target = _grid };
@@ -888,6 +888,7 @@ namespace AE2ForTerraria.UI
 			}
 
 			_grid.GroupOf = _category != Category.Npc && _sort == SortMode.Tier ? DisplayStageOf : null;
+            _grid.GroupIdentity = stage => Systems.StorageSystem.Progression?.GetTier(stage)?.Id ?? "unknown";
             _grid.GroupLabel = StageLabel; _grid.ProgressionTooltip = _grid.GroupOf != null;
             _grid.SetItems(_filtered);
 			UpdateStatus();

@@ -201,6 +201,7 @@ namespace AE2ForTerraria.UI
 			};
 			_grid.OnLeftClick += (evt, element) =>
 			{
+                if (_grid.HeaderClickHandled) return;
 				_searchFocused = false;
                 if (FavoriteInput.IsDown)
                 {
@@ -718,6 +719,7 @@ namespace AE2ForTerraria.UI
                 return Direction(result != 0 ? result : CompareKeys(a,b));
             });
             _grid.GroupOf = _sortMode == 3 ? DisplayStageOf : null;
+            _grid.GroupIdentity = stage => Systems.StorageSystem.Progression?.GetTier(stage)?.Id ?? "unknown";
             _grid.GroupLabel = tier => StorageSystem.Progression?.GetIntervalName(tier) ?? "阶段未知";
             _grid.ProgressionTooltip = _sortMode == 3;
 

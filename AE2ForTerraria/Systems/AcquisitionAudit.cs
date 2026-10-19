@@ -23,6 +23,8 @@ internal static class AcquisitionAudit
             reason=graph.GetExplanation(item.type),
             sources=StorageSystem.Acquisition.GetSources(ItemKey.Crafted(item.type)).Take(3).ToArray()
         }).ToArray();
+        var captures=ContentSamples.NpcsByNetId.Values.Where(n=>n.catchItem>0).Select(n=>new
+        { npc=n.type,name=NPCID.Search.GetName(n.type),item=n.catchItem,critter=NPCID.Sets.CountsAsCritter[n.type] }).ToArray();
         var drops=Enumerable.Range(1,NPCLoader.NPCCount-1).Concat(ContentSamples.NpcsByNetId.Keys.Where(id=>id<0))
             .SelectMany(npc=>GameDataIndex.GetNpcDropRecords(npc).Select(drop=>new
         { npc, item=drop.ItemType, conditions=drop.Conditions.Select(c=>c.GetType().FullName).ToArray() })).ToArray();
@@ -37,7 +39,7 @@ internal static class AcquisitionAudit
         { input=type,output=drop.ItemType,conditions=drop.Conditions.Select(c=>c.GetType().FullName).ToArray() })).ToArray();
         string directory=Path.Combine(Main.SavePath,"AE2-Validation"); Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory,"acquisition-audit.json"),JsonSerializer.Serialize(new
-        { version=AE2ForTerraria.Instance.Version.ToString(),items,drops,shops,tiers,recipes,containers }));
+        { version=AE2ForTerraria.Instance.Version.ToString(),items,drops,shops,tiers,recipes,containers,captures }));
         AE2ForTerraria.Instance.Logger.Info("AE2 ACQUISITION AUDIT: exported "+items.Length+" item stages without world/player I/O");
     }
 }
