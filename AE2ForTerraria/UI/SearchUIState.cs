@@ -65,6 +65,7 @@ namespace AE2ForTerraria.UI
 		private UIText _searchText;
 		private string _query = string.Empty;
 		private UIButton _sortButton;
+        private UIIconButton _directionButton;
 		private UIIconButton _wrench;
 		private UIButton _historyButton;
 		private bool _favoritesOnly;
@@ -192,6 +193,15 @@ namespace AE2ForTerraria.UI
 				CycleSort();
 			};
 			Window.Append(_sortButton);
+            _directionButton = new UIIconButton(UIIconButton.IconKind.Up) { Hint = "正序，点击切换倒序" };
+            _directionButton.OnLeftClick += (_,_) =>
+            {
+                UIChoiceMenu.Close(); _sortDescending = !_sortDescending;
+                _directionButton.Icon = _sortDescending ? UIIconButton.IconKind.Down : UIIconButton.IconKind.Up;
+                _directionButton.Hint = _sortDescending ? "倒序，点击切换正序" : "正序，点击切换倒序";
+                Refresh();
+            };
+            Window.Append(_directionButton);
 
 			_grid = new UIItemGrid { CellSize = 44, IsFavorite = key => IsFavorite(key.Type), InputBlocked = () => _details.BlocksPointer || UIBossOrderPanel.IsOpen || UIChoiceMenu.IsOpen || UISystem.SecondaryInterface?.CurrentState != null || UISystem.OverlayInterface?.CurrentState != null };
 			// 回车 = 打开这一项的来源(和左键同一个动作)
@@ -475,10 +485,11 @@ namespace AE2ForTerraria.UI
             Place(_modButton, w - Pad - 150, SearchTop, 150, SearchHeight);
             Place(_categories, Pad, GridTop, inner, 24);
             float top = GridTop + _categories.Arrange(inner) + 3;
-            float sortX = w - Pad - 104 - (_wrenchAttached ? 110 : 0);
+            float sortX = w - Pad - 138 - (_wrenchAttached ? 110 : 0);
             Place(_status, Pad, top + 5, Math.Max(120, sortX - Pad - 112), 22);
             Place(_clearDrop, sortX - 106, top, 100, 26);
             Place(_sortButton, sortX, top, 104, 26);
+            Place(_directionButton, sortX + 108, top, 30, 26);
             Place(_wrench, w - Pad - 104, top, 104, 26);
             top += 32;
             float gridHeight = Math.Max(43, h - Pad - top);
@@ -780,19 +791,18 @@ namespace AE2ForTerraria.UI
 				Window.Top.Pixels + SearchTop + SearchHeight + 38f));
 		}
 
-        private string SortLabel() => "排序：" + (_category == Category.Npc && _sort == SortMode.Default ? "图鉴" : SortName(_sort)) + (_sortDescending ? " ↓" : " ↑");
+        private string SortLabel() => "排序：" + (_category == Category.Npc && _sort == SortMode.Default ? "图鉴" : SortName(_sort));
 
         private void CycleSort()
         {
             SortMode[] modes = _category == Category.Npc ? new[] { SortMode.Default, SortMode.Name } : Enum.GetValues<SortMode>();
             var choices = modes.Select(mode => _category == Category.Npc && mode == SortMode.Default ? "图鉴顺序" : SortName(mode))
-                .Concat(new[]{_sortDescending ? "正序" : "正序（当前）", _sortDescending ? "倒序（当前）" : "倒序", "调整 Boss 顺序"}).ToArray();
+                .Concat(new[]{"调整 Boss 顺序"}).ToArray();
             UIChoiceMenu.Show(Window, _sortButton, choices, (index, _) =>
             {
-                if(index == modes.Length + 2)
+                if(index == modes.Length)
                 { _typing = false; ImeInput.Blur(); UIBossOrderPanel.Show(this,Window,Refresh); return; }
-                if(index < modes.Length) _sort = modes[index];
-                else _sortDescending = index == modes.Length + 1;
+                _sort = modes[index];
                 _sortButton.SetText(SortLabel()); Refresh();
             }, Array.IndexOf(modes,_sort));
         }
@@ -877,13 +887,14 @@ namespace AE2ForTerraria.UI
 				ApplySort();
 			}
 
-			_grid.GroupOf = _category != Category.Npc && _sort == SortMode.Tier ? StageOf : null;
+			_grid.GroupOf = _category != Category.Npc && _sort == SortMode.Tier ? DisplayStageOf : null;
             _grid.GroupLabel = StageLabel; _grid.ProgressionTooltip = _grid.GroupOf != null;
             _grid.SetItems(_filtered);
 			UpdateStatus();
 		}
 
         private int Direction(int value) => _sortDescending ? -Math.Sign(value) : value;
+        private static int DisplayStageOf(int type) => StorageSystem.Progression?.GetDisplayTierIndex(StageOf(type)) ?? -1;
         private static int StageOf(int type) => StorageSystem.Progression?.GetTierIndex(ItemKey.Crafted(type)) ?? -1;
         private static string StageLabel(int tier) => StorageSystem.Progression?.GetIntervalName(tier) ?? "阶段未知";
         private void ApplySort()

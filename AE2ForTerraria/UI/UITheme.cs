@@ -570,6 +570,7 @@ namespace AE2ForTerraria.UI
 			Left,
 			Right,
 			Reset,
+            Up, Down,
 			Wrench
 		}
 
@@ -587,7 +588,9 @@ namespace AE2ForTerraria.UI
 
 		public Color? GlyphColor;
 
-		public UIIconButton(IconKind icon) : base(string.Empty, 0.8f, false)
+		public string Hint;
+
+        public UIIconButton(IconKind icon) : base(string.Empty, 0.8f, false)
 		{
 			// Icons are drawn directly; the empty text panel's default minimum must not enlarge them.
 			SetPadding(0f);
@@ -666,10 +669,18 @@ namespace AE2ForTerraria.UI
 					UITheme.DrawReset(spriteBatch, cx - 6f, cy - 6f, glyph);
 					break;
 
+                case IconKind.Up:
+                case IconKind.Down:
+                    int direction = Icon == IconKind.Down ? 1 : -1;
+                    UITheme.Fill(spriteBatch,new Rectangle(cx,cy - 6,1,13),glyph);
+                    UITheme.Line(spriteBatch,new Vector2(cx,cy + direction * 6),new Vector2(cx - 4,cy + direction * 2),glyph,1);
+                    UITheme.Line(spriteBatch,new Vector2(cx,cy + direction * 6),new Vector2(cx + 4,cy + direction * 2),glyph,1);
+                    break;
 				case IconKind.Wrench:
 					UITheme.DrawWrench(spriteBatch, cx, cy, glyph, Enabled);
 					break;
 			}
+            if (_hover && Enabled && !string.IsNullOrEmpty(Hint) && !UIChoiceMenu.IsOpen) UITooltip.Draw(spriteBatch,Hint);
 		}
 	}
 

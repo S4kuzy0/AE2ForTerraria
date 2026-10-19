@@ -90,7 +90,7 @@ public sealed class UiRegressionSystem : ModSystem
         SetViewport(1280,720,1f);
         var state = NewSearch(); state.Layout.X=24;state.Layout.Y=24;state.Layout.W=760;state.Layout.H=600;
         state.FitToScreen(); Invoke(state,"ApplyLayout");
-        var all = Field<List<int>>(state,"_allItems"); all.Clear(); all.AddRange(new int[]{ItemID.Wood,ItemID.StoneBlock,ItemID.Torch,ItemID.Ectoplasm,ItemID.CobaltOre,ItemID.ChlorophyteOre,ItemID.LunarBar});
+        var all = Field<List<int>>(state,"_allItems"); all.Clear(); all.AddRange(new int[]{ItemID.Wood,ItemID.StoneBlock,ItemID.LifeCrystal,ItemID.MagicMirror,ItemID.Torch,ItemID.Ectoplasm,ItemID.CobaltOre,ItemID.ChlorophyteOre,ItemID.LunarBar});
         try
         {
             void Choose(string label)
@@ -98,14 +98,20 @@ public sealed class UiRegressionSystem : ModSystem
                 Click(state,"_sortButton"); var menu = ActiveChoice();
                 int index = Array.FindIndex(Field<string[]>(menu,"_choices"),value => value.StartsWith(label,StringComparison.Ordinal));
                 Assert(index >= 0,"sort menu provides " + label);
+                Assert(!Field<string[]>(menu,"_choices").Any(value=>value.StartsWith("正序") || value.StartsWith("倒序")),
+                    "sort dropdown contains methods without direction settings");
                 SetField(menu,"_scroll",index);
                 var d = menu.GetDimensions();
                 menu.LeftClick(new UIMouseEvent(menu,new Vector2(d.X+15,d.Y+15)));
             }
+            var sortBounds=Field<UIElement>(state,"_sortButton").GetDimensions().ToRectangle();
+            var directionBounds=Field<UIElement>(state,"_directionButton").GetDimensions().ToRectangle();
+            Assert(!sortBounds.Intersects(directionBounds) && directionBounds.Left>sortBounds.Right,
+                "direction is a separate arrow button beside the sort selector");
             Choose("默认"); var ascending = Field<List<int>>(state,"_filtered").ToArray();
-            Choose("倒序"); var descending = Field<List<int>>(state,"_filtered").ToArray();
+            Click(state,"_directionButton"); var descending = Field<List<int>>(state,"_filtered").ToArray();
             Assert(descending.Where(t=>!BrowserFavorites.Contains(t)).SequenceEqual(ascending.Where(t=>!BrowserFavorites.Contains(t)).Reverse()),"explicit descending reverses the base item order");
-            Choose("正序"); Choose("获取阶段");
+            Click(state,"_directionButton"); Choose("获取阶段");
             var grid = Field<UIItemGrid>(state,"_grid");
             Assert(grid.GroupOf != null && grid.ProgressionTooltip && grid.GroupLabel(0).Contains("Boss 前"),
                 "acquisition sort enables timeline headers and native tooltip explanations");
@@ -140,9 +146,17 @@ public sealed class UiRegressionSystem : ModSystem
         {
             sortButton.LeftClick(new UIMouseEvent(sortButton,sortButton.GetDimensions().Center()));
             Assert(UIChoiceMenu.IsOpen,"device contents uses an actual dropdown rather than cycling sort values");
+            Assert(!Field<string[]>(ActiveChoice(),"_choices").Any(value=>value.Contains("正序") || value.Contains("倒序")),
+                "device sort popup also excludes direction options");
             Main.mouseX=0;Main.mouseY=0;Main.mouseLeft=true;
             deviceState.Update(new GameTime());
             Assert(!UIChoiceMenu.IsOpen,"nested device popup dismisses during complete window update without mutating a live child enumeration");
+            var arrow=Field<UIElement>(contents,"_directionButton");
+            var before=Field<List<ItemKey>>(contents,"_items").ToArray();
+            arrow.LeftClick(new UIMouseEvent(arrow,arrow.GetDimensions().Center()));
+            Assert(Field<List<ItemKey>>(contents,"_items").SequenceEqual(before.Reverse()),
+                "device direction arrow reverses the existing contents without opening a menu");
+            arrow.LeftClick(new UIMouseEvent(arrow,arrow.GetDimensions().Center()));
         }
         finally {UIChoiceMenu.Close(); Main.mouseX=mouseX;Main.mouseY=mouseY;Main.mouseLeft=mouseDown;}
         var grouped = new UIItemGrid { CellSize=44,GroupOf=type=>type == ItemID.Torch ? 1 : 0,GroupLabel=stage=>"阶段 " + stage };
@@ -537,7 +551,7 @@ public sealed class UiRegressionSystem : ModSystem
         revision=grid.Revision;
         Click(state,"_craftableButton"); Click(state,"_sortButton"); menu=ActiveChoice();
         Assert(Field<UIElement>(menu,"_anchor")==Field<UIElement>(state,"_sortButton")
-            && Field<string[]>(menu,"_choices").SequenceEqual(new[]{"默认","名称","数量","获取阶段","正序（当前）","倒序","调整 Boss 顺序"})
+            && Field<string[]>(menu,"_choices").SequenceEqual(new[]{"默认","名称","数量","获取阶段","调整 Boss 顺序"})
             && Field<int>(state,"_sortMode")==0 && grid.Revision==revision,
             "sort click replaces the range popup without sorting until an option is selected");
         RenderProbe(state,"Terminal-sort-dropdown"); Choose(2);
@@ -550,6 +564,11 @@ public sealed class UiRegressionSystem : ModSystem
         Assert(WindowField<UIWindowPanel>(state,"<Window>k__BackingField").BackgroundColor==UITheme.WindowBg
             && UITheme.WindowBg.B>UITheme.WindowBg.R && UITheme.ItemBorder==Color.Black,
             "terminal uses the shared Terraria blue palette and retains thin black item borders");
+        var beforeDirection=Field<List<ItemKey>>(state,"_filtered").Where(key=>!BrowserFavorites.Contains(key.Type)).ToArray();
+        Click(state,"_directionButton");
+        Assert(Field<List<ItemKey>>(state,"_filtered").Where(key=>!BrowserFavorites.Contains(key.Type)).SequenceEqual(beforeDirection.Reverse())
+            && !UIChoiceMenu.IsOpen,"terminal direction changes through its separate button without changing the sort method");
+        Click(state,"_directionButton");
         Assert(UISystem.GetStoredAmount(ItemKey.Crafted(ItemID.Wood))==321,
             "opening and selecting terminal dropdowns never transfers stored items");
         void Choose(int index)

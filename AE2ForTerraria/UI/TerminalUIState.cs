@@ -79,6 +79,7 @@ namespace AE2ForTerraria.UI
 		private UITextPanel<string> _ammoButton;
 		private int _sortMode;
         private bool _sortDescending;
+        private UIIconButton _directionButton;
 		
 
 		public override bool SearchBoxFocused => _searchFocused || _quantityTyping;
@@ -250,6 +251,15 @@ namespace AE2ForTerraria.UI
 			_sortButton = new UIButton(SortLabel(), 0.78f, false) { Dropdown = true };
 			_sortButton.OnLeftClick += (_, _) => ShowSortMenu();
 			Window.Append(_sortButton);
+            _directionButton = new UIIconButton(UIIconButton.IconKind.Up) { Hint = "正序，点击切换倒序" };
+            _directionButton.OnLeftClick += (_,_) =>
+            {
+                UIChoiceMenu.Close(); _sortDescending = !_sortDescending;
+                _directionButton.Icon = _sortDescending ? UIIconButton.IconKind.Down : UIIconButton.IconKind.Up;
+                _directionButton.Hint = _sortDescending ? "倒序，点击切换正序" : "正序，点击切换倒序";
+                RebuildList();
+            };
+            Window.Append(_directionButton);
 
 			// 「存入全部」的范围开关。
 			// 默认只存主背包 —— 弹药栏和钱币栏不该被一键塞进网络。
@@ -408,13 +418,15 @@ namespace AE2ForTerraria.UI
                 Place(_takeSelectedButton, Pad, top, controlW, 26);
                 Place(_clearSelectionButton, Pad + controlW + 6, top, controlW, 26);
                 Place(_prefixButton, Pad + 2 * (controlW + 6), top, controlW, 26);
-                Place(_sortButton, Pad + 3 * (controlW + 6), top, controlW, 26);
+                Place(_sortButton, Pad + 3 * (controlW + 6), top, controlW - 34, 26);
+                Place(_directionButton, w - Pad - 30, top, 30, 26);
             }
             else
             {
                 Place(_craftableButton, Pad, top, inner - 224, 26);
                 Place(_prefixButton, w - Pad - 218, top, 94, 26);
-                Place(_sortButton, w - Pad - 118, top, 118, 26);
+                Place(_sortButton, w - Pad - 118, top, 84, 26);
+                Place(_directionButton, w - Pad - 30, top, 30, 26);
             }
             top += 32;
             float stationHeight = !IsAccess && catalogue ? _stationGrid.RequiredHeight : 0;
@@ -430,7 +442,7 @@ namespace AE2ForTerraria.UI
             Place(_capacity, Pad, h - Pad - 18, capacityWidth, 14);
             Place(_capacityCount, Pad, h - Pad - 18, capacityWidth, 18);
             Place(_status, Pad + capacityWidth + 8, h - Pad - 18, inner - capacityWidth - 20, 18);
-            foreach (var element in new UIElement[] { _searchBox, _modButton, _categories, _sortButton, _grid, _scrollBar,
+            foreach (var element in new UIElement[] { _searchBox, _modButton, _categories, _sortButton, _directionButton, _grid, _scrollBar,
                 _status, _depositButton, _ammoButton, _prefixButton }) Visible(element, catalogue);
             foreach (var element in new UIElement[] { _takeSelectedButton, _clearSelectionButton }) Visible(element, catalogue && IsAccess);
             Visible(_craftableButton, catalogue && !IsAccess);
@@ -705,7 +717,7 @@ namespace AE2ForTerraria.UI
                 };
                 return Direction(result != 0 ? result : CompareKeys(a,b));
             });
-            _grid.GroupOf = _sortMode == 3 ? StageOf : null;
+            _grid.GroupOf = _sortMode == 3 ? DisplayStageOf : null;
             _grid.GroupLabel = tier => StorageSystem.Progression?.GetIntervalName(tier) ?? "阶段未知";
             _grid.ProgressionTooltip = _sortMode == 3;
 
@@ -767,9 +779,9 @@ namespace AE2ForTerraria.UI
 				+ ModText.Get("LblStatusKinds", "种物品"));
 		}
 
+        private static int DisplayStageOf(int type) => StorageSystem.Progression?.GetDisplayTierIndex(StageOf(type)) ?? -1;
         private static int StageOf(int type) => StorageSystem.Progression?.GetTierIndex(ItemKey.Crafted(type)) ?? -1;
-        private string SortLabel() => "排序：" + (_sortMode switch { 1 => "名称", 2 => "数量", 3 => "获取阶段", _ => "默认" })
-            + (_sortDescending ? " ↓" : " ↑");
+        private string SortLabel() => "排序：" + (_sortMode switch { 1 => "名称", 2 => "数量", 3 => "获取阶段", _ => "默认" });
 
 		private string QuantityLabel()
 		{
@@ -1046,11 +1058,10 @@ namespace AE2ForTerraria.UI
 
         private void ShowSortMenu()
         {
-            UIChoiceMenu.Show(Window, _sortButton, new[] { "默认", "名称", "数量", "获取阶段",
-                _sortDescending ? "正序" : "正序（当前）", _sortDescending ? "倒序（当前）" : "倒序", "调整 Boss 顺序" }, (index, _) =>
+            UIChoiceMenu.Show(Window, _sortButton, new[] { "默认", "名称", "数量", "获取阶段", "调整 Boss 顺序" }, (index, _) =>
             {
-                if(index == 6) { _searchFocused = _quantityTyping = false; ImeInput.Blur(); UIBossOrderPanel.Show(this,Window,() => RebuildList()); return; }
-                if(index < 4) _sortMode = index; else _sortDescending = index == 5;
+                if(index == 4) { _searchFocused = _quantityTyping = false; ImeInput.Blur(); UIBossOrderPanel.Show(this,Window,() => RebuildList()); return; }
+                _sortMode = index;
                 _sortButton.SetText(SortLabel()); RebuildList();
             }, selectedIndex: _sortMode);
         }

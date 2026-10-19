@@ -28,6 +28,7 @@ namespace AE2ForTerraria.Progression
 		private readonly Dictionary<ItemKey, int> _inferredCache = new Dictionary<ItemKey, int>();
         private readonly Dictionary<int,List<int>> _stationItems = new();
         private bool _tierCacheReady; private int _tierRecipeRevision;
+        private bool[] _effectiveTiers = Array.Empty<bool>();
         public IReadOnlyList<ProgressionTier> DefaultOrder { get; private set; } = Array.Empty<ProgressionTier>();
         private readonly Dictionary<int,string> _sourceReasons = new();
         private readonly Dictionary<int,string> _reasons = new();
@@ -812,12 +813,27 @@ namespace AE2ForTerraria.Progression
             AnchorItemsFromBosses(); ProgressionSources.Anchor(this, _bossAnchored);
             _tierCacheReady = false; Revision++;
         }
+        public bool HasUnlocks(int tier)
+        {
+            EnsureTierCache();
+            return tier >= 0 && tier < _effectiveTiers.Length && _effectiveTiers[tier];
+        }
+        public int GetDisplayTierIndex(int tier)
+        {
+            if(tier < 0 || tier >= Tiers.Count) return UnknownTier;
+            EnsureTierCache();
+            while(tier > 0 && !_effectiveTiers[tier]) tier--;
+            return tier;
+        }
         public string GetIntervalName(int index)
         {
             if (index < 0 || index >= Tiers.Count) return "阶段未知";
+            EnsureTierCache();
             string Clean(string name) => name.EndsWith("后") ? name[..^1] : name;
             string current = index == 0 ? "Boss 前" : Clean(Tiers[index].DisplayName) + "后";
-            if (index + 1 < Tiers.Count) current += "（" + Clean(Tiers[index + 1].DisplayName) + "前）";
+            int next = index + 1;
+            while(next < Tiers.Count && !_effectiveTiers[next]) next++;
+            if(next < Tiers.Count) current += "（" + Clean(Tiers[next].DisplayName) + "前）";
             if (Tiers[index].Source == "inferred") current += " · 推测";
             return current;
         }
@@ -887,8 +903,23 @@ namespace AE2ForTerraria.Progression
                     {if(!stationUsers.TryGetValue(tile,out var list)) stationUsers[tile]=list=new();list.Add(index);}
                 Enqueue(index);
             }
+            var containerRoutes = ProgressionWorldSources.Containers(this);
+            var containersUsingKey = new Dictionary<int,List<int>>();
+            foreach(var container in containerRoutes)
+                foreach(int key in container.Value.Select(r=>r.Key).Where(k=>k>0).Distinct())
+                {
+                    if(!containersUsingKey.TryGetValue(key,out var users)) containersUsingKey[key] = users = new();
+                    users.Add(container.Key);
+                }
+            var sourceQueue = new Queue<int>(); var sourceQueued = new HashSet<int>();
+            void EnqueueSource(int type)
+            {
+                if(containerRoutes.ContainsKey(type) && sourceQueued.Add(type)) sourceQueue.Enqueue(type);
+            }
             void Notify(int type)
             {
+                EnqueueSource(type);
+                if(containersUsingKey.TryGetValue(type,out var containers)) foreach(int user in containers) EnqueueSource(user);
                 foreach(int dependent in _recipes.GetRecipesUsing(type)) Enqueue(dependent);
                 if(ContentSamples.ItemsByType.TryGetValue(type,out var item)
                     && stationUsers.TryGetValue(item.createTile,out var consumers))
@@ -914,8 +945,33 @@ namespace AE2ForTerraria.Progression
                 }
             }
             UpdateMining();
-            while(queue.Count>0)
+            foreach(var key in _inferredCache.Keys.ToArray()) EnqueueSource(key.Type);
+            while(queue.Count>0 || sourceQueue.Count>0)
             {
+                if(sourceQueue.Count>0)
+                {
+                    int source=sourceQueue.Dequeue();sourceQueued.Remove(source);
+                    if(!_inferredCache.TryGetValue(ItemKey.Crafted(source),out int available)) continue;
+                    foreach(var route in containerRoutes[source])
+                    {
+                        var key=ItemKey.Crafted(route.Output);
+                        if(_explicitItemTier.ContainsKey(key)) continue;
+                        int gate=route.Gate;
+                        if(route.Key>0)
+                        {
+                            if(!_inferredCache.TryGetValue(ItemKey.Crafted(route.Key),out int keyTier)) continue;
+                            gate=Math.Max(gate,keyTier);
+                        }
+                        int openedTier=Math.Max(available,gate);
+                        if(_inferredCache.TryGetValue(key,out int prior) && prior<=openedTier) continue;
+                        _inferredCache[key]=openedTier;
+                        _reasons[key.Type]="开启："+Lang.GetItemNameValue(source)+(route.Key>0 ? "；钥匙："+Lang.GetItemNameValue(route.Key) : "")
+                            + "；" + _reasons.GetValueOrDefault(source,"已知容器来源");
+                        Notify(key.Type);
+                        if(ContentSamples.ItemsByType.TryGetValue(key.Type,out var outputItem) && outputItem.pick>0) UpdateMining();
+                    }
+                    continue;
+                }
                 int index=queue.Dequeue();queued[index]=false;var recipe=Main.recipe[index];
                 var output=ItemKey.Crafted(recipe.createItem.type);
                 if(_explicitItemTier.ContainsKey(output)) continue;
@@ -925,6 +981,17 @@ namespace AE2ForTerraria.Progression
                 _reasons[output.Type] = RecipeReason(recipe, candidate);
                 Notify(output.Type);
                 if(ContentSamples.ItemsByType.TryGetValue(output.Type,out var crafted) && crafted.pick > 0) UpdateMining();
+            }
+            _effectiveTiers = new bool[Tiers.Count];
+            if(_effectiveTiers.Length > 0) _effectiveTiers[0] = true;
+            foreach(int tier in _inferredCache.Values)
+                if(tier >= 0 && tier < _effectiveTiers.Length) _effectiveTiers[tier] = true;
+            // A new recipe route still matters when its output was obtainable earlier by exploration or drops.
+            foreach(var recipe in Main.recipe.Take(Recipe.numRecipes))
+            {
+                if(recipe == null || recipe.Disabled || recipe.createItem.IsAir) continue;
+                int tier = RecipeTier(recipe);
+                if(tier >= 0 && tier < _effectiveTiers.Length) _effectiveTiers[tier] = true;
             }
             _tierCacheReady=true;_tierRecipeRevision=_recipes.Revision;
             TierBuildMilliseconds=System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;

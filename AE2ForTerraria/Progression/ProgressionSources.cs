@@ -73,6 +73,7 @@ internal static class ProgressionSources
             ItemID.CopperOre,ItemID.TinOre,ItemID.IronOre,ItemID.LeadOre,ItemID.SilverOre,ItemID.TungstenOre,ItemID.GoldOre,ItemID.PlatinumOre,
             ItemID.CopperPickaxe,ItemID.TinPickaxe,ItemID.Obsidian,ItemID.Hellforge,ItemID.Amber,ItemID.Amethyst,
             ItemID.Topaz,ItemID.Sapphire,ItemID.Emerald,ItemID.Ruby,ItemID.Diamond}) Add(type,0);
+        ProgressionWorldSources.Seed(graph,Add);
         int hardmode=Gate(graph,"Hardmode");
         foreach(int type in new[]{ItemID.Pearlwood,ItemID.CrystalShard}) Add(type,hardmode,"困难模式世界变化");
         // Read declared drop rules; never execute CanDrop or temporarily mutate world flags.
@@ -119,6 +120,17 @@ internal static class ProgressionSources
                 if(known) Add(entry.Item.type,tier,"商店：" + Lang.GetNPCNameValue(shop.NpcType) + "（含已知到达及商品条件）");
             }
         }
+    }
+    internal static int DropTier(ProgressionGraph graph,DropRecord drop)
+    {
+        int tier=0;
+        foreach(var condition in drop.Conditions)
+        {
+            int gate = DropConditionTier(graph,condition.GetType());
+            if(gate < 0) return -1;
+            tier = Math.Max(tier,gate);
+        }
+        return tier;
     }
     private static int DropConditionTier(ProgressionGraph graph,Type type)
     {

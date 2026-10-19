@@ -56,6 +56,7 @@ namespace AE2ForTerraria.UI
         private bool _builtDescending;
 
 		private UITextPanel<string> _sortButton;
+        private UIIconButton _directionButton;
 
 		/// <summary>宿主在内容变化后刷新一下状态行(容量之类)。</summary>
 		public Action OnChanged;
@@ -154,14 +155,16 @@ namespace AE2ForTerraria.UI
 			_sortButton = new UIButton(SortLabel(), 0.72f, false);
 			_sortButton.OnLeftClick += (evt, element) =>
 			{
-                UIChoiceMenu.Show(this,_sortButton,new[]{"默认","名称","数量","词缀优先",
-                    SharedDescending ? "正序" : "正序（当前）", SharedDescending ? "倒序（当前）" : "倒序"},(index,_) =>
+                UIChoiceMenu.Show(this,_sortButton,new[]{"默认","名称","数量","词缀优先"},(index,_) =>
                 {
-                    if(index < 4) SharedSortMode = index; else SharedDescending = index == 5;
+                    SharedSortMode = index;
                     _sortButton.SetText(SortLabel()); Refresh();
                 },SharedSortMode);
 			};
 			Append(_sortButton);
+            _directionButton = new UIIconButton(UIIconButton.IconKind.Up);
+            _directionButton.OnLeftClick += (_,_) => { UIChoiceMenu.Close(); SharedDescending = !SharedDescending; Refresh(); };
+            Append(_directionButton);
 		}
 
 		public void Bind(IMEStorage storage, Point16 position)
@@ -225,7 +228,9 @@ namespace AE2ForTerraria.UI
 
 			_sortButton.Left.Set(Math.Max(80f, width - 122f), 0f);
 			_sortButton.Top.Set(24f, 0f);
-			_sortButton.Width.Set(122f, 0f);
+			_sortButton.Width.Set(88f, 0f);
+            _directionButton.Left.Set(width - 30f,0f); _directionButton.Top.Set(24f,0f);
+            _directionButton.Width.Set(30f,0f); _directionButton.Height.Set(24f,0f);
 			_sortButton.Height.Set(24f, 0f);
 
 			Recalculate();
@@ -236,7 +241,7 @@ namespace AE2ForTerraria.UI
 			base.Update(gameTime);
 
 			string query = _search?.Text?.Trim() ?? string.Empty;
-			if (query != _lastQuery)
+			if (query != _lastQuery || _builtDescending != SharedDescending || _builtSortMode != SharedSortMode)
 			{
 				Refresh();
 			}
@@ -249,6 +254,9 @@ namespace AE2ForTerraria.UI
 				return;
 			}
 
+            _directionButton.Icon = SharedDescending ? UIIconButton.IconKind.Down : UIIconButton.IconKind.Up;
+            _directionButton.Hint = SharedDescending ? "倒序，点击切换正序" : "正序，点击切换倒序";
+            _sortButton.SetText(SortLabel());
 			string query = _search?.Text?.Trim() ?? string.Empty;
 			_lastQuery = query;
 
@@ -305,7 +313,7 @@ namespace AE2ForTerraria.UI
 				2 => ModText.Get("SortCount", "排序: 数量"),
 				3 => ModText.Get("SortPrefixed", "排序: 词缀优先"),
 				_ => ModText.Get("SortDefault", "排序: 默认")
-			}) + (SharedDescending ? " ↓" : " ↑");
+			});
 		}
 
 		private static int Direction(int value) => SharedDescending ? -Math.Sign(value) : value;

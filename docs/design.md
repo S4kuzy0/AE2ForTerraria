@@ -1,6 +1,6 @@
 # 设计与数据说明
 
-适用源码：0.27.6；核对日期：2026-10-18（北京时间）。源码根目录为 `AE2ForTerraria/`。本文件记录模块边界与关键数据流，不逐个解释简单函数。历史架构记录见 [ARCHITECTURE-0.22.md](ARCHITECTURE-0.22.md)。
+适用源码：0.27.7；核对日期：2026-10-19（北京时间）。源码根目录为 `AE2ForTerraria/`。本文件记录模块边界与关键数据流，不逐个解释简单函数。历史架构记录见 [ARCHITECTURE-0.22.md](ARCHITECTURE-0.22.md)。
 
 ## 技术与模块边界
 
@@ -116,3 +116,15 @@ Boss 顺序的默认记录保留 NPC、掉落和击败回调。个人顺序只�
 分组网格缓存显示行到实际条目的映射，标题不可选中；滚动、缩放、键盘跟随及 R 命中均使用同一映射，保留不足整行的原生裁剪。正倒序只改变各排序条件方向，未知阶段仍在末尾；阶段模式的收藏仅在各阶段内部优先。加号为细白色十字及黑色描边，仍只读取已核验可合成缓存。
 
 实现核对（2026-10-18，北京时间）：沿用 [BossChecklist 官方接口资料](https://github.com/JavidPack/BossChecklist/wiki/%5B1.4.4%5D-Other-Mod-Calls)；灾厄世界变化依据 [官方源码 NPC 解锁处理](https://github.com/CalamityTeam/CalamityModPublic/blob/1.4.4/NPCs/CalamityGlobalNPCLoot.cs) 及 [配置定义](https://github.com/CalamityTeam/CalamityModPublic/blob/1.4.4/CalamityConfig.cs)。未引入新依赖或复制第三方实现；适配读取当前已加载资料和配置。
+
+## 0.27.7：方向独立与来源比较
+
+查询、终端、设备内容的方向由独立箭头按钮切换，排序下拉只选择排序依据，Boss 顺序入口保留。按钮独立布局、悬停说明；设备列表的共享方向变化参与重建缓存。紧凑窗口的箭头从原排序区域分配宽度，不增加工具栏行。
+
+`ProgressionWorldSources` 声明可确认的自然采集、早期宝箱和钓鱼箱来源，生命水晶天然来源直接为开局。它不从 createTile 推断自然生成，也不扫描当前世界后将困难模式生成物误标成开局。容器只使用原版已知行为及 BossChecklist 标准宝藏袋资料；钥匙和可解释掉落条件共同限制开启阶段。任意模组容器可能有未在掉落表公开的 RightClick 门槛，不能仅因存在掉落表就视为可无条件开启。
+
+工作队列将来源与配方双向通知：新的来源可降低材料、工具、工作站及依赖配方的最早阶段；新的制作路线也可提前获得容器或钥匙。多路线始终取最早，有源链才传播，不允许无源循环自举。保留自然采集或宝箱说明，不被较晚合成覆盖。
+
+最后一次性统计所有已知物品最早阶段与所有已知配方首次可制作阶段，合并为有效检查点。纯掉落新物品独立保留；没有两类新增内容的检查点仅从网格分组和下一检查点说明略过，原时间轴、NPC 资料、个人顺序和实际来源索引保留。统计不读取当前筛选列表，正倒序都用同一份有效节点索引。
+
+核对依据沿用实际 tModLoader 和 BossChecklist API，并复核 [tModLoader TileLoader 官方实现](https://github.com/tModLoader/tModLoader/blob/1.4.4/patches/tModLoader/Terraria/ModLoader/TileLoader.cs) 与 [Recipe Browser](https://github.com/JavidPack/RecipeBrowser)。TileLoader 的类型／样式掉落查询不提供“世界自然生成”证明，因此沿用明确来源声明及现有索引，不增加外部依赖或复制第三方实现。尚无统一公开资料的第三方世界生成或容器条件继续保持未知。

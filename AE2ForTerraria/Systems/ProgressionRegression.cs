@@ -28,6 +28,10 @@ internal static class ProgressionRegression
                 + "; dungeonSpirit=" + string.Join(";",GameDataIndex.GetNpcDropRecords(NPCID.DungeonSpirit).Select(d=>d.ItemType+":"+string.Join(",",d.Conditions.Select(c=>c.GetType().FullName))))
                 + "; ectoplasm=" + sourceAnchors.GetValueOrDefault(ItemKey.Crafted(ItemID.Ectoplasm),-1)
                 + "; plantera=" + ProgressionSources.BossTier(live,NPCID.Plantera));
+            AE2ForTerraria.Instance.Logger.Info("AE2 EARLIEST SOURCE: LifeCrystal=" + live.GetTierIndex(ItemKey.Crafted(ItemID.LifeCrystal))
+                + "; source=" + live.GetExplanation(ItemID.LifeCrystal));
+            check(sourceAnchors.GetValueOrDefault(ItemKey.Crafted(ItemID.LifeCrystal),-1)==0,
+                "natural life crystals have a world-generation source before every boss independently of crafting recipes");
             check(sourceAnchors.TryGetValue(ItemKey.Crafted(ItemID.Ectoplasm),out int ectoplasm)
                 && ectoplasm == ProgressionSources.BossTier(live,NPCID.Plantera),
                 "actual dungeon-spirit drop records anchor ectoplasm to the Plantera world change");
@@ -41,6 +45,13 @@ internal static class ProgressionRegression
             if(Terraria.ModLoader.ModLoader.HasMod("CalamityMod"))
                 check(routes.Single(r=>r.Item==ItemID.MythrilOre).Gate>=0,
                     "loaded Calamity ore-rework configuration is readable without mutating its settings");
+        }
+        if(live != null)
+        {
+            check(live.GetTierIndex(ItemKey.Crafted(ItemID.LifeCrystal))==0 && live.GetExplanation(ItemID.LifeCrystal).Contains("自然"),
+                "real life-crystal sorting chooses natural world generation over its later crafting or boss-drop alternatives");
+            check(live.GetTierIndex(ItemKey.Crafted(ItemID.MagicMirror))==0 && live.GetExplanation(ItemID.MagicMirror).Contains("宝箱"),
+                "real early chest loot is ranked by exploration instead of a later crafting route");
         }
         var recipes=Main.recipe; int count=Recipe.numRecipes;
         try
@@ -90,6 +101,23 @@ internal static class ProgressionRegression
                 "reordering remaps explicit anchors and preserves original NPC records and defeat callbacks");
             check(graph.GetIntervalName(1).Contains("血肉墙后") && graph.GetIntervalName(1).Contains("克苏鲁之眼前")
                 && graph.GetIntervalName(-1)=="阶段未知","stage labels describe explicit after/before intervals and unknown remains distinct");
+            graph=Graph(Recipe.Create(ItemID.LifeCrystal).AddIngredient(ItemID.Ruby).AddCondition(Condition.Hardmode));
+            graph.AnchorItem(ItemKey.Crafted(ItemID.LifeCrystal),"start");
+            graph.AnchorItem(ItemKey.Crafted(ItemID.Ruby),"start");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.LifeCrystal))==0 && !graph.HasUnlocks(1) && graph.HasUnlocks(2),
+                "a naturally available item stays early while its later newly available recipe still makes a meaningful checkpoint");
+            check(graph.GetDisplayTierIndex(1)==0 && graph.GetIntervalName(0).Contains("血肉墙前")
+                && !graph.GetIntervalName(0).Contains("克苏鲁之眼前") && graph.Tiers.Count==3,
+                "empty checkpoints disappear from labels and next-checkpoint text without deleting the editable boss timeline");
+            graph=Graph();graph.AnchorItem(ItemKey.Crafted(ItemID.Ruby),"start");
+            graph.AnchorItem(ItemKey.Crafted(ItemID.CobaltShield),"bc_fixture_eye");
+            check(graph.HasUnlocks(1) && !graph.HasUnlocks(2) && graph.GetDisplayTierIndex(1)==1,
+                "a new direct drop retains its own phase even when it unlocks no crafting recipe");
+            graph=Graph(Recipe.Create(ItemID.Torch).AddIngredient(ItemID.Wood));
+            graph.AnchorItem(ItemKey.Crafted(ItemID.Ruby),"start");
+            check(!graph.HasUnlocks(1) && !graph.HasUnlocks(2) && graph.GetIntervalName(0)=="Boss 前",
+                "a timeline with no later unlocks omits every irrelevant boss instead of advertising an unrelated next boss");
+            CheckContainers(check,Graph);
             var drops=(Dictionary<int,List<DropRecord>>)typeof(GameDataIndex).GetField("NpcDrops",BindingFlags.Static|BindingFlags.NonPublic)!.GetValue(null);
             bool had=drops.TryGetValue(NPCID.EyeofCthulhu,out var prior);
             try
@@ -103,4 +131,29 @@ internal static class ProgressionRegression
         }
         finally {Main.recipe=recipes;Recipe.numRecipes=count;}
     }
+    private static void CheckContainers(Action<bool,string> check,Func<Recipe[],ProgressionGraph> graphFactory)
+    {
+        var records=(Dictionary<int,List<DropRecord>>)typeof(GameDataIndex).GetField("ContainerDrops",BindingFlags.Static|BindingFlags.NonPublic)!.GetValue(null);
+        bool had=records.TryGetValue(ItemID.LockBox,out var original);
+        try
+        {
+            records[ItemID.LockBox]=new(){new DropRecord(ItemID.IronBar,0,ItemID.LockBox,1,1,1,
+                Array.Empty<Terraria.GameContent.ItemDropRules.IItemDropRuleCondition>())};
+            var graph=graphFactory(new[]{Recipe.Create(ItemID.CobaltPickaxe).AddIngredient(ItemID.IronBar)});
+            graph.AnchorItem(ItemKey.Crafted(ItemID.LockBox),"start");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.IronBar))<0,
+                "a locked container cannot unlock its contents before its required key is obtainable");
+            graph.AnchorItem(ItemKey.Crafted(ItemID.GoldenKey),"bc_fixture_wall");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.IronBar))==2
+                && graph.GetTierIndex(ItemKey.Crafted(ItemID.CobaltPickaxe))==2,
+                "container, key and contents propagate their earliest combined route into recipes and tools");
+            graph=graphFactory(new[]{Recipe.Create(ItemID.IronBar).AddIngredient(ItemID.Wood)});
+            graph.AnchorItem(ItemKey.Crafted(ItemID.LockBox),"bc_fixture_wall");
+            graph.AnchorItem(ItemKey.Crafted(ItemID.GoldenKey),"bc_fixture_wall");
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.IronBar))==0,
+                "an earlier crafting route wins over a later valid chest-opening route");
+        }
+        finally {if(had) records[ItemID.LockBox]=original;else records.Remove(ItemID.LockBox);}
+    }
+
 }
