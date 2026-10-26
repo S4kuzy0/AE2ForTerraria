@@ -24,7 +24,7 @@ namespace AE2ForTerraria.Systems;
 /// </summary>
 public sealed class LiveIntegrationRegression : ModSystem
 {
-    private const string Root = @"C:\Users\ROG\Documents\ChatGPT\ae2 for tr\validation\stage1\live";
+    private static string Root => Path.Combine(RegressionPaths.Root, "stage1", "live");
     private const string WorldName = "AE2ValidationCore20261003";
     private const string ActorName = "AE2LiveActor";
     private const string ObserverName = "AE2LiveObserver";

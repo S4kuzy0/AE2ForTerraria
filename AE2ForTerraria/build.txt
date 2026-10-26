@@ -1,6 +1,6 @@
 displayName = AE2 for Terraria
-author = ROG
-version = 0.27.12
-homepage =
+author = S4kuzy0
+version = 0.27.13
+homepage = https://github.com/S4kuzy0/AE2ForTerraria
 side =
 playableOnPreview = false

@@ -1,8 +1,9 @@
 # Builds an in-conversation source browser fragment for the AE2 for Terraria mod.
 $ErrorActionPreference = 'Stop'
 
-$modDir  = 'C:\Users\ROG\Documents\ChatGPT\ae2 for tr\AE2ForTerraria'
-$outDir  = 'C:\Users\ROG\.codex\visualizations\2026\09\16\01a0aa66-33bd-7aa2-b49c-9e190be16388'
+$modDir  = Join-Path (Split-Path $PSScriptRoot -Parent) 'AE2ForTerraria'
+$outDir  = Join-Path (Split-Path $PSScriptRoot -Parent) 'work/source-browser'
+New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 $outFile = Join-Path $outDir 'ae2-source-browser.html'
 
 $modules = @(

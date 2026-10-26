@@ -1,9 +1,11 @@
 # Concatenates the whole AE2ForTerraria source tree into one Markdown listing.
 $ErrorActionPreference = 'Stop'
 
-$root    = 'C:\Users\ROG\Documents\ChatGPT\ae2 for tr'
+$root    = Split-Path $PSScriptRoot -Parent
 $modDir  = Join-Path $root 'AE2ForTerraria'
-$outFile = Join-Path $root 'AE2ForTerraria-FULL-SOURCE.md'
+$outDir = Join-Path $root 'work'
+New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+$outFile = Join-Path $outDir 'AE2ForTerraria-FULL-SOURCE.md'
 
 $exts = @('.cs', '.csproj', '.hjson', '.md', '.txt', '.json')
 

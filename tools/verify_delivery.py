@@ -3,20 +3,27 @@ Writes evidence only beneath this repository's validation directory.
 """
 from pathlib import Path
 from zipfile import ZipFile
-import hashlib, json, re, difflib, shutil
+import argparse, hashlib, json, re, difflib, shutil, os
 from datetime import datetime
 
 root = Path(__file__).resolve().parents[1]
 source = root / 'AE2ForTerraria'
-saved = Path.home() / 'Documents/My Games/Terraria/tModLoader'
-logs = Path('D:/SteamLibrary/steamapps/common/tModLoader/tModLoader-Logs')
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--tml-install', default=os.environ.get('TML_INSTALL'), required=not os.environ.get('TML_INSTALL'))
+parser.add_argument('--save-root', type=Path, default=Path.home() / 'Documents/My Games/Terraria/tModLoader')
+parser.add_argument('--save-backup', type=Path, required=True)
+parser.add_argument('--enabled-before', type=Path, required=True)
+parser.add_argument('--source-backup', type=Path, required=True)
+args = parser.parse_args()
+saved = args.save_root.resolve()
+logs = Path(args.tml_install).resolve() / 'tModLoader-Logs'
 out = root / 'validation'
 out.mkdir(exist_ok=True)
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
 
-world_backup = root / 'backups/Worlds-Players-before-0.22-20260921.zip'
+world_backup = args.save_backup.resolve()
 with ZipFile(world_backup) as archive:
     names = {i.filename for i in archive.infolist() if not i.is_dir()}
     absent, changed = [], []
@@ -30,7 +37,7 @@ with ZipFile(world_backup) as archive:
                for p in (saved / folder).rglob('*') if p.is_file()}
 
 enabled = json.loads((saved / 'Mods/enabled.json').read_text(encoding='utf-8-sig'))
-before_enabled = json.loads((root / 'backups/enabled-before-validation.json').read_text(encoding='utf-8-sig'))
+before_enabled = json.loads(args.enabled_before.read_text(encoding='utf-8-sig'))
 package = saved / 'Mods/AE2ForTerraria.tmod'
 version = re.search(r'^version\s*=\s*(.+)$', (source / 'build.txt').read_text(), re.M).group(1)
 result = {
@@ -69,7 +76,7 @@ for picture in (saved / 'AE2-Validation').glob('*.png'):
 result['uiImages'] = sorted(p.name for p in (out / 'ui').glob('*.png'))
 
 patch, changes = [], []
-with ZipFile(root / 'backups/AE2ForTerraria-before-0.22-20260921-122211.zip') as archive:
+with ZipFile(args.source_backup) as archive:
     old = {p: archive.read(p) for p in archive.namelist()
            if p.endswith(('.cs', '.hjson', '.txt', '.csproj'))}
     new = {'AE2ForTerraria/' + p.relative_to(source).as_posix(): p.read_bytes()
