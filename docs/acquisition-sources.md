@@ -1,6 +1,6 @@
 # 最早获取来源的核对方法
 
-核对日期：2026-10-19（北京时间）。适用游戏基线：Terraria 1.4.4.9 / tModLoader。阶段排序以当前已加载配方、Boss 顺序和已建模来源为准；查询时不联网，也不执行模拟钓鱼、任务领奖或世界进度回调。
+核对日期：2026-10-26（北京时间）。适用游戏基线：Terraria 1.4.4.9 / tModLoader。阶段排序以当前已加载配方、Boss 顺序和已建模来源为准；查询时不联网，也不执行模拟钓鱼、任务领奖或世界进度回调。
 
 ## 判定规则
 
@@ -97,3 +97,45 @@ BossChecklist 的物品清单缺少逐条条件：实际掉落表已有记录时
 同批检查补齐白蜡木与摇树辣椒的自然来源，修正灰烬木魔石及其依赖。参考[小动物](https://terraria.wiki.gg/wiki/Critter)、[蝴蝶](https://terraria.wiki.gg/wiki/Butterfly)、[捕虫网](https://terraria.wiki.gg/wiki/Bug_Net)、[仙灵](https://terraria.wiki.gg/wiki/Fairies)、[白蜡树](https://terraria.wiki.gg/wiki/Trees#Ash_tree)，并与实际加载的物品、NPC、配方索引对照。未扩展为任意模组的生成或捕捉回调推演。
 
 火把神同时存在 BossChecklist 记录和名称推断记录。推断补全现在先按 NPC 身份排除已经覆盖的记录，再进行名称兜底；旧偏好中已经消失的重复标识自动忽略，真实阶段及其元数据保留。阶段重排后重新计算所有来源；上调对应更小的排名，下调对应更大的排名。
+
+## 0.27.12：合法提前探索与遗漏材料链
+
+本轮先对照实际 0.27.11 导出的物品阶段，再查 Wiki、版本历史与本机 Terraria 1.4.4.9／Calamity 2.2.4 的只读 IL。Wiki 部分主页面已经描述新版，不能直接套用：例如皮鞭在本机要求原版图鉴达到 \(10\%\)，不是新版的 \(3\%\)；tML 图鉴完成度在此处只统计原版条目。公开灾厄源码的版本也与本机不同，涉及门槛的结论以安装版交叉核对。
+
+| 物品或材料链 | 合法最早路线 | 依据 |
+| --- | --- | --- |
+| 陨石锭、陨石装备、太空枪 | 深层金箱可出陨石锭，Boss 前；金属锭分解另外检查本机实际配方 | [陨石锭](https://terraria.wiki.gg/wiki/Meteorite_Bar)、[金箱](https://terraria.wiki.gg/wiki/Gold_Chest)，本机 AddBuriedChest |
+| 大自然的恩赐、丛林玫瑰、向日葵与染料植物 | 天然花草采集，Boss 前；树妖商店只是替代路线 | [恩赐](https://terraria.wiki.gg/wiki/Nature%27s_Gift)、[植物](https://terraria.wiki.gg/wiki/Plants)，本机 KillTile_GetItemDrops |
+| 沙岩、硬化沙、灰烬 | 世界原生地形，Boss 前正常采集 | [地下沙漠](https://terraria.wiki.gg/wiki/Underground_Desert)、[地狱](https://terraria.wiki.gg/wiki/The_Underworld) |
+| 狱炎箭、照明弹 | 地狱罐子／照明弹枪同箱弹药；蓝照明弹另需先有枪才能从商人购买 | [狱炎箭](https://terraria.wiki.gg/wiki/Hellfire_Arrow)、[照明弹](https://terraria.wiki.gg/wiki/Flare)，本机箱子、罐子与商店分支 |
+| 书、水蜡烛、金钥匙 | 地牢入口天然摆设、普通未锁箱；钥匙还可出自地下地牢罐子 | [地牢](https://terraria.wiki.gg/wiki/Dungeon)、[金钥匙](https://terraria.wiki.gg/wiki/Golden_Key) |
+| 水矢、炼药桌、施法桌、地牢金箱与暗影箱物品 | 可正常移动冒险躲避守卫取物；金箱／暗影箱仍需对应钥匙 | [地牢](https://terraria.wiki.gg/wiki/Dungeon)、[暗影钥匙](https://terraria.wiki.gg/wiki/Shadow_Key)；本机原生和关键 Fargo／灾厄地块钩子只读核对 |
+| 组织样本、暗影鳞片、邪恶镐与狱石装备 | 击杀飞眼怪或部分虫体，不必击败完整 Boss；正常召唤和分段战斗可在 Boss 前完成 | [飞眼怪](https://terraria.wiki.gg/wiki/Creeper)、[暗影鳞片](https://terraria.wiki.gg/wiki/Shadow_Scale)、[实用技巧](https://terraria.wiki.gg/wiki/Guide:Practical_tips#Skipping_ahead)，实际部件掉落记录 |
+| 苔藓、邪恶石块、桶装液体、镒块 | 漆铲采苔藓、正常炸弹采石、空桶取液体、水与天然微光接触 | [苔藓](https://terraria.wiki.gg/wiki/Moss)、[桶](https://terraria.wiki.gg/wiki/Buckets)、[微光](https://terraria.wiki.gg/wiki/Shimmer)；工具／液体作为路线输入 |
+| 稽古衣、武士刀、水枪 | 普通世界旅商随机池，无 Boss 门槛；武士刀在颠倒世界有不同替代规则 | [旅商](https://terraria.wiki.gg/wiki/Traveling_Merchant)、[稽古衣](https://terraria.wiki.gg/wiki/Gi)、[武士刀](https://terraria.wiki.gg/wiki/Katana)，本机 SetupTravelShop_GetItem |
+| 皮鞭、花园侏儒、雨天帽衣 | Boss 前图鉴探索后购买、侏儒日照石化、雨衣僵尸／雨伞史莱姆掉落 | [皮鞭](https://terraria.wiki.gg/wiki/Leather_Whip)、[花园侏儒](https://terraria.wiki.gg/wiki/Garden_Gnome)、[雨衣僵尸](https://terraria.wiki.gg/wiki/Raincoat_Zombie) |
+| 杨桃 | 珍珠木摇树；神圣种子或珍珠沙作为环境输入，随最早来源传播 | [杨桃](https://terraria.wiki.gg/wiki/Star_Fruit)、[树](https://terraria.wiki.gg/wiki/Trees)，本机 ShakeTree |
+| 乌兹 | 困难模式愤怒捕手掉落，早于世纪之花后的商店 | [乌兹](https://terraria.wiki.gg/wiki/Uzi)、[愤怒捕手](https://terraria.wiki.gg/wiki/Angry_Trapper) |
+| 钨钢材料、风暴之颚、虚空石 | 增幅器、风暴蚁狮、发光石首鱼的已核验普通掉落，Boss 前 | [钨钢增幅器](https://calamitymod.wiki.gg/wiki/Wulfrum_Amplifier)、[风暴蚁狮](https://calamitymod.wiki.gg/wiki/Stormlion)、[发光石首鱼](https://calamitymod.wiki.gg/wiki/Luminous_Corvina) |
+| 沉沦之海材料 | 天然采矿；海棱晶和碎片要求实际镐力，旧荒漠灾虫锁已移除 | [沉沦渊石历史](https://calamitymod.wiki.gg/wiki/History:Navystone)、[海棱晶](https://calamitymod.wiki.gg/wiki/Sea_Prism)，本机 ModTile |
+| 天蓝矿 | 腐巢意志或血肉宿主后注魔矿脉／天蓝史莱姆，早于钴矿微光替代路线 | [天蓝矿](https://calamitymod.wiki.gg/wiki/Aerialite_Ore)，本机生成与 SpawnChance |
+| 寒元矿 | 极地之灵首杀生成矿脉，再要求实际可得镐力；寒元史莱姆另需两个机械 Boss | [寒元矿](https://calamitymod.wiki.gg/wiki/Cryonic_Ore)、[寒元史莱姆](https://calamitymod.wiki.gg/wiki/Cryo_Slime)，本机 Cryogen.OnKill 与 SpawnChance |
+| 熔渣矿 | 天然深渊矿脉要求 \(210\) 镐力；另有石巨人后混乱刺鲀掉落，无需推到月亮领主 | [熔渣矿](https://calamitymod.wiki.gg/wiki/Scoria_Ore)，本机 MinPick、CanExplode 及掉落条件 |
+| 流明晶、深渊细胞 | 本机版本为利维坦和阿娜希塔后深渊怪掉落，不能沿用旧版门槛 | [流明晶](https://calamitymod.wiki.gg/wiki/Lumenyl)、[深渊细胞](https://calamitymod.wiki.gg/wiki/Depth_Cells)，本机 PostLevi |
+| 霜印剑、冰雪弓、寒霜之花 | 本机灾厄普通世界冰宝箱怪替代掉落仍只需困难模式，保留非雕像条件 | [冰雪宝箱怪](https://terraria.wiki.gg/wiki/Ice_Mimic)，本机 CalamityGlobalNPC 的精确分支 |
+| 血珠 | 克苏鲁之眼后，夜间邪恶粉末将天然猪猪变为恐惧之猪再击杀；无需先等血月 | [血珠](https://calamitymod.wiki.gg/wiki/Blood_Orb)、[恐惧之猪](https://calamitymod.wiki.gg/wiki/Horrible_Hog)，本机转化投射物与 PostEoC 分支 |
+
+这些早期材料会继续沿实际配方传播到魔石、武器和工具；没有给成品逐个写死阶段。路线不使用 hoik、穿墙、复制、无限液体或跨世界带入。地牢危险不构成拾取锁，但地牢鱼匣仍有明确骷髅王条件；深渊宝箱另有灾厄骷髅王锁，本轮没有当成普通暗影箱。施法桌取得不等于 Fargo 的永久增益功能已经解锁。
+
+同时修正反向错误：机械召唤物的 `MechanicalBossesDummyCondition` 只是掉落报表占位符，真正 `MechBossSpawnersDropRule.CanDrop` 仍要求困难模式，因此不能按占位谓词恒真判作 Boss 前。独立 Boss 条件优先选择其具体检查点，避免双足翼龙等被早期整场事件抢占；原生事件条件与全部机械 Boss 条件保留真实联合门槛。
+
+金属锭分解仅覆盖明确审核的原版金属锭，按实际候选顺序、禁分解标记、定制输出和已知分解条件处理；直接转换优先，遇到不能解释的早期候选停止，不调用动态 `DecraftAvailable`。含骨头／神庙砖的分解保护不被绕过，狱炎箭的直接转化也不能反推成狱石锭。依据 [tML Recipe API](https://docs.tmodloader.net/docs/stable/class_recipe.html) 与本机 ShimmerTransforms；任意模组分解回调、特殊种子、其余未建模商店／NPC／容器仍需单独核查。
+
+### 本轮运行中发现的版本差异
+
+- 天然普通箱、洞穴金箱中的投刀是 Boss 前来源，血月商店仅为另一种方式；与旅商出售的和服一起修正后，忍者魔石沿真实材料门槛推导。[投刀 Wiki](https://terraria.wiki.gg/wiki/Throwing_Knife)
+- 灾厄 2.2.4 的 `AdjustShimmerRequirements` 将混沌传送杖的转换条件改为至尊灾厄与星流巨械全部击败；和谐杖不能使用原版月领主门槛。未适配的灾厄版本不猜测该钩子。[灾厄微光](https://calamitymod.wiki.gg/wiki/Shimmer)
+- 实际启用包中的熵已更新到 4.3，混沌精原有掉落被包进虚空驱逐舰前后条件。本机 IL 确认前置分支只有完成状态上界，正常混沌精掉落仍在肉山后；目前只适配经核实的混沌精分支，不把所有模组条件视为无门槛。
+- 荧光虫依赖神圣生态；需要捕虫网及可建立神圣环境的材料，不再和森林萤火虫一并算作开局来源。
+
+撒旦军团完成条件另外读取本机 `ReadyToFindBartender`、`ReadyForTier2/3` 和 `WinInvasionInternal`：保留邪恶 Boss／困难模式等真实前提，高难度通关同时满足低难度完成标志。自定义排序不能移除这些条件。

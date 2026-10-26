@@ -1724,7 +1724,7 @@ public sealed class UiRegressionSystem : ModSystem
             using var fishingFile=File.Create(Path.Combine(directory,"AE-interface-layer-frog-tooltip-1280x720.png"));
             target.SaveAsPng(fishingFile,1280,720); Mod.Logger.Info("AE2 UI RENDERED: actual AE Frog Leg acquisition tooltip 1280x720");
             var auditedTypes=new List<int> {ItemID.SharkFin,ItemID.PinkGel,ItemID.LifeFruit,ItemID.AmberMosquito,
-                ItemID.SoulofFlight,ItemID.TurtleShell,ItemID.DemonHeart,ItemID.WingsSolar,ItemID.Squirrel,ItemID.AshWood};
+                ItemID.SoulofFlight,ItemID.TurtleShell,ItemID.DemonHeart,ItemID.WingsSolar,ItemID.Squirrel,ItemID.AshWood,ItemID.MeteoriteBar,ItemID.NaturesGift,ItemID.MechanicalEye,ItemID.Uzi};
             if(Terraria.ModLoader.ModLoader.TryGetMod("FargowiltasSouls",out var soulsMod)
                 && soulsMod.TryFind<ModItem>("WoodEnchant",out var woodEnchant)) auditedTypes.Add(woodEnchant.Type);
             foreach(int type in auditedTypes)
@@ -1737,6 +1737,7 @@ public sealed class UiRegressionSystem : ModSystem
                 var lines=new List<TooltipLine>(); ModContent.GetInstance<ProgressionTooltip>().ModifyTooltips(Main.HoverItem,lines);
                 Assert(lines.Any(line=>line.Text.Contains(type==ItemID.LifeFruit ? "机械 Boss" : type==ItemID.AmberMosquito ? "提炼机"
                     : type==ItemID.DemonHeart ? "Boss / 事件掉落" : type==ItemID.WingsSolar || type>=ItemID.Count ? "配方材料"
+                    : type==ItemID.MechanicalEye ? "血肉墙" : type==ItemID.MeteoriteBar ? "金箱" : type==ItemID.NaturesGift ? "自然"
                     : type==ItemID.Squirrel ? "捕捉" : type==ItemID.AshWood ? "自然" : "小怪掉落")),
                     "native tooltip includes the audited non-fishing source: "+type);
                 device.SetRenderTargets(targets);

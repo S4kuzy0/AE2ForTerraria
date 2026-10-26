@@ -13,6 +13,7 @@ internal static class ProgressionRegression
 {
     internal static void Run(Action<bool,string> check)
     {
+        CheckOldOnesArmyGates(check);
         if(Terraria.ModLoader.ModLoader.HasMod("BossChecklist"))
         {
             var stages=new List<ProgressionTier>();
@@ -51,6 +52,7 @@ internal static class ProgressionRegression
             CheckFishing(check, live, sourceAnchors);
             CheckAuditGaps(check,live);
             CheckOtherSources(check,live);
+            CheckContinuedAudit(check,live);
             check(sourceAnchors.GetValueOrDefault(ItemKey.Crafted(ItemID.LifeCrystal),-1)==0,
                 "natural life crystals have a world-generation source before every boss independently of crafting recipes");
             check(sourceAnchors.TryGetValue(ItemKey.Crafted(ItemID.Ectoplasm),out int ectoplasm)
@@ -180,6 +182,100 @@ internal static class ProgressionRegression
         }
         finally {Main.recipe=recipes;Recipe.numRecipes=count;}
     }
+    private static void CheckContinuedAudit(Action<bool,string> check, ProgressionGraph graph)
+    {
+        int Tier(int type) => graph.GetTierIndex(ItemKey.Crafted(type));
+        foreach (int item in new[] { ItemID.MeteoriteBar, ItemID.Meteorite, ItemID.MeteorHelmet, ItemID.SpaceGun,
+            ItemID.NaturesGift, ItemID.JungleRose, ItemID.Sunflower, ItemID.Book,
+            ItemID.WaterCandle, ItemID.Sandstone, ItemID.HardenedSand, ItemID.HellfireArrow,
+            ItemID.Flare, ItemID.BlueFlare, ItemID.ThrowingKnife, ItemID.Gi, ItemID.Katana, ItemID.WaterGun, ItemID.BlandWhip, ItemID.GardenGnome, ItemID.RainHat, ItemID.RainCoat, ItemID.UmbrellaHat,
+            ItemID.ShadowScale, ItemID.TissueSample, ItemID.NightmarePickaxe, ItemID.DeathbringerPickaxe,
+            ItemID.Hellstone, ItemID.HellstoneBar, ItemID.WaterBolt, ItemID.GoldenKey, ItemID.ShadowKey,
+            ItemID.Muramasa, ItemID.DarkLance, ItemID.AlchemyTable, ItemID.WaterBucket, ItemID.ShimmerBlock })
+            check(Tier(item)==0, "continued Wiki audit retains a legitimate pre-boss exploration route: " + ItemID.Search.GetName(item));
+        int hardmode=ProgressionSources.BossTier(graph,NPCID.WallofFlesh);
+        foreach (int item in new[] { ItemID.MechanicalEye, ItemID.MechanicalWorm, ItemID.MechanicalSkull, ItemID.Uzi, ItemID.RodofDiscord, ItemID.LightningBug })
+            check(Tier(item)==hardmode, "continued Wiki audit preserves the real Hardmode requirement: " + ItemID.Search.GetName(item));
+        if (Terraria.ModLoader.ModLoader.TryGetMod("FargowiltasSouls", out var souls)
+            && souls.TryFind<Terraria.ModLoader.ModItem>("NinjaEnchant", out var ninja))
+            check(Tier(ninja.Type)==ProgressionSources.BossTier(graph,NPCID.KingSlime),
+                "natural throwing knives and the traveling merchant Gi stop delaying Ninja Enchantment until Blood Moon");
+        if (Terraria.ModLoader.ModLoader.TryGetMod("CalamityMod",out var mod) && mod.Version==new Version(2,2,4))
+        {
+            foreach(string name in new[]{"WulfrumMetalScrap","EnergyCore","StormlionMandible","Navystone","SeaPrism","PrismShard","Voidstone"})
+            {
+                bool found=mod.TryFind<Terraria.ModLoader.ModItem>(name,out var item);
+                check(found && Tier(item.Type)==0,"audited Calamity exploration source is pre-boss: "+name);
+            }
+            int Boss(params string[] names)=>ProgressionSources.BossTier(graph,names.Select(n=>mod.Find<Terraria.ModLoader.ModNPC>(n).Type).ToArray());
+            foreach(string name in new[]{"Lumenyl","DepthCells"})
+                check(Tier(mod.Find<Terraria.ModLoader.ModItem>(name).Type)==Boss("Leviathan","Anahita"),
+                    "Calamity abyss conditional resources retain the installed Leviathan gate: "+name);
+            check(Tier(mod.Find<Terraria.ModLoader.ModItem>("AerialiteOre").Type)==Boss("HiveMind","PerforatorHive"),
+                "Aerialite's infused ore and slime sources beat the later cobalt shimmer alternative");
+            foreach(int item in new[]{ItemID.Frostbrand,ItemID.IceBow,ItemID.FlowerofFrost})
+                check(Tier(item)==hardmode,"Calamity ordinary-world ice mimic reward retains its real Hardmode source: "+item);
+            check(Tier(mod.Find<Terraria.ModLoader.ModItem>("BloodOrb").Type)==ProgressionSources.BossTier(graph,NPCID.EyeofCthulhu),
+                "powder transformation provides blood orbs after the Eye without requiring the Blood Moon event");
+            var mining=ProgressionCalamitySources.MiningRoutes(graph);
+            check(mining.Exists(r=>r.Item==mod.Find<Terraria.ModLoader.ModItem>("CryonicOre").Type && r.Gate==Boss("Cryogen")),
+                "Cryogen ore generation does not inherit the distinct Cryo Slime two-mechanical-boss spawn gate");
+            check(Tier(mod.Find<Terraria.ModLoader.ModItem>("ScoriaOre").Type)<=ProgressionSources.BossTier(graph,NPCID.Golem)
+                && mining.Exists(r=>r.Item==mod.Find<Terraria.ModLoader.ModItem>("ScoriaOre").Type && r.Pick==210),
+                "Scoria has a Golem enemy alternative while its natural mining route still requires actual pick power");
+        }
+        var mostSpecific=graph.Tiers.Where(t=>t.NpcIds.Contains(NPCID.DD2Betsy)).OrderBy(t=>t.NpcIds.Count).ThenBy(t=>t.Index).FirstOrDefault();
+        if(mostSpecific!=null)
+            check(ProgressionSources.BossTier(graph,NPCID.DD2Betsy)==mostSpecific.Index,
+                "a boss-specific checkpoint takes priority over an earlier multi-wave event containing the same NPC");
+        check(ProgressionSources.ConditionTier(graph,Condition.NightOrEclipse)==0,
+            "an ordinary night alternative does not inherit the Solar Eclipse stage");
+        check(ProgressionSources.ConditionTier(graph,Condition.Eclipse)==Math.Max(hardmode,ProgressionSources.EventTier(graph,"Eclipse")),
+            "an explicit eclipse requirement retains both event and Hardmode gates");
+        var incomplete=new ProgressionGraph(new RecipeIndex());
+        incomplete.Tiers.Add(new(0,"start","start","fixture"));
+        var mech=new ProgressionTier(1,"mech","mech","fixture"); mech.NpcIds.Add(NPCID.TheDestroyer); incomplete.Tiers.Add(mech);
+        check(ProgressionSources.ConditionTier(incomplete,Condition.DownedMechBossAll)<0,
+            "an ALL condition cannot discard a missing mechanical boss checkpoint");
+        var dummy=new DropRecord(ItemID.MechanicalEye,NPCID.BlueSlime,0,1,1,1,
+            new Terraria.GameContent.ItemDropRules.IItemDropRuleCondition[] { new Terraria.GameContent.ItemDropRules.Conditions.MechanicalBossesDummyCondition() });
+        check(ProgressionSources.DropTier(graph,dummy)==hardmode,
+            "mechanical spawner report metadata preserves the Hardmode gate implemented by its parent drop rule");
+    }
+    private static void CheckOldOnesArmyGates(Action<bool,string> check)
+    {
+        ProgressionTier Add(ProgressionGraph graph, int index, string id, int npc = 0)
+        {
+            var tier = new ProgressionTier(index, id, id, "fixture");
+            if (npc > 0) tier.NpcIds.Add(npc);
+            graph.Tiers.Add(tier);
+            return tier;
+        }
+        var earlyEvent = new ProgressionGraph(new RecipeIndex());
+        Add(earlyEvent, 1, "bc_Terraria OldOnesArmy");
+        Add(earlyEvent, 2, "darkMage", NPCID.DD2DarkMageT1);
+        Add(earlyEvent, 3, "evilBoss", NPCID.EaterofWorldsHead);
+        check(ProgressionSources.ConditionTier(earlyEvent, Condition.DownedOldOnesArmyT1) == 3,
+            "moving Old One's Army before the evil boss cannot bypass the Tavernkeep unlock");
+
+        var thirdOnly = new ProgressionGraph(new RecipeIndex());
+        Add(thirdOnly, 1, "bc_Terraria OldOnesArmy");
+        var evil = Add(thirdOnly, 2, "evilBoss", NPCID.BrainofCthulhu);
+        var wall = Add(thirdOnly, 3, "wall", NPCID.WallofFlesh);
+        Add(thirdOnly, 4, "golem", NPCID.Golem);
+        Add(thirdOnly, 5, "betsy", NPCID.DD2Betsy);
+        check(ProgressionSources.ConditionTier(thirdOnly, Condition.DownedOldOnesArmyT1) == 5
+            && ProgressionSources.ConditionTier(thirdOnly, Condition.DownedOldOnesArmyT2) == 5,
+            "completing Old One's Army tier three also unlocks tier one and two without their separate checkpoints");
+        check(ProgressionSources.ConditionTier(thirdOnly, Condition.DownedOldOnesArmyAny) == 5,
+            "any completed Old One's Army difficulty remains known when lower-difficulty routes are unavailable");
+        wall.Index = 8;
+        check(ProgressionSources.ConditionTier(thirdOnly, Condition.DownedOldOnesArmyT3) == 8,
+            "moving Golem and Betsy earlier cannot bypass the Hardmode requirement of tier three");
+        thirdOnly.Tiers.Remove(evil);
+        check(ProgressionSources.ConditionTier(thirdOnly, Condition.DownedOldOnesArmyAny) < 0,
+            "all Old One's Army completion routes remain unknown when their shared evil-boss gate is missing");
+    }
     private static void CheckAuditGaps(Action<bool,string> check,ProgressionGraph graph)
     {
         int Tier(int type)=>graph.GetTierIndex(ItemKey.Crafted(type));
@@ -217,16 +313,16 @@ internal static class ProgressionRegression
         int goblins=ProgressionSources.EventTier(graph,"GoblinArmy");
         check(Tier(ItemID.TinkerersWorkshop)==goblins && Tier(ItemID.RocketBoots)==goblins,
             "Goblin Tinkerer stock follows the editable Goblin Army event checkpoint");
-        check(Tier(ItemID.Meteorite)==ProgressionSources.BossTier(graph,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu),
-            "meteorite uses the evil-boss meteor source rather than a post-Plantera shop alternative");
+        check(ProgressionSources.MiningRoutes(graph).Exists(r=>r.Item==ItemID.Meteorite && r.Gate==ProgressionSources.BossTier(graph,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu)),
+            "meteorite falling retains its evil-boss gate even when chest bars provide a separate early route");
         check(Tier(ItemID.ShadowFlameKnife)>=hardmode,
             "Hardmode Goblin Summoner drops cannot inherit the pre-Hardmode invasion checkpoint");
         check(Tier(ItemID.SanguineStaff)>=hardmode && Tier(ItemID.DD2BetsyBow)>=ProgressionSources.BossTier(graph,NPCID.Golem),
             "event member NPCs keep their own boss and spawn gates instead of inheriting the first event tier");
         int moonlord=ProgressionSources.BossTier(graph,NPCID.MoonLordCore);
-        check(Tier(ItemID.RodOfHarmony)==moonlord && Tier(ItemID.Clentaminator2)==moonlord
+        check(Tier(ItemID.RodOfHarmony)==ProgressionCalamitySources.RodOfHarmonyGate(graph) && Tier(ItemID.Clentaminator2)==moonlord
             && Tier(ItemID.BottomlessShimmerBucket)==moonlord,
-            "special shimmer upgrades retain the Moon Lord requirement even when their inputs are earlier");
+            "special shimmer upgrades retain vanilla locks and Calamity's two endgame boss requirements");
         var routes=ProgressionWorldSources.Routes(graph);
         check(routes.Exists(r=>r.Output==ItemID.AmberMosquito && r.Inputs.Contains(ItemID.Extractinator) && r.Inputs.Contains(ItemID.SiltBlock)),
             "extractinator progression requires both the processing material and a machine");

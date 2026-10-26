@@ -16,15 +16,15 @@ try {
         if (Test-Path -LiteralPath $portable) { $GitHubCli = $portable }
         else {
             $installed = Get-Command gh -ErrorAction SilentlyContinue
-            if (!$installed) { throw 'GitHub CLI is required to verify repository privacy.' }
+            if (!$installed) { throw 'GitHub CLI is required to verify repository visibility.' }
             $GitHubCli = $installed.Source
         }
     }
     $repoJson = & $GitHubCli repo view 'S4kuzy0/AE2ForTerraria' --json nameWithOwner,isPrivate
-    if ($LASTEXITCODE -ne 0) { throw 'Could not verify repository privacy; upload stopped.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Could not verify repository visibility; upload stopped.' }
     $repo = $repoJson | ConvertFrom-Json
-    if ($repo.nameWithOwner -ne 'S4kuzy0/AE2ForTerraria' -or !$repo.isPrivate) {
-        throw 'The authorized repository must remain private; upload stopped.'
+    if ($repo.nameWithOwner -ne 'S4kuzy0/AE2ForTerraria' -or $repo.isPrivate) {
+        throw 'The authorized repository must remain public; upload stopped.'
     }
     $branch = & git branch --show-current
     if ($LASTEXITCODE -ne 0 -or !$branch) { throw 'A checked-out branch is required.' }

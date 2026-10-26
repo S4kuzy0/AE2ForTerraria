@@ -18,9 +18,15 @@ internal static class ProgressionSources
         .GroupBy(f=>(Condition)f.GetValue(null)).ToDictionary(g=>g.Key,g=>g.First().Name);
     internal static int BossTier(ProgressionGraph graph, params int[] npcs)
     {
-        var tiers=graph.Tiers.Where(t=>t.NpcIds.Any(n=>npcs.Contains(n))).Select(t=>t.Index).ToArray();
+        // A boss may also be listed as a member of an event. Prefer its own
+        // checkpoint before taking the earliest of the alternative bosses.
+        var tiers=npcs.Select(npc=>graph.Tiers.Where(t=>t.NpcIds.Contains(npc))
+            .OrderBy(t=>t.NpcIds.Count).ThenBy(t=>t.Index).FirstOrDefault())
+            .Where(t=>t!=null).Select(t=>t.Index).ToArray();
         return tiers.Length>0 ? tiers.Min() : -1;
     }
+    private static int AllGates(params int[] gates) => gates.Any(g=>g<0) ? -1 : gates.Max();
+    private static int AnyGate(params int[] gates) => gates.Where(g=>g>=0).DefaultIfEmpty(-1).Min();
     internal static int EventTier(ProgressionGraph graph, string id) =>
         graph.Tiers.FirstOrDefault(t => t.Id == "bc_Terraria " + id)?.Index ?? -1;
     internal static int EventNpcGate(ProgressionGraph graph,int npc)
@@ -37,6 +43,23 @@ internal static class ProgressionSources
         }
         return 0;
     }
+    private static int OldOnesArmyCompletionGate(ProgressionGraph graph, int minimumDifficulty)
+    {
+        int eventGate = EventTier(graph, "OldOnesArmy");
+        int evilBoss = Gate(graph, "DownedEowOrBoc");
+        int hardmode = Gate(graph, "Hardmode");
+        int first = AllGates(eventGate, evilBoss, BossTier(graph, NPCID.DD2DarkMageT1));
+        int second = AllGates(eventGate, evilBoss, hardmode, Gate(graph, "DownedMechBossAny"), BossTier(graph, NPCID.DD2OgreT2));
+        int third = AllGates(eventGate, evilBoss, hardmode, BossTier(graph, NPCID.Golem), BossTier(graph, NPCID.DD2Betsy));
+        // WinInvasionInternal sets every completion flag at or below the
+        // completed difficulty, so higher tiers are valid alternative routes.
+        return minimumDifficulty switch
+        {
+            1 => AnyGate(first, second, third),
+            2 => AnyGate(second, third),
+            _ => third
+        };
+    }
     private static int Gate(ProgressionGraph graph,string name) => name switch
     {
         "Hardmode"=>BossTier(graph,NPCID.WallofFlesh),
@@ -48,26 +71,57 @@ internal static class ProgressionSources
         "DownedQueenBee"=>BossTier(graph,NPCID.QueenBee),
         "DownedSkeletron"=>BossTier(graph,NPCID.SkeletronHead),
         "DownedDeerclops"=>BossTier(graph,NPCID.Deerclops),
+        "DownedEarlygameBoss"=>BossTier(graph,NPCID.EyeofCthulhu,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu,
+            NPCID.SkeletronHead,NPCID.QueenBee,NPCID.WallofFlesh),
         "DownedQueenSlime"=>BossTier(graph,NPCID.QueenSlimeBoss),
         "DownedMechBossAny"=>BossTier(graph,NPCID.TheDestroyer,NPCID.Retinazer,NPCID.SkeletronPrime),
         "DownedTwins"=>BossTier(graph,NPCID.Retinazer),
         "DownedDestroyer"=>BossTier(graph,NPCID.TheDestroyer),
         "DownedSkeletronPrime"=>BossTier(graph,NPCID.SkeletronPrime),
-        "DownedMechBossAll"=>new[]{BossTier(graph,NPCID.TheDestroyer),BossTier(graph,NPCID.Retinazer),BossTier(graph,NPCID.SkeletronPrime)}.Max(),
+        "DownedMechBossAll"=>AllGates(BossTier(graph,NPCID.TheDestroyer),BossTier(graph,NPCID.Retinazer),BossTier(graph,NPCID.SkeletronPrime)),
         "DownedPlantera"=>BossTier(graph,NPCID.Plantera),
         "DownedGolem"=>BossTier(graph,NPCID.Golem),
         "DownedDukeFishron"=>BossTier(graph,NPCID.DukeFishron),
         "DownedEmpressOfLight"=>BossTier(graph,NPCID.HallowBoss),
         "DownedCultist"=>BossTier(graph,NPCID.CultistBoss),
         "DownedMoonLord"=>BossTier(graph,NPCID.MoonLordCore),
+        "DownedMourningWood"=>BossTier(graph,NPCID.MourningWood),
+        "DownedPumpking"=>BossTier(graph,NPCID.Pumpking),
+        "DownedEverscream"=>BossTier(graph,NPCID.Everscream),
+        "DownedSantaNK1"=>BossTier(graph,NPCID.SantaNK1),
+        "DownedIceQueen"=>BossTier(graph,NPCID.IceQueen),
+        "DownedClown"=>AllGates(EventTier(graph,"BloodMoon"),BossTier(graph,NPCID.WallofFlesh)),
+        "DownedGoblinArmy"=>EventTier(graph,"GoblinArmy"),
+        "DownedPirates"=>AllGates(EventTier(graph,"PirateInvasion"),BossTier(graph,NPCID.WallofFlesh)),
+        "DownedMartians"=>AllGates(EventTier(graph,"MartianMadness"),BossTier(graph,NPCID.Golem)),
+        "DownedFrostLegion"=>AllGates(EventTier(graph,"FrostLegion"),BossTier(graph,NPCID.WallofFlesh)),
+        "DownedSolarPillar"=>BossTier(graph,NPCID.LunarTowerSolar),
+        "DownedVortexPillar"=>BossTier(graph,NPCID.LunarTowerVortex),
+        "DownedNebulaPillar"=>BossTier(graph,NPCID.LunarTowerNebula),
+        "DownedStardustPillar"=>BossTier(graph,NPCID.LunarTowerStardust),
+        "DownedOldOnesArmyT1" or "DownedOldOnesArmyAny"=>OldOnesArmyCompletionGate(graph, 1),
+        "DownedOldOnesArmyT2"=>OldOnesArmyCompletionGate(graph, 2),
+        "DownedOldOnesArmyT3"=>OldOnesArmyCompletionGate(graph, 3),
         _=>-1
     };
     internal static int ConditionTier(ProgressionGraph graph,Condition condition)
     {
         if(!VanillaConditions.TryGetValue(condition,out string name)) return -1;
         if(name=="Hardmode" || name.StartsWith("Downed")) return Gate(graph,name);
-        // Day, weather, biome, research and pre-hardmode conditions do not add a
-        // permanent boss unlock. Their runtime execution checks remain separate.
+        int? eventGate=name switch
+        {
+            "BloodMoon"=>EventTier(graph,"BloodMoon"),
+            "Eclipse"=>AllGates(EventTier(graph,"Eclipse"),Gate(graph,"Hardmode")),
+            "EclipseOrBloodMoon"=>AnyGate(EventTier(graph,"BloodMoon"),AllGates(EventTier(graph,"Eclipse"),Gate(graph,"Hardmode"))),
+            "BloodMoonOrHardmode"=>AnyGate(EventTier(graph,"BloodMoon"),Gate(graph,"Hardmode")),
+            "InOldOneArmy"=>AllGates(EventTier(graph,"OldOnesArmy"),Gate(graph,"DownedEowOrBoc")),
+            "InTowerSolar" or "InTowerVortex" or "InTowerNebula" or "InTowerStardust"=>Gate(graph,"DownedCultist"),
+            "InHallow"=>Gate(graph,"Hardmode"),
+            _=>null
+        };
+        if(eventGate.HasValue) return eventGate.Value;
+        // Remaining time/weather/locality flags do not add a progression gate.
+        // Their runtime execution checks remain separate.
         return 0;
     }
     internal static int NaturalStationTier(ProgressionGraph graph,int tile) => tile switch
@@ -90,6 +144,7 @@ internal static class ProgressionSources
             ItemID.CopperPickaxe,ItemID.TinPickaxe,ItemID.Obsidian,ItemID.Hellforge,ItemID.Amber,ItemID.Amethyst,
             ItemID.Topaz,ItemID.Sapphire,ItemID.Emerald,ItemID.Ruby,ItemID.Diamond}) Add(type,0);
         ProgressionWorldSources.Seed(graph,Add);
+        ProgressionCalamitySources.Seed(graph,Add);
         int hardmode=Gate(graph,"Hardmode");
         foreach(int type in new[]{ItemID.Pearlwood,ItemID.CrystalShard}) Add(type,hardmode,"困难模式世界变化");
         Add(ItemID.LifeFruit,Gate(graph,"DownedMechBossAny"),"击败任意机械 Boss 后，地下丛林自然生长");
@@ -105,7 +160,7 @@ internal static class ProgressionSources
             NPCID.GraniteFlyer,NPCID.GreekSkeleton,NPCID.Nymph,NPCID.Salamander,
             NPCID.GiantShelly,NPCID.Crawdad,NPCID.GoblinScout,NPCID.EaterofSouls,NPCID.DevourerHead,
             NPCID.Crimera,NPCID.FaceMonster,NPCID.BloodCrawler,NPCID.WallCreeper,
-            NPCID.BlueJellyfish,NPCID.PinkJellyfish}) spawnGates[npc] = 0;
+            NPCID.BlueJellyfish,NPCID.PinkJellyfish,NPCID.ZombieRaincoat,NPCID.UmbrellaSlime}) spawnGates[npc] = 0;
         foreach(int npc in new[]{NPCID.AngryBones,NPCID.DarkCaster,NPCID.CursedSkull})
             spawnGates[npc] = BossTier(graph,NPCID.SkeletronHead);
         foreach(int npc in new[]{NPCID.Pixie,NPCID.Unicorn,NPCID.ChaosElemental,NPCID.WyvernHead,NPCID.GiantBat,
@@ -115,7 +170,7 @@ internal static class ProgressionSources
             NPCID.Werewolf,NPCID.IceGolem,NPCID.SandElemental,NPCID.Mummy,NPCID.LightMummy,NPCID.DarkMummy,
             NPCID.Moth,NPCID.RainbowSlime,NPCID.EnchantedSword,NPCID.CursedHammer,NPCID.CrimsonAxe,
             NPCID.RuneWizard,NPCID.Crimslime,NPCID.BlackRecluse,NPCID.GreenJellyfish,
-            NPCID.GiantTortoise,NPCID.IceTortoise,NPCID.SeekerHead,NPCID.PigronCorruption,
+            NPCID.AngryTrapper,NPCID.GiantTortoise,NPCID.IceTortoise,NPCID.SeekerHead,NPCID.PigronCorruption,
             NPCID.PigronHallow,NPCID.PigronCrimson,NPCID.AngryNimbus}) spawnGates[npc] = hardmode;
         foreach(int npc in new[]{NPCID.RedDevil,NPCID.Lavabat}) spawnGates[npc] = Gate(graph,"DownedMechBossAny");
         foreach(int npc in new[]{NPCID.DungeonSpirit,NPCID.BlueArmoredBones,NPCID.RustyArmoredBonesAxe,NPCID.HellArmoredBones,
@@ -168,6 +223,15 @@ internal static class ProgressionSources
     }
     private static int DropConditionTier(ProgressionGraph graph,Type type,int npc)
     {
+        // Entropy 4.3 wraps existing drops in a before/after Void Destroyer
+        // condition. The before branch adds an upper bound, not a later unlock.
+        if (npc == NPCID.ChaosElemental && ModLoader.TryGetMod("CalamityEntropy", out var entropy) && entropy.Version == new Version(4,3)
+            && type.Assembly == entropy.Code)
+        {
+            if (type.FullName == "CalamityEntropy.Content.Events.VoidDestroyerAftermath.PreVoidDestroyerCondition") return 0;
+            if (type.FullName == "CalamityEntropy.Content.Events.VoidDestroyerAftermath.PostVoidDestroyerCondition")
+                return entropy.TryFind<ModNPC>("VoidDestroyer", out var boss) ? BossTier(graph, boss.Type) : -1;
+        }
         // Fargo adaptations are version-bound. Runtime/lambda predicates and
         // unreviewed early-bird conditions remain unknown.
         if(ModLoader.TryGetMod("FargowiltasSouls",out var fargo) && fargo.Version==new Version(1,7,3,9) && type.Assembly==fargo.Code)
@@ -186,19 +250,21 @@ internal static class ProgressionSources
                 return BossTier(graph,NPCID.WallofFlesh);
         }
         if(type.Assembly != typeof(Terraria.GameContent.ItemDropRules.Conditions).Assembly) return -1;
+        // MechanicalBossesDummyCondition only labels ReportDroprates; the real
+        // MechBossSpawnersDropRule.CanDrop requires hardMode in native 1.4.4.9.
         return type.Name switch
         {
             "IsHardmode" or "SoulOfLight" or "SoulOfNight" or "LivingFlames" or "PirateMap"
                 or "JungleKeyCondition" or "CorruptKeyCondition" or "CrimsonKeyCondition" or "FrozenKeyCondition"
                 or "HallowKeyCondition" or "DesertKeyCondition" or "YoyosAmarok" or "YoyosHelFire"
-                or "RemixSeedHardmode" => BossTier(graph,NPCID.WallofFlesh),
+                or "RemixSeedHardmode" or "MechanicalBossesDummyCondition" => BossTier(graph,NPCID.WallofFlesh),
             "BeatAnyMechBoss" or "YoyosYelets" => Gate(graph,"DownedMechBossAny"),
             "YoyoCascade" => BossTier(graph,NPCID.SkeletronHead),
             "YoyosKraken" => BossTier(graph,NPCID.Plantera),
             "DownedAllMechBosses" or "MechdusaKill" => Gate(graph,"DownedMechBossAll"),
             "DownedPlantera" => BossTier(graph,NPCID.Plantera),
             "NotExpert" or "IsExpert" or "IsMasterMode" or "NotMasterMode" or "NotRemixSeed" or "RemixSeed" or "NotFromStatue"
-                or "IsPreHardmode" or "RemixSeedEasymode" or "MechanicalBossesDummyCondition"
+                or "IsPreHardmode" or "RemixSeedEasymode"
                 or "IsCorruptionAndNotExpert" or "IsCrimsonAndNotExpert" or "LegacyHack_IsABoss"
                 or "LegacyHack_IsBossAndNotExpert" or "MissingTwin" or "EmpressOfLightIsGenuinelyEnraged"
                 or "DontStarveIsNotUp" or "DontStarveIsUp" or "TenthAnniversaryIsNotUp" or "TenthAnniversaryIsUp"
@@ -243,6 +309,7 @@ internal static class ProgressionSources
             ModOre("PerennialOre",BossTier(graph,NPCID.Plantera),"世纪之花后生成多年生矿脉");
             if(rework == true) ModOre("HallowedOre",mechs.Max(),"灾厄重做：全部机械 Boss 后生成神圣矿脉");
         }
+        result.AddRange(ProgressionCalamitySources.MiningRoutes(graph));
         return result;
     }
     private static bool? CalamityOreRework()
