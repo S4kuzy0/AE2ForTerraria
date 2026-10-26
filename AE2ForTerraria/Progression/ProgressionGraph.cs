@@ -656,16 +656,18 @@ namespace AE2ForTerraria.Progression
                     foreach(var drop in GameDataIndex.GetContainerDrops(tier.TreasureBag))
                     {
                         reported.Add(drop.ItemType);
-                        AnchorDrop(drop.ItemType,ProgressionSources.DropTier(this,drop));
+                        AnchorDrop(drop.ItemType,ProgressionSources.DropTier(this,drop,tier.Index));
                     }
                 }
                 foreach(int npcType in npcs)
                     foreach(var drop in GameDataIndex.GetNpcDropRecords(npcType))
                     {
                         reported.Add(drop.ItemType);
-                        int gate=ProgressionSources.DropTier(this,drop), spawn=ProgressionSources.EventNpcGate(this,npcType);
+                        int spawn=ProgressionSources.EventNpcGate(this,npcType);
+                        int checkpoint=npcCheckpoints.GetValueOrDefault(npcType,tier.Index);
+                        int gate=spawn<0 ? -1 : ProgressionSources.DropTier(this,drop,Math.Max(checkpoint,spawn));
                         AnchorDrop(drop.ItemType,gate<0 || spawn<0 ? -1 : Math.Max(gate,spawn),
-                            npcCheckpoints.GetValueOrDefault(npcType,tier.Index));
+                            checkpoint);
                     }
                 // Checklist metadata lacks per-drop conditions. It must not bypass
                 // a gate (or an opaque predicate) already reported by the real loot table.
@@ -819,8 +821,8 @@ namespace AE2ForTerraria.Progression
                 int old = _explicitItemTier[key];
                 if (old >= 0 && old < priorIds.Length) _explicitItemTier[key] = Tiers.FindIndex(t => t.Id == priorIds[old]);
             }
-            AnchorItemsFromBosses(); ProgressionSources.Anchor(this, _bossAnchored);
             _tierCacheReady = false; Revision++;
+            AnchorItemsFromBosses(); ProgressionSources.Anchor(this, _bossAnchored);
         }
         public bool HasUnlocks(int tier)
         {
@@ -945,7 +947,10 @@ namespace AE2ForTerraria.Progression
                         if(pick.pick >= route.Pick && _inferredCache.TryGetValue(ItemKey.Crafted(pick.type),out int value)
                             && (best < 0 || value < best)) { best = value; tool = pick.type; }
                     if(best < 0) continue;
-                    best = Math.Max(best,route.Gate); var key = ItemKey.Crafted(route.Item);
+                    best = Math.Max(best,route.Gate);
+                    if(route.Conditions != null) best = AdaptiveProgressionConditions.Earliest(this,route.Conditions,best);
+                    if(best < 0) continue;
+                    var key = ItemKey.Crafted(route.Item);
                     if(_inferredCache.TryGetValue(key,out int previous) && previous <= best) continue;
                     _inferredCache[key] = best;
                     _reasons[route.Item] = route.Reason + "；镐力要求 " + route.Pick + "，可用 " + Lang.GetItemNameValue(tool);
@@ -969,6 +974,10 @@ namespace AE2ForTerraria.Progression
                             if(!_inferredCache.TryGetValue(ItemKey.Crafted(input),out int inputTier)) { available=-1; break; }
                             available=Math.Max(available,inputTier);
                         }
+                        if (available >= 0 && route.Conditions != null)
+                            available=ProgressionSources.ConditionsTier(this,route.Conditions,available);
+                        if (available >= 0 && route.Drop != null)
+                            available=ProgressionSources.DropTier(this,route.Drop,available);
                         if(available<0 || _inferredCache.TryGetValue(key,out int prior) && prior<=available) continue;
                         _inferredCache[key]=available;
                         _reasons[key.Type]=route.Reason+"："+string.Join("、",route.Inputs.Select(Lang.GetItemNameValue));
@@ -1018,8 +1027,6 @@ namespace AE2ForTerraria.Progression
         private int RecipeTier(Recipe recipe)
         {
             int tier=0;
-            foreach(var condition in recipe.Conditions)
-            {int gate=ProgressionSources.ConditionTier(this,condition);if(gate<0)return UnknownTier;tier=Math.Max(tier,gate);}
             foreach(int tile in recipe.requiredTile)
             {
                 if(tile<0) continue;
@@ -1041,7 +1048,7 @@ namespace AE2ForTerraria.Progression
                 if(material<0)return UnknownTier;
                 tier=Math.Max(tier,material);
             }
-            return tier;
+            return ProgressionSources.ConditionsTier(this,recipe.Conditions,tier);
         }
 
 		/// <summary>当前世界进度所处的阶段序号。</summary>

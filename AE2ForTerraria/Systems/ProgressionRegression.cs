@@ -23,6 +23,7 @@ internal static class ProgressionRegression
         GameDataIndex.EnsureBuilt();
         AcquisitionAudit.Export();
         var live = StorageSystem.Progression;
+        if (live != null) AdaptiveProgressionRegressionChecks.LogLoadedConditions(live);
         if(live != null)
         {
             var sourceAnchors = new Dictionary<ItemKey,int>(); ProgressionSources.Anchor(live,sourceAnchors);
@@ -111,6 +112,8 @@ internal static class ProgressionRegression
                 .GetValue(graph))[TileID.MythrilAnvil]=new(){ItemID.MythrilAnvil};
             check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==2,"a later workstation prevents an early-material recipe from sorting before its unlock");
             graph=Graph(Recipe.Create(ItemID.Torch).AddIngredient(ItemID.Wood).AddCondition(new Condition("Mods.AE2ForTerraria.UnknownGate",()=>true)));
+            check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))==0,"a provably constant mod condition is interpreted without executing its delegate");
+            graph=Graph(Recipe.Create(ItemID.Torch).AddIngredient(ItemID.Wood).AddCondition(new Condition("Mods.AE2ForTerraria.UnknownGate",()=>Main.LocalPlayer.active)));
             check(graph.GetTierIndex(ItemKey.Crafted(ItemID.Torch))<0,"an opaque mod condition remains unknown instead of becoming a fabricated early unlock");
             graph=Graph(Recipe.Create(ItemID.MoltenPickaxe).AddIngredient(ItemID.Ruby),Recipe.Create(ItemID.ObsidianSkull).AddIngredient(ItemID.Hellstone));
             graph.AnchorItem(ItemKey.Crafted(ItemID.CopperPickaxe),"start");

@@ -126,15 +126,7 @@ namespace AE2ForTerraria.Systems
 					audit.Add(reader.ReadString());
 				}
 
-				int lockedCount = ReadCount(reader);
-				var locked = new List<int>();
-
-				for (int i = 0; i < lockedCount; i++)
-				{
-                    int type = reader.ReadInt32();
-                    if (!SavedItemGuard.IsValidFilterEntry(type)) throw new InvalidDataException("Invalid locked item identity");
-					locked.Add(type);
-				}
+                var locked = ReadFilter(reader);
 
                 // Publish the policy only after all sections have decoded successfully.
 				NetworkRegistry.ApplyRemoteSecurity(position, owner, table);
@@ -252,21 +244,12 @@ namespace AE2ForTerraria.Systems
 				case ServerSyncBusConfig:
 					if (entity is MEStorageBusEntity busCfg)
 					{
-						var ids = new List<int>();
-						busCfg.SetExportMode(reader.ReadBoolean());
-						busCfg.IsWhitelist = reader.ReadBoolean();
-						int count = reader.ReadInt32();
-
-						for (int i = 0; i < count; i++)
-						{
-							int id = reader.ReadInt32();
-							if (id > 0)
-							{
-								ids.Add(id);
-							}
-						}
-
-						busCfg.Filter = ids;
+                        bool exportMode = reader.ReadBoolean();
+                        bool whitelist = reader.ReadBoolean();
+                        var ids = ReadFilter(reader);
+                        busCfg.SetExportMode(exportMode);
+                        busCfg.IsWhitelist = whitelist;
+                        busCfg.Filter = ids;
 						busCfg.MarkFilterDirty();
 					}
 
@@ -276,18 +259,7 @@ namespace AE2ForTerraria.Systems
 					if (entity is IPartitionedStorage partitioned)
 					{
 						bool whitelist = reader.ReadBoolean();
-						int count = reader.ReadInt32();
-						var ids = new List<int>();
-
-						for (int i = 0; i < count; i++)
-						{
-							int id = reader.ReadInt32();
-
-							if (SavedItemGuard.IsValidFilterEntry(id))
-							{
-								ids.Add(id);
-							}
-						}
+                        var ids = ReadFilter(reader);
 
 						partitioned.Filter = ids;
 						partitioned.IsWhitelist = whitelist;

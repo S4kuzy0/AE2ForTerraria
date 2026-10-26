@@ -95,8 +95,7 @@ public static partial class MENet
         var locked = NetworkRegistry.GetLocked(anchor);
         using var buffer = new MemoryStream(); using var writer = new BinaryWriter(buffer);
         writer.Write(ServerTerminalPolicy); writer.Write(position.X); writer.Write(position.Y);
-        writer.Write(epoch); writer.Write(anchor.X); writer.Write(anchor.Y); writer.Write(locked.Count);
-        foreach (int type in locked) writer.Write(type);
+        writer.Write(epoch); writer.Write(anchor.X); writer.Write(anchor.Y); WriteFilter(writer, locked);
         SendAuthorizedPayload(buffer.ToArray(), position, who, -1);
     }
     internal static void ValidateTerminalSubscriptions()
@@ -117,13 +116,7 @@ public static partial class MENet
         {
             int policyEpoch = reader.ReadInt32();
             var anchor = new Point16(reader.ReadInt16(), reader.ReadInt16());
-            int policyCount = ReadCount(reader); var locked = new List<int>(policyCount);
-            for (int i = 0; i < policyCount; i++)
-            {
-                int type = reader.ReadInt32();
-                if (!SavedItemGuard.IsValidType(type)) throw new InvalidDataException("Invalid terminal locked item");
-                locked.Add(type);
-            }
+            var locked = ReadFilter(reader);
             UISystem.ApplyTerminalPolicy(position, policyEpoch, anchor, locked); return true;
         }
         if (message == ServerBridgeAccess)

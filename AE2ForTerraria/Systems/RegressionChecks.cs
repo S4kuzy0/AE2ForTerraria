@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AE2ForTerraria.Core;
+using AE2ForTerraria.Progression;
 using AE2ForTerraria.Content.Items;
 using AE2ForTerraria.Content.Tiles;
 using Terraria;
@@ -51,6 +52,10 @@ public static class RegressionChecks
             Suite("disk tier capacities", DiskCapacityRegression.Run);
             Suite("craftability", CraftabilityRegression.Run);
             Suite("progression routes", ProgressionRegression.Run);
+            Suite("adaptive predicate safety", AdaptivePredicateRegressionChecks.Run);
+            Suite("adaptive progression gates", AdaptiveProgressionRegressionChecks.Run);
+            Suite("adaptive storage", StorageAdaptationRegressionChecks.Run);
+            Suite("adaptive content lifecycle", LifecycleAdaptationRegressionChecks.Run);
             Suite("storage bus", StorageBusRegression.Run);
             Suite("storage upgrade", StorageUpgradeRegression.Run);
             Suite("autocrafting operations", AutocraftingRegression.Run);

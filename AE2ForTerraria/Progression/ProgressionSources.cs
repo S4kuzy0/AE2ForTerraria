@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using AE2ForTerraria.Core;
 using AE2ForTerraria.Systems;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
+using Terraria.GameContent.ItemDropRules;
 
 namespace AE2ForTerraria.Progression;
 
@@ -60,7 +62,7 @@ internal static class ProgressionSources
             _ => third
         };
     }
-    private static int Gate(ProgressionGraph graph,string name) => name switch
+    internal static int Gate(ProgressionGraph graph,string name) => name switch
     {
         "Hardmode"=>BossTier(graph,NPCID.WallofFlesh),
         "DownedKingSlime"=>BossTier(graph,NPCID.KingSlime),
@@ -106,7 +108,12 @@ internal static class ProgressionSources
     };
     internal static int ConditionTier(ProgressionGraph graph,Condition condition)
     {
-        if(!VanillaConditions.TryGetValue(condition,out string name)) return -1;
+        if (condition == null) return -1;
+        if (TryNativeNotZenith(condition,out var notZenith))
+            return AdaptiveProgressionConditions.Earliest(graph,new[]{notZenith});
+        if(!VanillaConditions.TryGetValue(condition,out string name))
+            return AdaptiveProgressionConditions.TryRead(condition?.Predicate, out var formula)
+                ? AdaptiveProgressionConditions.Earliest(graph, new[] { formula }) : -1;
         if(name=="Hardmode" || name.StartsWith("Downed")) return Gate(graph,name);
         int? eventGate=name switch
         {
@@ -120,9 +127,9 @@ internal static class ProgressionSources
             _=>null
         };
         if(eventGate.HasValue) return eventGate.Value;
-        // Remaining time/weather/locality flags do not add a progression gate.
-        // Their runtime execution checks remain separate.
-        return 0;
+        if (NativeEnvironmentConditions.Names.Contains(name)) return 0;
+        return AdaptiveProgressionConditions.TryRead(condition.Predicate,out var remaining)
+            ? AdaptiveProgressionConditions.Earliest(graph,new[]{remaining}) : -1;
     }
     internal static int NaturalStationTier(ProgressionGraph graph,int tile) => tile switch
     {
@@ -130,6 +137,22 @@ internal static class ProgressionSources
         TileID.AlchemyTable=>BossTier(graph,NPCID.SkeletronHead),
         _=>-1
     };
+    internal static int ConditionsTier(ProgressionGraph graph,IEnumerable<Condition> conditions,int minimum)
+    {
+        if (minimum < 0) return -1;
+        int tier = minimum;
+        var predicates = new List<AdaptivePredicate.Formula>();
+        foreach (var condition in conditions)
+        {
+            if (AdaptiveProgressionConditions.TryRead(condition?.Predicate,out var formula)
+                && AdaptiveProgressionConditions.TryEarliest(graph,new[]{formula},0,out _))
+            { predicates.Add(formula); continue; }
+            int gate = ConditionTier(graph,condition);
+            if (gate < 0) return -1;
+            tier = Math.Max(tier,gate);
+        }
+        return AdaptiveProgressionConditions.Earliest(graph,predicates,tier);
+    }
     internal static void Anchor(ProgressionGraph graph,Dictionary<ItemKey,int> anchors)
     {
         void Add(int type,int tier,string reason = "基础资源 / 生成来源")
@@ -178,7 +201,7 @@ internal static class ProgressionSources
         foreach(var spawn in spawnGates)
             foreach(var drop in GameDataIndex.GetNpcDropRecords(spawn.Key))
             {
-                int gate = DropTier(graph,drop);
+                int gate = DropTier(graph,drop,spawn.Value);
                 int tier = gate < 0 || spawn.Value < 0 ? -1 : Math.Max(spawn.Value,gate);
                 Add(drop.ItemType,tier,"世界 / 小怪掉落：" + Lang.GetNPCNameValue(spawn.Key));
             }
@@ -203,52 +226,78 @@ internal static class ProgressionSources
             foreach(var entry in shop.Entries)
             {
                 if(entry.Disabled) continue;
-                int tier=arrival; bool known=true;
-                foreach(var condition in entry.Conditions)
-                { int gate=ConditionTier(graph,condition);if(gate<0){known=false;break;}tier=Math.Max(tier,gate); }
-                if(known) Add(entry.Item.type,tier,"商店：" + Lang.GetNPCNameValue(shop.NpcType) + "（含已知到达及商品条件）");
+                int tier=ConditionsTier(graph,entry.Conditions,arrival);
+                if(tier>=0) Add(entry.Item.type,tier,"商店：" + Lang.GetNPCNameValue(shop.NpcType) + "（含已知到达及商品条件）");
             }
         }
     }
-    internal static int DropTier(ProgressionGraph graph,DropRecord drop)
+    internal static int DropTier(ProgressionGraph graph,DropRecord drop,int minimum = 0)
     {
-        int tier=0;
+        if (minimum < 0) return -1;
+        int tier=minimum;
+        var predicates = new List<AdaptivePredicate.Formula>();
         foreach(var condition in drop.Conditions)
         {
+            if (condition == null) return -1;
             int gate = DropConditionTier(graph,condition.GetType(),drop.NpcType);
-            if(gate < 0) return -1;
-            tier = Math.Max(tier,gate);
+            bool parsed = AdaptiveProgressionConditions.TryRead(condition,drop.NpcType,out var formula)
+                && AdaptiveProgressionConditions.TryEarliest(graph,new[]{formula},0,out _);
+            if (!parsed) parsed = TryNativeDifficulty(condition.GetType(),out formula);
+            if(parsed)
+                predicates.Add(formula);
+            else if(gate < 0) return -1;
+            // Keep independent declared gates as well: notably the mechanical
+            // spawner report dummy is true although its actual drop is hardmode.
+            if(gate >= 0) tier = Math.Max(tier,gate);
         }
-        return tier;
+        return AdaptiveProgressionConditions.Earliest(graph, predicates, tier);
+    }
+
+    private static bool TryNativeDifficulty(Type type,out AdaptivePredicate.Formula formula)
+    {
+        formula = null;
+        if (type.Assembly != typeof(Terraria.GameContent.ItemDropRules.Conditions).Assembly) return false;
+        bool expert = type.Name is "IsExpert" or "NotExpert";
+        bool master = type.Name is "IsMasterMode" or "NotMasterMode";
+        if (!expert && !master) return false;
+        bool negated = type.Name is "NotExpert" or "NotMasterMode";
+        var method = type.GetMethod(nameof(IItemDropRuleCondition.CanDrop),new[]{typeof(DropAttemptInfo)});
+        if (!MethodIl.TryRead(method,out var body,out var all) || body.ExceptionHandlingClauses.Count != 0) return false;
+        var code = all.Where(instruction=>instruction.OpCode != OpCodes.Nop).ToArray();
+        var getter = typeof(Main).GetProperty(expert ? nameof(Main.expertMode) : nameof(Main.masterMode))?.GetMethod;
+        if (code.Length != (negated ? 4 : 2) || code[0].OpCode != OpCodes.Call || !Equals(code[0].Operand,getter)
+            || code[^1].OpCode != OpCodes.Ret) return false;
+        if (negated && (!MethodIl.TryIntegerConstant(code[1],out int zero) || zero != 0 || code[2].OpCode != OpCodes.Ceq)) return false;
+        string proxy = expert ? (negated ? nameof(NotExpertMode) : nameof(ExpertMode))
+            : (negated ? nameof(NotMasterMode) : nameof(MasterMode));
+        return AdaptiveProgressionConditions.TryRead(typeof(ProgressionSources).GetMethod(proxy,BindingFlags.Static|BindingFlags.NonPublic),out formula);
+    }
+
+    private static bool ExpertMode(DropAttemptInfo info) => info.IsExpertMode;
+    private static bool NotExpertMode(DropAttemptInfo info) => !info.IsExpertMode;
+    private static bool MasterMode(DropAttemptInfo info) => info.IsMasterMode;
+    private static bool NotMasterMode(DropAttemptInfo info) => !info.IsMasterMode;
+
+    private static bool TryNativeNotZenith(Condition condition,out AdaptivePredicate.Formula formula)
+    {
+        formula = null;
+        if (!ReferenceEquals(condition,Condition.NotZenithWorld) || condition.Predicate?.GetInvocationList().Length != 1
+            || !MethodIl.TryRead(condition.Predicate.Method,out var body,out var all) || body.ExceptionHandlingClauses.Count != 0) return false;
+        var code = all.Where(instruction=>instruction.OpCode != OpCodes.Nop).ToArray();
+        if (code.Length != 5 || code[0].OpCode != OpCodes.Ldsfld || code[0].Operand is not FieldInfo field
+            || field.DeclaringType != typeof(Condition) || field.Name != nameof(Condition.ZenithWorld)
+            || code[1].OpCode != OpCodes.Callvirt || !Equals(code[1].Operand,typeof(Condition).GetMethod(nameof(Condition.IsMet)))
+            || !MethodIl.TryIntegerConstant(code[2],out int zero) || zero != 0 || code[3].OpCode != OpCodes.Ceq
+            || code[4].OpCode != OpCodes.Ret
+            || !AdaptiveProgressionConditions.TryRead(Condition.ZenithWorld.Predicate,out var source)) return false;
+        formula = new AdaptivePredicate.Formula(new AdaptivePredicate.Node { Kind = AdaptivePredicate.Kind.Not,
+            Left = source.root, Canonical = "!(" + source.Canonical + ")" });
+        return true;
     }
     private static int DropConditionTier(ProgressionGraph graph,Type type,int npc)
     {
-        // Entropy 4.3 wraps existing drops in a before/after Void Destroyer
-        // condition. The before branch adds an upper bound, not a later unlock.
-        if (npc == NPCID.ChaosElemental && ModLoader.TryGetMod("CalamityEntropy", out var entropy) && entropy.Version == new Version(4,3)
-            && type.Assembly == entropy.Code)
-        {
-            if (type.FullName == "CalamityEntropy.Content.Events.VoidDestroyerAftermath.PreVoidDestroyerCondition") return 0;
-            if (type.FullName == "CalamityEntropy.Content.Events.VoidDestroyerAftermath.PostVoidDestroyerCondition")
-                return entropy.TryFind<ModNPC>("VoidDestroyer", out var boss) ? BossTier(graph, boss.Type) : -1;
-        }
-        // Fargo adaptations are version-bound. Runtime/lambda predicates and
-        // unreviewed early-bird conditions remain unknown.
-        if(ModLoader.TryGetMod("FargowiltasSouls",out var fargo) && fargo.Version==new Version(1,7,3,9) && type.Assembly==fargo.Code)
-        {
-            if(type.FullName is "FargowiltasSouls.Core.ItemDropRules.Conditions.EModeDropCondition"
-                or "FargowiltasSouls.Core.ItemDropRules.Conditions.EModeNotMasterDropCondition"
-                or "FargowiltasSouls.Core.ItemDropRules.Conditions.NotEModeDropCondition") return 0;
-            if(type.FullName=="FargowiltasSouls.Core.ItemDropRules.Conditions.DownedEvilBossDropCondition")
-                return BossTier(graph,NPCID.EaterofWorldsHead,NPCID.BrainofCthulhu);
-            // In 1.7.3.9 this predicate is hardMode || !EternityMode.
-            // These native Hardmode enemies may spawn early in Eternity, but
-            // their ordinary rewards remain locked until Hardmode in that mode.
-            if(type.FullName=="FargowiltasSouls.Core.ItemDropRules.Conditions.EModeEarlyBirdLockDropCondition"
-                && npc is NPCID.WyvernHead or NPCID.SeekerHead or NPCID.PigronCorruption or NPCID.PigronHallow
-                    or NPCID.PigronCrimson or NPCID.AngryNimbus or NPCID.IchorSticker or NPCID.Medusa)
-                return BossTier(graph,NPCID.WallofFlesh);
-        }
+        // Mod predicates are read from their current method bodies. A package
+        // version is neither proof that a rule is unchanged nor a reason to reject it.
         if(type.Assembly != typeof(Terraria.GameContent.ItemDropRules.Conditions).Assembly) return -1;
         // MechanicalBossesDummyCondition only labels ReportDroprates; the real
         // MechBossSpawnersDropRule.CanDrop requires hardMode in native 1.4.4.9.
@@ -276,7 +325,8 @@ internal static class ProgressionSources
             _ => -1
         };
     }
-    internal readonly record struct MiningRoute(int Item,int Gate,int Pick,string Reason);
+    internal readonly record struct MiningRoute(int Item,int Gate,int Pick,string Reason,
+        IReadOnlyList<AdaptivePredicate.Formula> Conditions = null);
     internal static List<MiningRoute> MiningRoutes(ProgressionGraph graph)
     {
         int hardmode = BossTier(graph,NPCID.WallofFlesh);

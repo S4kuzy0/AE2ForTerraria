@@ -63,22 +63,30 @@ namespace AE2ForTerraria.Content.Tiles
 				return;
 			}
 
-			Enabled = config.DropCollectorEnabled;
-			IsBlacklist = config.FilterIsBlacklist;
-			Radius = NormalizeRadius(config.DropCollectorRadius);
-			Filter = new List<int>();
+			var identities = new List<string>();
 
 			if (config.FilteredItems != null)
 			{
 				foreach (Terraria.ModLoader.Config.ItemDefinition definition in config.FilteredItems)
 				{
-					if (definition != null && definition.Type > 0)
-					{
-						Filter.Add(definition.Type);
-					}
+                    if (definition == null) continue;
+                    // The native picker uses Terraria/None for an empty slot; every other identity is validated.
+                    if (definition.Mod == "Terraria" && definition.Name == "None") continue;
+                    identities.Add(definition.Mod + "/" + definition.Name);
 				}
 			}
 
+            List<int> filter;
+            try { filter = ItemPersistence.FilterFromIdentities(identities); }
+            catch (System.IO.InvalidDataException)
+            {
+                UIStatus.Toast("默认过滤清单含无效物品身份，本次配置未应用；请在模组配置中修正，原设备配置已保留");
+                return;
+            }
+            Enabled = config.DropCollectorEnabled;
+            IsBlacklist = config.FilterIsBlacklist;
+            Radius = NormalizeRadius(config.DropCollectorRadius);
+            Filter = filter;
 			MarkFilterDirty();
 		}
 

@@ -119,8 +119,11 @@ public sealed class DropCollectorUIState : MovableWindowState
         if (_collector == null || _filterGrid.HoveredType <= 0 || _filterGrid.InputBlocked?.Invoke() == true) return;
         int type = _filterGrid.HoveredType;
         _collector.Filter ??= new();
-        if (_listed.Contains(type)) _collector.Filter.RemoveAll(id => id == type);
-        else _collector.Filter.Add(type);
+        if (!ItemPersistence.TryToggleFilterType(_collector.Filter, type))
+        {
+            UIStatus.Toast("该物品的模组未加载，无法按占位物品添加；已有名单会保留，重新启用模组后可编辑");
+            return;
+        }
         Push();
     }
 
@@ -130,7 +133,7 @@ public sealed class DropCollectorUIState : MovableWindowState
         _lastSearch = query;
         var candidates = new List<int>();
         for (int type = 1; type < ItemLoader.ItemCount; type++)
-            if (!ItemID.Sets.Deprecated[type] && !string.IsNullOrWhiteSpace(Lang.GetItemNameValue(type))
+            if (SavedItemGuard.IsSelectableFilterType(type) && !ItemID.Sets.Deprecated[type] && !string.IsNullOrWhiteSpace(Lang.GetItemNameValue(type))
                 && (query.Length == 0 || ItemSearch.Matches(ItemKey.Crafted(type), query))) candidates.Add(type);
         _filterGrid.SetItems(candidates);
     }

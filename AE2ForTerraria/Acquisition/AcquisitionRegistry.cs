@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AE2ForTerraria.Core;
 using AE2ForTerraria.Systems;
 
@@ -17,26 +18,29 @@ namespace AE2ForTerraria.Acquisition
 		private readonly Dictionary<int, string> _spawnConditions = new Dictionary<int, string>();
 		private readonly Dictionary<ItemKey, List<string>> _sources = new Dictionary<ItemKey, List<string>>();
 		private readonly Dictionary<ItemKey, List<string>> _uses = new Dictionary<ItemKey, List<string>>();
+		// Generated indexes can be replaced without deleting explicit registrations from callers.
+		private readonly Dictionary<string, AcquisitionRegistry> _derived = new(StringComparer.Ordinal);
+		private IEnumerable<AcquisitionRegistry> Layers => new[] { this }.Concat(_derived.Values);
+		internal void ReplaceDerived(string owner, AcquisitionRegistry data)
+		{
+			if (string.IsNullOrEmpty(owner) || data == this || data?._derived.Count > 0)
+				throw new ArgumentException("A derived acquisition layer must be a separate, flat registry.");
+			if (data == null) _derived.Remove(owner); else _derived[owner] = data;
+		}
 
-		public int EntryCount => _info.Count;
+		public int EntryCount => Layers.SelectMany(layer => layer._info.Keys).Distinct().Count();
 
-		public int ShimmerRecipeCount => _shimmer.Count;
+		public int ShimmerRecipeCount => Layers.SelectMany(layer => layer._shimmer.Keys).Distinct().Count();
 
-		public int TreasureBagCount => _treasureBags.Count;
+		public int TreasureBagCount => Layers.SelectMany(layer => layer._treasureBags.Keys).Distinct().Count();
 
-		public int SpawnConditionCount => _spawnConditions.Count;
+		public int SpawnConditionCount => Layers.SelectMany(layer => layer._spawnConditions.Keys).Distinct().Count();
 
 		public int SourceCount
 		{
 			get
 			{
-				int total = 0;
-				foreach (List<string> list in _sources.Values)
-				{
-					total += list.Count;
-				}
-
-				return total;
+				return Layers.SelectMany(layer => layer._sources.Keys).Distinct().Sum(key => GetSources(key).Count);
 			}
 		}
 
@@ -61,8 +65,7 @@ namespace AE2ForTerraria.Acquisition
 		/// </summary>
 		public bool RegisterIfAbsent(ItemKey key, AcquisitionKind kind, string detail)
 		{
-			if (_info.TryGetValue(key, out AcquisitionInfo existing)
-				&& existing.Kind != AcquisitionKind.Unknown)
+			if (Get(key) is AcquisitionInfo existing && existing.Kind != AcquisitionKind.Unknown)
 			{
 				return false;
 			}
@@ -73,24 +76,27 @@ namespace AE2ForTerraria.Acquisition
 
 		public AcquisitionInfo Get(ItemKey key)
 		{
-			return _info.TryGetValue(key, out AcquisitionInfo info) ? info : null;
+			if (_info.TryGetValue(key, out AcquisitionInfo info)) return info;
+			foreach (var layer in _derived.Values)
+				if (layer._info.TryGetValue(key, out info)) return info;
+			return null;
 		}
 
 		public string Describe(ItemKey key)
 		{
 			// 有显式登记的类别信息就优先用它
-			if (_info.TryGetValue(key, out AcquisitionInfo info)
-				&& info.Kind != AcquisitionKind.Unknown)
+			if (Get(key) is AcquisitionInfo info && info.Kind != AcquisitionKind.Unknown)
 			{
 				return info.Describe();
 			}
 
 			// 否则回退到已登记的来源列表(怪物掉落 / 商店 / 微光 等)。
 			// GameDataIndex 会自动填这张表,所以这里通常都能取到东西。
-			if (_sources.TryGetValue(key, out List<string> list) && list.Count > 0)
+			var list = GetSources(key);
+			if (list.Count > 0)
 			{
 					int take = list.Count < 3 ? list.Count : 3;
-					string joined = string.Join(" / ", list.GetRange(0, take));
+					string joined = string.Join(" / ", list.Take(take));
 					return list.Count > take
 						? ModText.Format("AcqMoreWays", "{0} 等 {1} 种途径", joined, list.Count)
 						: joined;
@@ -109,7 +115,10 @@ namespace AE2ForTerraria.Acquisition
 
 		public bool TryGetShimmerOutput(int inputType, out int outputType)
 		{
-			return _shimmer.TryGetValue(inputType, out outputType);
+			if (_shimmer.TryGetValue(inputType, out outputType)) return true;
+			foreach (var layer in _derived.Values)
+				if (layer._shimmer.TryGetValue(inputType, out outputType)) return true;
+			outputType = 0; return false;
 		}
 
 		public void RegisterTreasureBag(int bagType, IEnumerable<int> contents)
@@ -125,14 +134,14 @@ namespace AE2ForTerraria.Acquisition
 				_treasureBags[bagType] = list;
 			}
 
-			list.AddRange(contents);
+			foreach (int type in contents)
+				if (type > 0 && !list.Contains(type)) list.Add(type);
 		}
 
 		public IReadOnlyList<int> GetTreasureBagContents(int bagType)
 		{
-			return _treasureBags.TryGetValue(bagType, out List<int> list)
-				? list
-				: (IReadOnlyList<int>)Array.Empty<int>();
+			return Layers.Where(layer => layer._treasureBags.ContainsKey(bagType))
+				.SelectMany(layer => layer._treasureBags[bagType]).Distinct().ToArray();
 		}
 
 		public void RegisterSpawnCondition(int npcType, string condition)
@@ -145,7 +154,9 @@ namespace AE2ForTerraria.Acquisition
 
 		public string GetSpawnCondition(int npcType)
 		{
-			return _spawnConditions.TryGetValue(npcType, out string condition) ? condition : null;
+			foreach (var layer in Layers)
+				if (layer._spawnConditions.TryGetValue(npcType, out string condition)) return condition;
+			return null;
 		}
 
 		// —— 来源 / 用途(供 JEI 式覆盖窗口显示) ——
@@ -162,16 +173,14 @@ namespace AE2ForTerraria.Acquisition
 
 		public IReadOnlyList<string> GetSources(ItemKey key)
 		{
-			return _sources.TryGetValue(key, out List<string> list)
-				? list
-				: (IReadOnlyList<string>)Array.Empty<string>();
+			if (_derived.Count == 0) return _sources.TryGetValue(key, out var list) ? list : Array.Empty<string>();
+			return Layers.Where(layer => layer._sources.ContainsKey(key)).SelectMany(layer => layer._sources[key]).Distinct().ToArray();
 		}
 
 		public IReadOnlyList<string> GetUses(ItemKey key)
 		{
-			return _uses.TryGetValue(key, out List<string> list)
-				? list
-				: (IReadOnlyList<string>)Array.Empty<string>();
+			if (_derived.Count == 0) return _uses.TryGetValue(key, out var list) ? list : Array.Empty<string>();
+			return Layers.Where(layer => layer._uses.ContainsKey(key)).SelectMany(layer => layer._uses[key]).Distinct().ToArray();
 		}
 
 		private static void Add(Dictionary<ItemKey, List<string>> map, ItemKey key, string text)
@@ -195,6 +204,7 @@ namespace AE2ForTerraria.Acquisition
 
 		public void Clear()
 		{
+			_derived.Clear();
 			_info.Clear();
 			_shimmer.Clear();
 			_treasureBags.Clear();

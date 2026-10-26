@@ -54,28 +54,21 @@ namespace AE2ForTerraria.Systems
 		}
 
 		/// <summary>整份提交锁定清单(勾选网格编辑完一次性发过去)。</summary>
-		public static void SetLockedList(Point16 anchor, List<int> types)
+		public static bool SetLockedList(Point16 anchor, List<int> types)
 		{
 			if (!IsClient)
 			{
-				return;
+				return false;
 			}
 
-			ModPacket packet = CreatePacket();
+			return SendFilterRequest(anchor, packet =>
+            {
 			packet.Write(ClientSetLockedList);
 			packet.Write((short)anchor.X);
 			packet.Write((short)anchor.Y);
-			packet.Write(types?.Count ?? 0);
+			WriteFilter(packet, types);
 
-			if (types != null)
-			{
-				foreach (int type in types)
-				{
-					packet.Write(type);
-				}
-			}
-
-			packet.Send();
+			});
 		}
 
 
@@ -200,12 +193,7 @@ namespace AE2ForTerraria.Systems
 
 			// 物品级锁定清单
 			List<int> locked = canRead ? NetworkRegistry.GetLocked(anchor) : new();
-			packet.Write(locked.Count);
-
-			foreach (int type in locked)
-			{
-				packet.Write(type);
-			}
+			WriteFilter(packet, locked);
 
 			return buffer.ToArray();
 		}

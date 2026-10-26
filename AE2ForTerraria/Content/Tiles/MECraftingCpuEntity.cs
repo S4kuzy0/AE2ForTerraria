@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using AE2ForTerraria.Content.Achievements;
 using AE2ForTerraria.Core;
 using AE2ForTerraria.Systems;
@@ -69,6 +70,7 @@ namespace AE2ForTerraria.Content.Tiles
 		public Job ActiveJob;
 
 		private int _keepTimer;
+        private int _keepCursor;
 
 		public override bool IsTileValidForEntity(int x, int y)
             => MachineTiles.IsEntityAnchor(x,y,ModContent.TileType<MECraftingCpuTile>());
@@ -122,6 +124,11 @@ namespace AE2ForTerraria.Content.Tiles
 		/// <summary>设置 / 更新「保持库存」。target &lt;= 0 表示移除。</summary>
 		public bool SetKeep(ItemKey key, long target)
 		{
+            if (target <= 0)
+            {
+                Keep.RemoveAll(entry => entry.Key.Equals(key));
+                return true;
+            }
 			if (!SavedItemGuard.IsValidType(key.Type) || key.Prefix != 0 || key.Data != null)
 			{
 				return false;
@@ -131,20 +138,9 @@ namespace AE2ForTerraria.Content.Tiles
 			{
 				if (Keep[i].Key.Equals(key))
 				{
-					if (target <= 0)
-					{
-						Keep.RemoveAt(i);
-						return true;
-					}
-
 					Keep[i].Target = target;
 					return true;
 				}
-			}
-
-			if (target <= 0)
-			{
-				return true;
 			}
 
 			Keep.Add(new KeepEntry { Key = key, Target = target });
@@ -193,8 +189,13 @@ namespace AE2ForTerraria.Content.Tiles
             foreach (var point in MENetwork.Collect(Position.X,Position.Y))
                 if (TileEntity.ByPosition.TryGetValue(point,out var entity) && entity is MECraftingCpuEntity cpu) hosts.Add(cpu);
 
-			foreach (KeepEntry entry in Keep)
+            long started = Stopwatch.GetTimestamp();
+            int attempts = Math.Min(Keep.Count, TerminalCraftingExecutor.CandidateBudget);
+			for (int attempt = 0; attempt < attempts; attempt++)
 			{
+                if (attempt > 0 && Stopwatch.GetElapsedTime(started).TotalMilliseconds >= TerminalCraftingExecutor.FrameBudgetMilliseconds) break;
+                KeepEntry entry = Keep[(_keepCursor++ & int.MaxValue) % Keep.Count];
+
 				long have = totals.TryGetValue(entry.Key, out long amount) ? amount : 0;
 
 				// 队列里已经排了同一个物品的话,把它算作「在路上」,避免重复排队
@@ -212,10 +213,8 @@ namespace AE2ForTerraria.Content.Tiles
 					continue;
 				}
 
-				if (!Enqueue(entry.Key, entry.Target - have))
-				{
-					break; // 队列满了,下一轮再说
-				}
+                // Missing content remains a durable target, but cannot block other replenishment.
+                Enqueue(entry.Key, entry.Target - have);
 			}
 		}
 

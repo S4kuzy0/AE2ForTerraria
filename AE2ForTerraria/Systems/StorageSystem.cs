@@ -72,6 +72,7 @@ namespace AE2ForTerraria.Systems
 			NpcIndex.Reset();
 			GameDataIndex.Reset();
 			ProgressionGraph.ResetInference();
+            AdaptiveProgressionConditions.Reset();
 			MENetwork.InvalidateCache();
 			MEBlocks.Reset();
 			WirelessRegistry.Reset();

@@ -34,29 +34,22 @@ namespace AE2ForTerraria.Systems
         }
 
 		/// <summary>提交驱动器 / 存储单元的分区清单。</summary>
-		public static void SendStorageFilter(Point16 position, bool whitelist, List<int> filter)
+		public static bool SendStorageFilter(Point16 position, bool whitelist, List<int> filter)
 		{
 			if (!IsClient)
 			{
-				return;
+				return false;
 			}
 
-			ModPacket packet = CreatePacket();
+			return SendFilterRequest(position, packet =>
+            {
 			packet.Write(ClientStorageFilter);
 			packet.Write((short)position.X);
 			packet.Write((short)position.Y);
 			packet.Write(whitelist);
-			packet.Write(filter?.Count ?? 0);
+			WriteFilter(packet, filter);
 
-			if (filter != null)
-			{
-				foreach (int id in filter)
-				{
-					packet.Write(id);
-				}
-			}
-
-			packet.Send();
+			});
 		}
 
 
@@ -72,19 +65,15 @@ namespace AE2ForTerraria.Systems
 
 			List<int> filter = storage.Filter ?? new List<int>();
 
-			ModPacket packet = CreatePacket();
+			using var buffer = new MemoryStream();
+            using var packet = new BinaryWriter(buffer);
 			packet.Write(ServerSyncStorageFilter);
 			packet.Write((short)position.X);
 			packet.Write((short)position.Y);
 			packet.Write(storage.IsWhitelist);
-			packet.Write(filter.Count);
+			WriteFilter(packet, filter);
 
-			foreach (int id in filter)
-			{
-				packet.Write(id);
-			}
-
-			packet.Send(toClient, ignoreClient);
+			SendPayload(buffer.ToArray(), toClient, ignoreClient);
 		}
 
 
@@ -135,32 +124,25 @@ namespace AE2ForTerraria.Systems
 		/// 收集器的设置是**每块独立**的,而且存在方块实体里(服务器权威),
 		/// 所以客户端改完必须发给服务器,由服务器写进真正的实体再广播回来。
 		/// </summary>
-		public static void SendCollectorConfig(Point16 position, bool enabled, float radius, bool blacklist,
+		public static bool SendCollectorConfig(Point16 position, bool enabled, float radius, bool blacklist,
 			List<int> itemIds)
 		{
 			if (!IsClient)
 			{
-				return;
+				return false;
 			}
 
-			ModPacket packet = CreatePacket();
+			return SendFilterRequest(position, packet =>
+            {
 			packet.Write(ClientSetCollector);
 			packet.Write((short)position.X);
 			packet.Write((short)position.Y);
 			packet.Write(enabled);
 			packet.Write(radius);
 			packet.Write(blacklist);
-			packet.Write(itemIds?.Count ?? 0);
+			WriteFilter(packet, itemIds);
 
-			if (itemIds != null)
-			{
-				foreach (int id in itemIds)
-				{
-					packet.Write(id);
-				}
-			}
-
-			packet.Send();
+			});
 		}
 
 
@@ -200,30 +182,23 @@ namespace AE2ForTerraria.Systems
 
 
 		/// <summary>客户端提交存储总线的完整配置(模式 + 分区清单)。</summary>
-		public static void SendBusConfig(Point16 position, bool exportMode, bool whitelist, List<int> filter)
+		public static bool SendBusConfig(Point16 position, bool exportMode, bool whitelist, List<int> filter)
 		{
 			if (!IsClient)
 			{
-				return;
+				return false;
 			}
 
-			ModPacket packet = CreatePacket();
+			return SendFilterRequest(position, packet =>
+            {
 			packet.Write(ClientBusConfig);
 			packet.Write((short)position.X);
 			packet.Write((short)position.Y);
 			packet.Write(exportMode);
 			packet.Write(whitelist);
-			packet.Write(filter?.Count ?? 0);
+			WriteFilter(packet, filter);
 
-			if (filter != null)
-			{
-				foreach (int id in filter)
-				{
-					packet.Write(id);
-				}
-			}
-
-			packet.Send();
+			});
 		}
 
 
@@ -239,20 +214,16 @@ namespace AE2ForTerraria.Systems
 
 			List<int> filter = bus.Filter ?? new List<int>();
 
-			ModPacket packet = CreatePacket();
+			using var buffer = new MemoryStream();
+            using var packet = new BinaryWriter(buffer);
 			packet.Write(ServerSyncBusConfig);
 			packet.Write((short)position.X);
 			packet.Write((short)position.Y);
 			packet.Write(bus.ExportMode);
 			packet.Write(bus.IsWhitelist);
-			packet.Write(filter.Count);
+			WriteFilter(packet, filter);
 
-			foreach (int id in filter)
-			{
-				packet.Write(id);
-			}
-
-			packet.Send(toClient, ignoreClient);
+			SendPayload(buffer.ToArray(), toClient, ignoreClient);
 		}
 
 
@@ -262,17 +233,9 @@ namespace AE2ForTerraria.Systems
             enabled = reader.ReadBoolean();
             radius = reader.ReadSingle();
             blacklist = reader.ReadBoolean();
-            int count = reader.ReadInt32();
-            if (!float.IsFinite(radius) || count < 0 || count > Terraria.ModLoader.ItemLoader.ItemCount
-                || count > (reader.BaseStream.Length - reader.BaseStream.Position) / sizeof(int))
-                throw new System.IO.InvalidDataException("Invalid collector configuration");
-            var unique = new HashSet<int>();
-            ids = new List<int>();
-            for (int i = 0; i < count; i++)
-            {
-                int id = reader.ReadInt32();
-                if (id > 0 && id < Terraria.ModLoader.ItemLoader.ItemCount && unique.Add(id)) ids.Add(id);
-            }
+            if (!float.IsFinite(radius))
+                throw new InvalidDataException("Invalid collector radius");
+            ids = ReadFilter(reader);
             if (reader.BaseStream.Position != reader.BaseStream.Length)
                 throw new System.IO.InvalidDataException("Trailing collector configuration");
             radius = MEDropCollectorEntity.NormalizeRadius(radius);
@@ -289,21 +252,17 @@ namespace AE2ForTerraria.Systems
 
 			List<int> ids = collector.Filter ?? new List<int>();
 
-			ModPacket packet = CreatePacket();
+			using var buffer = new MemoryStream();
+            using var packet = new BinaryWriter(buffer);
 			packet.Write(ServerSyncCollector);
 			packet.Write((short)position.X);
 			packet.Write((short)position.Y);
 			packet.Write(collector.Enabled);
 			packet.Write(MEDropCollectorEntity.NormalizeRadius(collector.Radius));
 			packet.Write(collector.IsBlacklist);
-			packet.Write(ids.Count);
+			WriteFilter(packet, ids);
 
-			foreach (int id in ids)
-			{
-				packet.Write(id);
-			}
-
-			packet.Send(toClient, ignoreClient);
+			SendPayload(buffer.ToArray(), toClient, ignoreClient);
 		}
 
 	}

@@ -2,7 +2,7 @@
 
 把 **ME 网络存储、自动合成与物品查询**带进 Terraria 的 tModLoader 模组。查询物品、配方、用途与掉落，集中存取材料，在终端管理制作任务、库存目标与网络权限。
 
-当前源码版本 **0.27.13**，以 [build.txt](AE2ForTerraria/build.txt) 为准。原创代码采用 [MIT](LICENSE)；这是一款独立社区模组，与 Minecraft Applied Energistics 2、Re-Logic 或 tModLoader 官方无隶属关系。
+当前源码版本 **0.27.14**，以 [build.txt](AE2ForTerraria/build.txt) 为准。原创代码采用 [MIT](LICENSE)；这是一款独立社区模组，与 Minecraft Applied Energistics 2、Re-Logic 或 tModLoader 官方无隶属关系。
 
 ## 界面
 
@@ -31,11 +31,11 @@
 
 存储总线目前只支持原版箱子系统。未知第三方条件保留未知；特殊合成回调可能仍需手动制作。查询功能尚未完成与 Recipe Browser 的全功能对等验收。旧访问设备为兼容而保留，主要使用合成终端。
 
-0.27.13 补齐天然材料、宝箱、旅商、合法提前探索与灾厄矿物来源，并保留机械召唤物、特殊微光和事件的真实门槛；材料来源继续传播到相关配方。Wiki 及安装版本依据见[获取来源](docs/acquisition-sources.md)。
+0.27.14 加固模组变动后的数据适配：过滤名单和库存目标保留稳定身份，重新加载时重建派生索引，阶段条件读取当前注册的布尔规则。复杂兼容来源按具体路线检查，只暂停无法确认的路线。Wiki、实现依据及边界见[获取来源](docs/acquisition-sources.md)。
 
 ## 环境与兼容性
 
-0.27.13 合并此前公开整理并继续核对获取阶段。已在实际启用的模组环境完成菜单核心及界面回归；范围与限制见[维护手册](docs/maintenance.md)。
+已在实际启用的模组环境完成菜单核心及界面回归；范围与限制见[维护手册](docs/maintenance.md)。普通更新和内容增减尽量由当前注册数据适配；任意第三方私有接口或复杂规则彻底变化仍可能需要维护，未知规则不会冒充已验证来源。
 
 历史验证环境：Windows、Terraria 1.4.4.9、tModLoader 2026.08.3.0、.NET 8。源码使用 C# 12。Calamity、Fargo、BossChecklist 是可选兼容来源或测试环境组成，不是强制依赖。多人使用须保持模组版本一致；现有测试不能替代所有版本、模组组合与真实双客户端验收。
 

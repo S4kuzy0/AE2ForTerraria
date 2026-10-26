@@ -60,19 +60,26 @@ namespace AE2ForTerraria.Systems
 			}
 
 			DropSources.Clear(); NpcDrops.Clear(); ContainerDrops.Clear(); ContainerSources.Clear(); IndexedDropTexts.Clear();
+            Built = false;
+            var destination = registry;
+            registry = new AcquisitionRegistry();
             var watch = System.Diagnostics.Stopwatch.StartNew();
-			int sourcesBefore = registry.SourceCount;
-
-			BuildShimmer(registry);
-			BuildNpcDrops(registry);
-			BuildContainers(registry);
-			BuildSpawnConditions(registry);
+            void Read(string source, Action<AcquisitionRegistry> build)
+            {
+                try { build(registry); }
+                catch (Exception ex) { AE2ForTerraria.Instance?.Logger.Warn("Acquisition index failed for " + source + "; other sources retained: " + ex); }
+            }
+			Read("shimmer", BuildShimmer);
+			Read("NPC drops", BuildNpcDrops);
+			Read("containers", BuildContainers);
+			Read("spawn conditions", BuildSpawnConditions);
 			ShopEntryCount = 0;
-			BuildShopsFromDatabase(registry);
-			BuildSummonItems(registry, true);
-			BuildSummonItems(registry, false);
-			BuildCraftKinds(registry);
-			BuildBiomeKinds(registry);
+			Read("shops", BuildShopsFromDatabase);
+			Read("vanilla summons", data => BuildSummonItems(data, true));
+			Read("mod summons", data => BuildSummonItems(data, false));
+			Read("crafting", BuildCraftKinds);
+			Read("biomes", BuildBiomeKinds);
+            destination.ReplaceDerived("game-data", registry);
 
 			watch.Stop();
 
@@ -86,7 +93,7 @@ namespace AE2ForTerraria.Systems
 			}
 
 			Log("来源/用途索引" + (force ? "(补建)" : "(初建)") + "完成:新增 "
-				+ (registry.SourceCount - sourcesBefore) + " 条来源,"
+				+ registry.SourceCount + " 条来源,"
 				+ "覆盖 " + withDrops + " 个有掉落的怪物,"
 				+ DropSources.Count + " 个可从掉落获得的物品,"
 				+ registry.ShimmerRecipeCount + " 条微光,"
@@ -601,8 +608,7 @@ namespace AE2ForTerraria.Systems
 
 		/// <summary>
 		/// 宝藏袋 / 宝箱:用掉落表读出「打开它能开出什么」。
-		/// 只处理名字像容器的物品(含 袋/Bag/箱/Crate/匣/圣物 等),
-		/// 避免把普通物品也当成容器。
+		/// 用实际注册的物品掉落规则识别容器,不依赖名称或翻译。
 		/// </summary>
 		private static void BuildContainers(AcquisitionRegistry registry)
 		{
@@ -611,17 +617,13 @@ namespace AE2ForTerraria.Systems
 
 			for (int itemType = 1; itemType < total; itemType++)
 			{
-				string name = Lang.GetItemNameValue(itemType);
-				if (string.IsNullOrWhiteSpace(name) || !LooksLikeContainer(name))
-				{
-					continue;
-				}
-
-				List<DropRateInfo> contents = CollectItemRules(itemType);
+				IReadOnlyList<DropRateInfo> contents = CollectItemRules(itemType);
 				if (contents.Count == 0)
 				{
 					continue;
 				}
+				string name = Lang.GetItemNameValue(itemType);
+				if (string.IsNullOrWhiteSpace(name)) name = ItemLoader.GetItem(itemType)?.FullName ?? "#" + itemType;
 
 				ContainerCount++;
 				var containerKey = ItemKey.Crafted(itemType);
@@ -665,17 +667,18 @@ namespace AE2ForTerraria.Systems
 			}
 		}
 
-		private static List<DropRateInfo> CollectItemRules(int itemType)
+		private static IReadOnlyList<DropRateInfo> CollectItemRules(int itemType)
 		{
-			var result = new List<DropRateInfo>();
+			List<DropRateInfo> result = null;
 
 			try
 			{
 				List<IItemDropRule> rules = Main.ItemDropsDB.GetRulesForItemID(itemType);
-				if (rules == null)
+				if (rules == null || rules.Count == 0)
 				{
-					return result;
+					return Array.Empty<DropRateInfo>();
 				}
+				result = new List<DropRateInfo>();
 
 				var feed = new DropRateInfoChainFeed(1f);
 				foreach (IItemDropRule rule in rules)
@@ -696,15 +699,7 @@ namespace AE2ForTerraria.Systems
 			catch (Exception ex)
             { AE2ForTerraria.Instance.Logger.Warn("Drop table read failed: " + ex.Message); }
 
-			return result;
-		}
-
-		private static bool LooksLikeContainer(string name)
-		{
-			return name.Contains("袋") || name.Contains("箱") || name.Contains("匣")
-				|| name.Contains("圣物")
-				|| name.Contains("Bag") || name.Contains("Crate")
-				|| name.Contains("Cache") || name.Contains("Trove");
+			return result ?? (IReadOnlyList<DropRateInfo>)Array.Empty<DropRateInfo>();
 		}
 
 		// —— NPC 商店 ——

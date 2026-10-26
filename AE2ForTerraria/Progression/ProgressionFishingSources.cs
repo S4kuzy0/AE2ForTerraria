@@ -74,8 +74,7 @@ internal static class ProgressionFishingSources
             ItemID.FishingPotion, ItemID.SonarPotion, ItemID.CratePotion);
         Group(hardmode, "渔夫任务奖励：困难模式专属，仍需完成对应任务数量",
             ItemID.HotlineFishingHook, ItemID.FinWings);
-        // Audited installed hook; historical Calamity reward tables differ substantially.
-        if (ModLoader.TryGetMod("CalamityMod", out var calamity) && calamity.Version == new Version(2, 2, 4))
-            Group(0, "灾厄 2.2.4：渔夫完成第 26 次任务的奖励，无 Boss 门槛", ItemID.Sundial);
+        if (ModLoader.TryGetMod("CalamityMod", out var calamity) && CalamitySourceCompatibility.Supports(calamity, "angler-sundial"))
+            Group(0, "灾厄：渔夫完成第 26 次任务的奖励，无 Boss 门槛", ItemID.Sundial);
     }
 }

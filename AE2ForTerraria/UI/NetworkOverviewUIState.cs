@@ -683,6 +683,11 @@ namespace AE2ForTerraria.UI
 						new Color(255, 200, 150));
 					return;
 				}
+                if (!heldLocked && !SavedItemGuard.IsSelectableFilterType(heldType))
+                {
+                    UIStatus.Toast("该物品的模组未加载，无法按占位物品锁定；已有锁定记录会保留");
+                    return;
+                }
 
 				if (Main.netMode == NetmodeID.MultiplayerClient)
 				{

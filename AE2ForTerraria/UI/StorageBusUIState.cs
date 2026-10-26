@@ -125,6 +125,7 @@ namespace AE2ForTerraria.UI
 				}
 
 				int count = CopyToAllBuses();
+				if (count < 0) return;
 				UIStatus.Toast(ModText.Format("MsgCopiedToAllBuses",
 					"已把分区清单复制到 {0} 个存储总线", count));
 			});
@@ -162,7 +163,7 @@ namespace AE2ForTerraria.UI
 
 				_bus.Filter = loaded;
 				_bus.MarkFilterDirty();
-				Push();
+				if (!Push()) return;
 				RebuildCandidates();
 				Refresh();
 				UIStatus.Toast(ModText.Format("MsgListImported", "已导入 {0} 项", read));
@@ -205,14 +206,11 @@ namespace AE2ForTerraria.UI
 
 			_bus.Filter ??= new List<int>();
 
-			if (_bus.Filter.Contains(type))
-			{
-				_bus.Filter.Remove(type);
-			}
-			else
-			{
-				_bus.Filter.Add(type);
-			}
+            if (!ItemPersistence.TryToggleFilterType(_bus.Filter, type))
+            {
+                UIStatus.Toast("该物品的模组未加载，无法按占位物品添加；已有名单会保留，重新启用模组后可编辑");
+                return;
+            }
 
 			_bus.MarkFilterDirty();
 			Push();
@@ -243,13 +241,13 @@ namespace AE2ForTerraria.UI
 			{
 				if (Main.netMode == NetmodeID.MultiplayerClient)
 				{
-					MENet.SendBusConfig(target.Position, _bus.ExportMode, _bus.IsWhitelist, _bus.Filter);
+					if (!MENet.SendBusConfig(target.Position, _bus.ExportMode, _bus.IsWhitelist, _bus.Filter)) return -1;
 					continue;
 				}
 
 				target.SetExportMode(_bus.ExportMode);
 				target.IsWhitelist = _bus.IsWhitelist;
-				target.Filter = new List<int>(_bus.Filter ?? new List<int>());
+				target.Filter = ItemPersistence.CloneFilter(_bus.Filter);
 				target.MarkFilterDirty();
 
 				if (Main.netMode == NetmodeID.Server)
@@ -261,19 +259,20 @@ namespace AE2ForTerraria.UI
 			return targets.Count;
 		}
 
-		private void Push()
+		private bool Push()
 		{
 			if (_bus == null)
 			{
-				return;
+				return false;
 			}
 
 			if (Main.netMode == NetmodeID.MultiplayerClient)
 			{
-				MENet.SendBusConfig(_bus.Position, _bus.ExportMode, _bus.IsWhitelist, _bus.Filter);
+				if (!MENet.SendBusConfig(_bus.Position, _bus.ExportMode, _bus.IsWhitelist, _bus.Filter)) return false;
 			}
 
 			Refresh();
+			return true;
 		}
 
 		public void SetBus(MEStorageBusEntity bus)
@@ -321,7 +320,7 @@ namespace AE2ForTerraria.UI
 				int total = Terraria.ModLoader.ItemLoader.ItemCount;
 				for (int type = 1; type < total; type++)
 				{
-					if (string.IsNullOrWhiteSpace(Lang.GetItemNameValue(type)))
+					if (!SavedItemGuard.IsSelectableFilterType(type) || string.IsNullOrWhiteSpace(Lang.GetItemNameValue(type)))
 					{
 						continue;
 					}

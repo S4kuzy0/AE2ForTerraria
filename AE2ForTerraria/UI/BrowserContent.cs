@@ -13,6 +13,8 @@ namespace AE2ForTerraria.UI;
 internal static class BrowserContent
 {
     private static ConditionalWeakTable<Recipe, Signature> _signatures = new();
+    private static RecipeIndex _recipeIndex;
+    private static int _recipeRevision = -1;
     private static readonly System.Collections.Generic.Dictionary<(int Type, bool Npc), string> Names = new();
     private sealed record Signature(string Value);
     internal static string Name(int type, bool npc = false)
@@ -41,6 +43,11 @@ internal static class BrowserContent
     internal static string RecipeKey(Recipe recipe)
     {
         if (recipe == null) return "";
+        var index = Systems.StorageSystem.Recipes;
+        if (!ReferenceEquals(_recipeIndex, index) || _recipeRevision != (index?.Revision ?? -1))
+        {
+            _signatures = new(); _recipeIndex = index; _recipeRevision = index?.Revision ?? -1;
+        }
         return _signatures.GetValue(recipe, r =>
         {
             string TileName(int tile) => tile < TileID.Count ? "Terraria/" + tile : TileLoader.GetTile(tile)?.FullName ?? "missing";
@@ -48,8 +55,10 @@ internal static class BrowserContent
             foreach (var item in r.requiredItem.Where(i => !i.IsAir)) text.Append('|').Append(Name(item.type)).Append(':').Append(item.stack);
             foreach (int tile in r.requiredTile.Where(t => t >= 0)) text.Append('|').Append(TileName(tile));
             foreach (int id in r.acceptedGroups)
-                text.Append("|group:").AppendJoin(',', RecipeGroup.recipeGroups[id].ValidItems.Select(t => Name(t)).OrderBy(n => n, StringComparer.Ordinal));
-            foreach (var condition in r.Conditions) text.Append('|').Append(condition.Description.Key);
+                if (RecipeGroup.recipeGroups.TryGetValue(id, out var group))
+                    text.Append("|group:").AppendJoin(',', group.ValidItems.Select(t => Name(t)).OrderBy(n => n, StringComparer.Ordinal));
+                else text.Append("|missing-group");
+            foreach (var condition in r.Conditions) text.Append('|').Append(condition?.Description?.Key ?? "missing-condition");
             return new Signature(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()))));
         }).Value;
     }
@@ -61,5 +70,5 @@ internal static class BrowserContent
             foreach (int index in recipes) if (RecipeKey(Main.recipe[index]) == signature) return index;
         return recipes[0];
     }
-    internal static void Reset() { _signatures = new(); Names.Clear(); }
+    internal static void Reset() { _signatures = new(); Names.Clear(); _recipeIndex = null; _recipeRevision = -1; }
 }

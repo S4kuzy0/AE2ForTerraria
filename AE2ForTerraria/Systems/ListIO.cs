@@ -11,7 +11,7 @@ namespace AE2ForTerraria.Systems
 	/// 存成**存档目录下的文本文件**,一行一个物品:
 	///     74 # 铁矿石
 	/// 换存档 / 换电脑时可以直接把文件拷过去,不用一个个重新点。
-	/// 读取时照样过 <see cref="SavedItemGuard"/>,别人给的清单里有失效 ID 也不会写进去。
+		/// 模组物品使用稳定名称；未加载项保留，无法识别的数字身份拒绝整次导入。
 	/// </summary>
 	public static class ListIO
 	{
@@ -49,28 +49,9 @@ namespace AE2ForTerraria.Systems
 			{
 				Directory.CreateDirectory(Dir);
 
-				var lines = new List<string>
-				{
-					"# AE2 for Terraria 清单导出:一行一个物品身份(原版 ID 或 ModName/ItemName)，后面是显示名"
-				};
-
-				int count = 0;
-
-				foreach (int id in ids ?? new List<int>())
-				{
-					if (!SavedItemGuard.IsValidFilterEntry(id))
-					{
-						continue;
-					}
-
-					string itemName = Lang.GetItemNameValue(id);
-					string identity = Terraria.ModLoader.ItemLoader.GetItem(id)?.FullName ?? id.ToString();
-                    lines.Add(identity + " # " + (string.IsNullOrWhiteSpace(itemName) ? "?" : itemName));
-					count++;
-				}
-
+				var lines = ExportLines(ids);
 				File.WriteAllLines(PathOf(name), lines);
-				return count;
+				return lines.Count - 1;
 			}
 			catch (System.Exception ex)
 			{
@@ -90,41 +71,9 @@ namespace AE2ForTerraria.Systems
 					return -1;
 				}
 
-				into.Clear();
-				int count = 0;
-
-				foreach (string rawLine in File.ReadAllLines(path))
-				{
-					// 支持 "123" 和 "123 # 铁矿石" 两种写法
-					string line = rawLine.Trim();
-					int comment = line.IndexOf('#');
-
-					if (comment >= 0)
-					{
-						line = line.Substring(0, comment).Trim();
-					}
-
-					if (line.Length == 0)
-					{
-						continue;
-					}
-
-					int id;
-                    if (!int.TryParse(line,out id))
-                        id=Terraria.ModLoader.ModContent.TryFind<Terraria.ModLoader.ModItem>(line,out var modItem) ? modItem.Type : 0;
-                    if (!SavedItemGuard.IsValidFilterEntry(id))
-					{
-						continue;
-					}
-
-					if (!into.Contains(id))
-					{
-						into.Add(id);
-						count++;
-					}
-				}
-
-				return count;
+                var parsed = ImportLines(File.ReadAllLines(path));
+                ItemPersistence.ReplaceFilterContents(into, parsed);
+				return ItemPersistence.FilterIdentities(parsed).Count;
 			}
 			catch (System.Exception ex)
 			{
@@ -132,6 +81,31 @@ namespace AE2ForTerraria.Systems
 				return -1;
 			}
 		}
+
+        internal static List<string> ExportLines(IEnumerable<int> ids)
+        {
+            var lines = new List<string> { "# AE2 for Terraria 清单导出:原版 ID 或 ModName/ItemName；未加载物品会保留" };
+            foreach (string identity in ItemPersistence.FilterIdentities(ids))
+            {
+                var resolved = ItemPersistence.FilterFromIdentities(new[] { identity });
+                string name = resolved.Count > 0 ? Lang.GetItemNameValue(resolved[0]) : "模组未加载，保留此项";
+                lines.Add(identity + " # " + name);
+            }
+            return lines;
+        }
+
+        internal static List<int> ImportLines(IEnumerable<string> lines)
+        {
+            var identities = new List<string>();
+            foreach (string raw in lines)
+            {
+                string line = raw.Trim();
+                int comment = line.IndexOf('#');
+                if (comment >= 0) line = line.Substring(0, comment).Trim();
+                if (line.Length > 0) identities.Add(line);
+            }
+            return ItemPersistence.FilterFromIdentities(identities);
+        }
 
 		/// <summary>清单文件所在目录(提示里显示给玩家)。</summary>
 		public static string Folder => Dir;

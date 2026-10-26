@@ -18,7 +18,8 @@ public sealed class TerminalCraftingExecutor
     internal const int CandidateBudget=64;
     internal const double FrameBudgetMilliseconds=4;
     private int _cursor;
-    public void Reset() => _cursor=0;
+    private int _legacyCursor;
+    public void Reset() { _cursor=0; _legacyCursor=0; }
 
     /// <summary>Manual orders execute synchronously; blocked work remains a normal durable job.</summary>
     public static bool Submit(MECraftingCpuEntity host, ItemKey key, long count, string requester, out string status)
@@ -118,17 +119,23 @@ public sealed class TerminalCraftingExecutor
         // Retain old assembler's saved single target without migrating, duplicating or
         // deleting its station inventory. A canceled/changed target is checked at commit.
         if (count==0 && !terminal.Paused)
-            foreach (var assembler in legacy)
+        {
+            legacy.Sort((a,b)=>a.Position.Y!=b.Position.Y ? a.Position.Y.CompareTo(b.Position.Y) : a.Position.X.CompareTo(b.Position.X));
+            for (int attempt=0;attempt<Math.Min(legacy.Count,CandidateBudget);attempt++)
             {
+                if (attempt>0 && Stopwatch.GetElapsedTime(started).TotalMilliseconds>=FrameBudgetMilliseconds) break;
+                var assembler=legacy[(_legacyCursor++ & int.MaxValue)%legacy.Count];
                 if (assembler.Target.IsAir) continue;
                 var target=assembler.Target;
                 var temporary=new MECraftingCpuEntity.Job { Key=target,Remaining=1,Total=1 };
-                if (TryExecute(terminal,null,temporary,storage,out string status,assembler))
+                bool completed=TryExecute(terminal,null,temporary,storage,out string status,assembler);
+                if (completed)
                 { assembler.Target=ItemKey.None; changed=true; }
                 assembler.LastStatus=terminal.LastStatus=status;
                 MENet.SendAssembler(assembler.Position);
-                break;
+                if (completed) break;
             }
+        }
         foreach (var cpu in dirty) MENet.SendCpu(cpu.Position);
         if (changed)
         {

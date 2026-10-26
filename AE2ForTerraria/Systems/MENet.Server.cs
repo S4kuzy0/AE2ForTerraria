@@ -222,17 +222,7 @@ namespace AE2ForTerraria.Systems
 				{
 					bool exportMode = reader.ReadBoolean();
 					bool whitelist = reader.ReadBoolean();
-					int count = ReadCount(reader);
-
-					var ids = new List<int>();
-					for (int i = 0; i < count; i++)
-					{
-						int id = reader.ReadInt32();
-						if (id > 0)
-						{
-							ids.Add(id);
-						}
-					}
+					var ids = ReadFilter(reader);
 
 					if (TileEntity.ByPosition.TryGetValue(position, out TileEntity entity)
 						&& entity is MEStorageBusEntity bus)
@@ -292,18 +282,7 @@ namespace AE2ForTerraria.Systems
 				case ClientStorageFilter:
 				{
 					bool whitelist = reader.ReadBoolean();
-					int count = ReadCount(reader);
-					var ids = new List<int>();
-
-					for (int i = 0; i < count; i++)
-					{
-						int id = reader.ReadInt32();
-
-						if (SavedItemGuard.IsValidFilterEntry(id))
-						{
-							ids.Add(id);
-						}
-					}
+					var ids = ReadFilter(reader);
 
 					if (TileEntity.ByPosition.TryGetValue(position, out TileEntity entity)
 						&& entity is IPartitionedStorage storage)
@@ -371,18 +350,7 @@ namespace AE2ForTerraria.Systems
 
 				case ClientSetLockedList:
 				{
-					int count = ReadCount(reader);
-					var types = new List<int>();
-
-					for (int i = 0; i < count; i++)
-					{
-						int type = reader.ReadInt32();
-
-						if (SavedItemGuard.IsValidFilterEntry(type))
-						{
-							types.Add(type);
-						}
-					}
+					var types = ReadFilter(reader);
 
 					NetworkRegistry.SetLockedList(AnchorOf(position), types);
 					SyncSecurity(position);

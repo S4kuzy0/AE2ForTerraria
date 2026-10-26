@@ -65,8 +65,8 @@ internal static class DropCollectorRegression
             {
                 using var buffer=new MemoryStream();using var writer=new BinaryWriter(buffer);
                 writer.Write(MENet.ServerSyncCollector);writer.Write(collector.Position.X);writer.Write(collector.Position.Y);
-                writer.Write(false);writer.Write(radius);writer.Write(false);writer.Write(ids.Length);
-                foreach(int id in ids)writer.Write(id);return buffer.ToArray();
+                writer.Write(false);writer.Write(radius);writer.Write(false);
+                MENet.WriteFilter(writer,ids);return buffer.ToArray();
             }
             void Receive(byte[] bytes) {using var reader=new BinaryReader(new MemoryStream(bytes));MENet.HandlePayload(reader,256);}
             var complete=Snapshot(100000,ItemID.StoneBlock,ItemID.StoneBlock,0,int.MaxValue);

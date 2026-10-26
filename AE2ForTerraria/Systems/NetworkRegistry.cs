@@ -35,11 +35,14 @@ namespace AE2ForTerraria.Systems
 			new Dictionary<string, HashSet<int>>();
 
 		public static bool IsLocked(Point16 anchor, int itemType)
-            => Policies(anchor).Any(k=>Locked.TryGetValue(k,out var set) && set.Contains(itemType));
+            => Policies(anchor).Any(k=>Locked.TryGetValue(k,out var set)
+                && (set.Contains(itemType) || (itemType == ModContent.ItemType<Terraria.ModLoader.Default.UnloadedItem>()
+                    && Core.ItemPersistence.HasMissingFilterReferences(set))));
 
 		public static void SetLocked(Point16 anchor, int itemType, bool locked)
         {
             if (anchor.X<0 || !Core.SavedItemGuard.IsValidType(itemType)) return;
+            if (locked && !Core.SavedItemGuard.IsSelectableFilterType(itemType)) return;
             foreach (string key in Policies(anchor))
             {
                 if (!Locked.TryGetValue(key,out var set)) Locked[key]=set=new();
@@ -51,11 +54,25 @@ namespace AE2ForTerraria.Systems
 		public static void SetLockedList(Point16 anchor, List<int> types)
         {
             if (anchor.X<0) return;
-            foreach (string key in Policies(anchor)) Locked[key]=new((types ?? new()).Where(Core.SavedItemGuard.IsValidType));
+            foreach (string key in Policies(anchor))
+            {
+                var set = new HashSet<int>((types ?? new()).Where(Core.SavedItemGuard.IsValidType));
+                Core.ItemPersistence.CopyMissingFilterReferences(types, set);
+                Locked[key] = set;
+            }
         }
 
 		public static List<int> GetLocked(Point16 anchor)
-            => Policies(anchor).Where(Locked.ContainsKey).SelectMany(k=>Locked[k]).Distinct().ToList();
+        {
+            var result = new List<int>();
+            foreach (string key in Policies(anchor))
+                if (Locked.TryGetValue(key, out var set))
+                {
+                    foreach (int type in set) if (!result.Contains(type)) result.Add(type);
+                    Core.ItemPersistence.CopyMissingFilterReferences(set, result);
+                }
+            return result;
+        }
 
 		public static void ApplyRemoteLocked(Point16 anchor, List<int> types)
 		{
@@ -65,6 +82,7 @@ namespace AE2ForTerraria.Systems
 			}
 
 			Locked[Key(anchor)] = types == null ? new HashSet<int>() : new HashSet<int>(types);
+            Core.ItemPersistence.CopyMissingFilterReferences(types, Locked[Key(anchor)]);
 		}
 
 		/// <summary>记一条审计。玩家名 / 动作 / 物品 / 数量 / 时间。</summary>

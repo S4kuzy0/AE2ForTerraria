@@ -151,20 +151,22 @@ namespace AE2ForTerraria.Systems
 
 		private static bool EnsureCached(int itemType)
 		{
-			if (Cache.ContainsKey(itemType))
+			string name = Lang.GetItemNameValue(itemType);
+			if (string.IsNullOrEmpty(name))
+			{
+				Cache.Remove(itemType);
+				return false;
+			}
+
+			string normalized = name.ToLowerInvariant();
+			if (Cache.TryGetValue(itemType, out Entry cached) && cached.Name == normalized)
 			{
 				return true;
 			}
 
-			string name = Lang.GetItemNameValue(itemType);
-			if (string.IsNullOrEmpty(name))
-			{
-				return false;
-			}
-
 			Cache[itemType] = new Entry
 			{
-				Name = name.ToLowerInvariant(),
+				Name = normalized,
 				Full = ToFull(name),
 				Initials = ToInitials(name)
 			};

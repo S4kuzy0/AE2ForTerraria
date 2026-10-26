@@ -3,14 +3,9 @@ using Terraria.ModLoader;
 namespace AE2ForTerraria.Core
 {
 	/// <summary>
-	/// 存档里物品 ID 的校验。
-	///
-	/// 账本、CPU 队列、Keep 清单、过滤 / 分区清单都是直接存 `int 物品ID`,
-	/// 而玩家随时可能**禁用或删掉某个模组** —— 那些 ID 就会越界,
-	/// 下游到处都在 `ContentSamples.ItemsByType[type]` 直接索引,
-	/// 结果就是拆方块 / 打开界面时抛异常,或者静默变成另一个物品。
-	///
-	/// 所以所有 LoadData 都必须先过这里,无效条目直接丢掉。
+	/// 当前运行期及旧版数值格式的物品 ID 边界校验。
+	/// 当前存储、任务与过滤持久化由 ItemPersistence 保存稳定的 ItemIO 身份。
+	/// 缺失模组内容必须保留原身份，不能依据此数值校验删除存档记录。
 	/// </summary>
 	public static class SavedItemGuard
 	{
@@ -39,6 +34,10 @@ namespace AE2ForTerraria.Core
 		{
 			return IsValidType(type);
 		}
+
+        /// <summary>纯 ID 选择器不能识别缺失物品的原身份，禁止添加裸占位类型。</summary>
+        public static bool IsSelectableFilterType(int type)
+            => IsValidType(type) && ItemLoader.GetItem(type) is not Terraria.ModLoader.Default.UnloadedItem;
 
 		/// <summary>
 		/// 安全取最大堆叠。

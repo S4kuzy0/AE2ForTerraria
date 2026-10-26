@@ -383,8 +383,7 @@ internal static class CursorTransactionRegression
         for (int i = 0; i < acl; i++) { reader.ReadString(); reader.ReadInt32(); }
         int audit = reader.ReadInt32();
         for (int i = 0; i < audit; i++) reader.ReadString();
-        int locks = reader.ReadInt32();
-        for (int i = 0; i < locks; i++) reader.ReadInt32();
+        int locks = ItemPersistence.FilterIdentities(MENet.ReadFilter(reader)).Count;
         if (reader.BaseStream.Position != reader.BaseStream.Length) throw new InvalidDataException("Trailing security reply data");
         return (owner, acl, audit, locks);
     }

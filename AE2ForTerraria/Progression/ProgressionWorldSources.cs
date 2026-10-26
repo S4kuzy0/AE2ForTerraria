@@ -46,7 +46,8 @@ internal static class ProgressionWorldSources
         ProgressionExplorationSources.Seed(graph, add);
         ProgressionTownSources.Seed(graph, add);
     }
-    internal sealed record AcquisitionRoute(int Output,int Gate,int[] Inputs,string Reason);
+    internal sealed record AcquisitionRoute(int Output,int Gate,int[] Inputs,string Reason,
+        IReadOnlyList<Condition> Conditions = null, DropRecord Drop = null);
     internal static List<AcquisitionRoute> Routes(ProgressionGraph graph)
     {
         var result=new List<AcquisitionRoute>();
@@ -57,7 +58,7 @@ internal static class ProgressionWorldSources
         AddMetalDecraftingRoutes(graph, result);
         foreach(var container in Containers(graph))
             foreach(var route in container.Value)
-                result.Add(new(route.Output,route.Gate,route.Key>0 ? new[]{container.Key,route.Key} : new[]{container.Key},"开启容器"));
+                result.Add(new(route.Output,route.Gate,route.Key>0 ? new[]{container.Key,route.Key} : new[]{container.Key},"开启容器",Drop:route.Drop));
 
         // Direct vanilla transmutations only. Decrafting and arbitrary mod
         // CanShimmer callbacks cannot be proven from the transformation table.
@@ -105,19 +106,13 @@ internal static class ProgressionWorldSources
                 if (index < 0 || index >= Recipe.numRecipes) continue;
                 var recipe = Main.recipe[index];
                 if (recipe == null || recipe.createItem.type != input || recipe.Disabled || recipe.DecraftDisabled) continue;
-                int gate = 0;
-                foreach (var condition in recipe.DecraftConditions)
-                {
-                    int requirement = ProgressionSources.ConditionTier(graph, condition);
-                    if (requirement < 0) { gate = -1; break; }
-                    gate = Math.Max(gate, requirement);
-                }
+                int gate = ProgressionSources.ConditionsTier(graph,recipe.DecraftConditions,0);
                 var outputs = recipe.customShimmerResults ?? recipe.requiredItem;
                 // Do not generalize to furniture's bone/temple-brick exceptions.
                 if (outputs.Any(item => item.type is ItemID.Bone or ItemID.LihzahrdBrick)) gate = -1;
                 if (gate >= 0)
                     foreach (var output in outputs.Where(item => !item.IsAir))
-                        result.Add(new(output.type, gate, new[] { input }, "金属锭微光分解（实际配方及分解条件）"));
+                        result.Add(new(output.type, gate, new[] { input }, "金属锭微光分解（实际配方及分解条件）",recipe.DecraftConditions.ToArray()));
                 // An earlier opaque recipe might shadow later recipes; stop here.
                 break;
             }
@@ -147,7 +142,7 @@ internal static class ProgressionWorldSources
                 result.Add(new(npc.catchItem, gate, new[] { net }, "捕虫网捕捉：" + npc.FullName));
         }
     }
-    internal readonly record struct ContainerRoute(int Output,int Gate,int Key);
+    internal readonly record struct ContainerRoute(int Output,int Gate,int Key,DropRecord Drop);
     internal static Dictionary<int,List<ContainerRoute>> Containers(ProgressionGraph graph)
     {
         var routes = new Dictionary<int,List<ContainerRoute>>();
@@ -162,7 +157,7 @@ internal static class ProgressionWorldSources
                 if(gate < 0) continue;
                 int key = type == ItemID.LockBox ? ItemID.GoldenKey : type == ItemID.ObsidianLockbox ? ItemID.ShadowKey : 0;
                 if(!routes.TryGetValue(type,out var list)) routes[type] = list = new();
-                list.Add(new(drop.ItemType,gate,key));
+                list.Add(new(drop.ItemType,gate,key,drop));
             }
         }
         return routes;

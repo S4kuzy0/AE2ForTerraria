@@ -142,7 +142,7 @@ namespace AE2ForTerraria.UI
 
 				_storage.Filter = loaded;
 				_storage.MarkFilterDirty();
-				Push();
+				if (!Push()) return;
 				RebuildCandidates();
 				Refresh();
 				UIStatus.Toast(ModText.Format("MsgListImported", "已导入 {0} 项", count));
@@ -233,16 +233,15 @@ namespace AE2ForTerraria.UI
 				return;
 			}
 
-			_storage.Filter ??= new List<int>();
+			var filter = _storage.Filter ?? new List<int>();
 
-			if (_storage.Filter.Contains(type))
-			{
-				_storage.Filter.Remove(type);
-			}
-			else
-			{
-				_storage.Filter.Add(type);
-			}
+            if (!ItemPersistence.TryToggleFilterType(filter, type))
+            {
+                UIStatus.Toast("该物品的模组未加载，无法按占位物品添加；已有名单会保留，重新启用模组后可编辑");
+                return;
+            }
+
+            _storage.Filter = filter;
 
 			_storage.MarkFilterDirty();
 			Push();
@@ -251,17 +250,18 @@ namespace AE2ForTerraria.UI
 		}
 
 		/// <summary>改动落盘 + 多人转发。</summary>
-		private void Push()
+		private bool Push()
 		{
 			if (_storage == null)
 			{
-				return;
+				return false;
 			}
 
-			if (Main.netMode == NetmodeID.MultiplayerClient)
+			if (Main.netMode == NetmodeID.MultiplayerClient && _storage is TileEntity)
 			{
-				MENet.SendStorageFilter(_position, _storage.IsWhitelist, _storage.Filter);
+				return MENet.SendStorageFilter(_position, _storage.IsWhitelist, _storage.Filter);
 			}
+			return true;
 		}
 
 		private void RebuildCandidates()
@@ -291,7 +291,7 @@ namespace AE2ForTerraria.UI
 				int total = Terraria.ModLoader.ItemLoader.ItemCount;
 				for (int type = 1; type < total; type++)
 				{
-					if (string.IsNullOrWhiteSpace(Lang.GetItemNameValue(type)))
+					if (!SavedItemGuard.IsSelectableFilterType(type) || string.IsNullOrWhiteSpace(Lang.GetItemNameValue(type)))
 					{
 						continue;
 					}

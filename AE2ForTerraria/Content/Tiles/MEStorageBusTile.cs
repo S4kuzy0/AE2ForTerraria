@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AE2ForTerraria.Core;
 using AE2ForTerraria.Systems;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -44,35 +45,16 @@ namespace AE2ForTerraria.Content.Tiles
 			// 手持物品 = 直接把它加进 / 移出分区清单;空手 = 打开配置界面
 			if (held != null && held.type > 0)
 			{
+                bus.Filter ??= new List<int>();
+                if (!ItemPersistence.TryToggleFilterType(bus.Filter, held.type))
+                {
+                    UIStatus.Toast("该物品的模组未加载，无法按占位物品添加；已有名单会保留，重新启用模组后可编辑");
+                    return true;
+                }
 				if (Main.netMode == Terraria.ID.NetmodeID.MultiplayerClient)
 				{
-					// 客户端自己先算一份,发给服务器定夺
-					bus.Filter ??= new List<int>();
-					if (bus.Filter.Contains(held.type))
-					{
-						bus.Filter.Remove(held.type);
-					}
-					else
-					{
-						bus.Filter.Add(held.type);
-					}
-
 					MENet.SendBusConfig(position, bus.ExportMode, bus.IsWhitelist, bus.Filter);
 					return true;
-				}
-
-				if (bus.Filter == null)
-				{
-					bus.Filter = new List<int>();
-				}
-
-				if (bus.Filter.Contains(held.type))
-				{
-					bus.Filter.Remove(held.type);
-				}
-				else
-				{
-					bus.Filter.Add(held.type);
 				}
 
 				bus.MarkFilterDirty();

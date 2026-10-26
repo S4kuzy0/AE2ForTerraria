@@ -18,9 +18,20 @@ internal static class BrowserCategories
     private static HashSet<int> _stations;
     private static readonly Dictionary<(int, int, int), bool> Results = new();
     private static readonly Dictionary<Category, int> Icons = new();
-    public static void Reset() { _items = null; _stations = null; Results.Clear(); Icons.Clear(); }
+    private static Core.RecipeIndex _recipeIndex;
+    private static int _recipeRevision = -1;
+    public static void Reset() { _items = null; _stations = null; Results.Clear(); Icons.Clear(); _recipeIndex = null; _recipeRevision = -1; }
+    private static void RefreshRecipes()
+    {
+        var index = Systems.StorageSystem.Recipes;
+        int revision = index?.Revision ?? -1;
+        if (_stations != null && ReferenceEquals(_recipeIndex, index) && _recipeRevision == revision) return;
+        _stations = new HashSet<int>(Main.recipe.Take(Recipe.numRecipes).Where(r => r != null && !r.Disabled).SelectMany(r => r.requiredTile).Where(t => t >= 0));
+        _recipeIndex = index; _recipeRevision = revision; Results.Clear(); Icons.Clear();
+    }
     internal static int Icon(Category category)
     {
+        RefreshRecipes();
         if (Icons.TryGetValue(category, out int icon)) return icon;
         icon = category.Name switch
         {
@@ -39,8 +50,8 @@ internal static class BrowserCategories
     {
         get
         {
+            RefreshRecipes();
             if (_items != null) return _items;
-            _stations = new HashSet<int>(Main.recipe.Take(Recipe.numRecipes).Where(r => r != null && !r.Disabled).SelectMany(r => r.requiredTile).Where(t => t >= 0));
             var categories = new List<Category>
             {
                 C("全部", i => true),
@@ -92,6 +103,7 @@ internal static class BrowserCategories
         ItemID.DemonConch, ItemID.CellPhone, ItemID.IceMirror, ItemID.MagicMirror };
     public static bool Matches(int type, int category, int child)
     {
+        RefreshRecipes();
         if (!ContentSamples.ItemsByType.TryGetValue(type, out var item)) return false;
         var key = (type, category, child);
         if (!Results.TryGetValue(key, out bool result))

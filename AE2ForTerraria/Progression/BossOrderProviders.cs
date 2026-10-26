@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System;
+using System.Collections;
+using System.Linq;
 using AE2ForTerraria.Acquisition;
 using AE2ForTerraria.Core;
 using AE2ForTerraria.Systems;
@@ -225,10 +227,26 @@ namespace AE2ForTerraria.Progression
 			{
 				Mod bossChecklist = ModLoader.GetMod(ModName);
 				object raw = bossChecklist?.Call("GetBossInfoDictionary", AE2ForTerraria.Instance, "1.6");
+                return TryBuildFromData(raw, output, StorageSystem.Acquisition);
+            }
+            catch (Exception ex)
+            {
+                StorageSystem.Acquisition?.ReplaceDerived("bosschecklist", null);
+                AE2ForTerraria.Instance?.Logger.Warn("BossChecklist query unavailable; using other progression sources: " + ex.Message);
+                return false;
+            }
+        }
 
-				if (raw is not Dictionary<string, Dictionary<string, object>> perMod)
+        internal bool TryBuildFromData(object raw, List<ProgressionTier> output, AcquisitionRegistry destination)
+        {
+            var registry = new AcquisitionRegistry();
+            try
+            {
+                var perMod = ReadDictionary(raw);
+				if (perMod == null)
 				{
 					LogCallResult(raw);
+					destination?.ReplaceDerived("bosschecklist", null);
 					return false;
 				}
 
@@ -236,36 +254,50 @@ namespace AE2ForTerraria.Progression
 
                 void AddEntry(string key,Dictionary<string,object> info)
                 {
-                    if(!info.TryGetValue("progression",out object rank)) return;
-                    float order=Convert.ToSingle(rank);
-                    if(!float.IsFinite(order)) return;
-                    var npcs=info.TryGetValue("npcIDs",out object ids) && ids is IEnumerable<int> values
-                        ? new List<int>(values) : new List<int>();
-                    ordered.Add((order,key,npcs,info));
+                    try
+                    {
+                        if (!info.TryGetValue("progression", out object rank) || rank == null) return;
+                        float order = Convert.ToSingle(rank, System.Globalization.CultureInfo.InvariantCulture);
+                        if (!float.IsFinite(order)) return;
+                        var npcs = info.TryGetValue("npcIDs", out object ids) ? ReadIds(ids, NPCLoader.NPCCount) : new List<int>();
+                        ordered.Add((order, key, npcs, info));
+                    }
+                    catch (Exception ex) { WarnEntry(key, ex); }
                 }
                 foreach(var entry in perMod)
                 {
-                    if(entry.Value==null) continue;
-                    if(entry.Value.ContainsKey("progression")) AddEntry(entry.Key,entry.Value);
-                    else foreach(var nested in entry.Value)
-                        if(nested.Value is Dictionary<string,object> info) AddEntry(nested.Key,info);
+                    try
+                    {
+                        var info = ReadDictionary(entry.Value);
+                        if (info == null) continue;
+                        if (info.ContainsKey("progression")) AddEntry(entry.Key, info);
+                        else foreach (var nested in info)
+                        {
+                            var boss = ReadDictionary(nested.Value);
+                            if (boss != null) AddEntry(nested.Key, boss);
+                        }
+                    }
+                    catch (Exception ex) { WarnEntry(entry.Key, ex); }
                 }
 				if (ordered.Count == 0)
 				{
+					destination?.ReplaceDerived("bosschecklist", null);
 					return false;
 				}
 
 				ordered.Sort((a, b) => a.order.CompareTo(b.order));
 
 				int index = 0;
-				AcquisitionRegistry registry = StorageSystem.Acquisition;
 
 				foreach ((float order, string key, List<int> npcs, Dictionary<string, object> info) in ordered)
 				{
+                    try
+                    {
 					// 优先用 NPC 的显示名,拿不到就用 Boss 键。
 					// 多 NPC 事件以前只显示 npcs[0],现在把前两个都列出来。
 					bool declaredName=info.TryGetValue("displayName",out object label) && label is Terraria.Localization.LocalizedText;
-                    string display=declaredName ? ((Terraria.Localization.LocalizedText)label).Value : npcs.Count>0 ? NpcIndex.GetName(npcs[0]) : key;
+                    string display=declaredName ? ((Terraria.Localization.LocalizedText)label).Value : label as string ?? (npcs.Count>0 ? NpcIndex.GetName(npcs[0]) : key);
+                    declaredName |= label is string;
 					if (string.IsNullOrWhiteSpace(display))
 					{
 						display = key;
@@ -296,7 +328,7 @@ namespace AE2ForTerraria.Progression
 						tier.SpawnInfo = spawnInfoText;
 					}
 
-                    if(info.TryGetValue("loot",out object declaredLoot) && declaredLoot is IEnumerable<int> lootTypes) tier.LootItems.AddRange(lootTypes);
+                    if(info.TryGetValue("loot",out object declaredLoot)) tier.LootItems.AddRange(ReadIds(declaredLoot is IDictionary lootMap ? lootMap.Keys : declaredLoot, ItemLoader.ItemCount));
 					output.Add(tier);
 
 					// —— 官方接口还给了宝藏袋和召唤物,顺手接上 ——
@@ -307,7 +339,7 @@ namespace AE2ForTerraria.Progression
 
 					// 宝藏袋:击败这个 Boss 获得
 					if (info.TryGetValue("treasureBag", out object bagObject)
-						&& bagObject is int bagId && bagId > 0)
+						&& bagObject is int bagId && bagId > 0 && bagId < ItemLoader.ItemCount)
 					{
 						tier.TreasureBag = bagId;
 						registry.RegisterSource(ItemKey.Crafted(bagId),
@@ -318,10 +350,9 @@ namespace AE2ForTerraria.Progression
 					}
 
 					// 召唤物:用于召唤这个 Boss
-					if (info.TryGetValue("spawnItems", out object spawnObject)
-						&& spawnObject is List<int> spawnIds)
+					if (info.TryGetValue("spawnItems", out object spawnObject))
 					{
-						foreach (int spawnId in spawnIds)
+						foreach (int spawnId in ReadIds(spawnObject, ItemLoader.ItemCount))
 						{
 							if (spawnId > 0)
 							{
@@ -340,7 +371,7 @@ namespace AE2ForTerraria.Progression
 					{
 						foreach (KeyValuePair<int, float> drop in loot)
 						{
-							if (drop.Key <= 0)
+							if (drop.Key <= 0 || drop.Key >= ItemLoader.ItemCount || !float.IsFinite(drop.Value))
 							{
 								continue;
 							}
@@ -382,7 +413,7 @@ namespace AE2ForTerraria.Progression
 								itemId = asFloat;
 							}
 
-							if (itemId <= 0)
+							if (itemId <= 0 || itemId >= ItemLoader.ItemCount || !float.IsFinite(rate))
 							{
 								continue;
 							}
@@ -399,16 +430,62 @@ namespace AE2ForTerraria.Progression
 								ModText.Format("SrcDefeatDropShort", "击败「{0}」掉落", display));
 						}
 					}
+				    }
+                    catch (Exception ex) { WarnEntry(key, ex); }
 				}
-
-				return true;
+                destination?.ReplaceDerived("bosschecklist", registry);
+				return output.Count > 0;
 			}
-			catch
+			catch (Exception ex)
 			{
-				// 接口失败就让下层 provider 接手
-				return false;
+                destination?.ReplaceDerived("bosschecklist", registry);
+                AE2ForTerraria.Instance?.Logger.Warn("BossChecklist data partially unavailable: " + ex.Message);
+				return output.Count > 0;
 			}
 		}
+
+        private static void WarnEntry(string key, Exception error) =>
+            AE2ForTerraria.Instance?.Logger.Warn("BossChecklist entry skipped or incomplete: " + key + " " + error.Message);
+
+        private static List<int> ReadIds(object value, int maximum)
+        {
+            var result = new List<int>();
+            if (value is not IEnumerable values || value is string) return result;
+            foreach (object entry in values)
+            {
+                try
+                {
+                    int id = Convert.ToInt32(entry, System.Globalization.CultureInfo.InvariantCulture);
+                    if (id > 0 && id < maximum && !result.Contains(id)) result.Add(id);
+                }
+                catch (Exception) { /* An unsupported ID does not invalidate its other siblings. */ }
+            }
+            return result;
+        }
+
+        private static Dictionary<string, object> ReadDictionary(object value)
+        {
+            if (value is Dictionary<string, object> direct) return direct;
+            var result = new Dictionary<string, object>(StringComparer.Ordinal);
+            if (value is IDictionary dictionary)
+            {
+                foreach (DictionaryEntry entry in dictionary)
+                    if (entry.Key is string key) result[key] = entry.Value;
+                return result;
+            }
+            // IReadOnlyDictionary and immutable dictionaries need not implement non-generic IDictionary.
+            bool stringMap = value?.GetType().GetInterfaces().Any(type => type.IsGenericType
+                && (type.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>) || type.GetGenericTypeDefinition() == typeof(IDictionary<,>))
+                && type.GetGenericArguments()[0] == typeof(string)) == true;
+            if (!stringMap || value is not IEnumerable entries) return null;
+            foreach (object entry in entries)
+            {
+                if (entry == null) continue;
+                var type = entry.GetType();
+                if (type.GetProperty("Key")?.GetValue(entry) is string key) result[key] = type.GetProperty("Value")?.GetValue(entry);
+            }
+            return result;
+        }
 
 	}
 
