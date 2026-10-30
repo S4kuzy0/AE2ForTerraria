@@ -29,6 +29,7 @@ internal static class FavoriteTreeHud
     private static string _sourceLabel = "背包";
     private static int _readRevision;
     private static Rectangle _eye;
+    private static Rectangle _nextSteps;
     private static ulong _stockAt;
     private static object _stockSource;
     internal static bool Visible => !Main.dedServ && !Main.gameMenu && !Main.LocalPlayer.dead
@@ -78,6 +79,7 @@ internal static class FavoriteTreeHud
         _panel.Recalculate();
         var bounds = _panel.GetDimensions().ToRectangle();
         _eye = new Rectangle(bounds.Right - 27, bounds.Y + 4, 22, 20);
+        _nextSteps = new Rectangle(bounds.Right - 83, bounds.Y + 4, 52, 20);
         _scroll = Math.Clamp(_scroll, 0, Math.Max(0, _totalRows - VisibleRows));
         if (_dragging && !Main.mouseLeft)
         {
@@ -95,6 +97,7 @@ internal static class FavoriteTreeHud
             if (Main.mouseLeft && !_wasDown)
             {
                 if (_eye.Contains(pointer.ToPoint())) BrowserFavorites.AlwaysVisible = !BrowserFavorites.AlwaysVisible;
+                else if (_nextSteps.Contains(pointer.ToPoint())) UISystem.OpenGuide(GuidePage.Goals);
                 else if (pointer.Y < bounds.Top + 27)
                 { _dragging = true; _position = position; _dragOffset = pointer - position; }
                 else if (_body.ContainsPoint(pointer)) ActivateRow((int)((pointer.Y - _body.GetDimensions().Y) / 22) + _scroll);
@@ -165,8 +168,11 @@ internal static class FavoriteTreeHud
         {
             var box = GetDimensions().ToRectangle();
             UITheme.Fill(batch, box, new Color(22, 30, 49) * .94f); UITheme.Outline(batch, box, UITheme.ItemBorder);
-            Utils.DrawBorderString(batch, "收藏合成树 · " + _sourceLabel
-                + (_pendingTrees > 0 ? " · 展开中" : ""), new Vector2(box.X + 7, box.Y + 7), UITheme.Text, .65f);
+            string title = "收藏 · " + _sourceLabel + (_pendingTrees > 0 ? " · 展开中" : "");
+            while (title.Length > 1 && FontAssets.MouseText.Value.MeasureString(title).X * .6f > box.Width - 93) title = title[..^1];
+            Utils.DrawBorderString(batch, title, new Vector2(box.X + 7, box.Y + 7), UITheme.Text, .6f);
+            UITheme.Fill(batch, _nextSteps, UITheme.Btn);
+            Utils.DrawBorderString(batch, "下一步", new Vector2(_nextSteps.X + 6, _nextSteps.Y + 3), UITheme.Info, .6f);
             Color eyeColor = BrowserFavorites.AlwaysVisible ? Main.OurFavoriteColor : UITheme.TextDim;
             int cx = _eye.Center.X, cy = _eye.Center.Y;
             for (int x = -8; x <= 8; x++)

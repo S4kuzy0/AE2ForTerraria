@@ -1364,6 +1364,114 @@ public sealed class UiRegressionSystem : ModSystem
     }
 
     private static string WindowLayoutTestPath => Path.Combine(Main.SavePath,"AE2-Validation","menu-layout-test.txt");
+    private void ValidateWikiGuidance()
+    {
+        using var preferences = BrowserPreferences.Isolate(Path.Combine(Main.SavePath, "AE2-Validation", "wiki-" + Guid.NewGuid().ToString("N")));
+        var oldState = UISystem.Interface.CurrentState;
+        var oldTerminal = UISystem.TerminalState;
+        var oldOverlay = UISystem.OverlayInterface.CurrentState;
+        var originalStock = UISystem.ActiveNetworkContents;
+        var restoreViewport = CaptureViewport();
+        try
+        {
+            var terminal = NewTerminal(TerminalViewMode.Craft);
+            typeof(UISystem).GetProperty(nameof(UISystem.TerminalState))!.SetValue(null, terminal);
+            UISystem.Interface.SetState(terminal);
+            BrowserFavorites.Toggle(ItemID.Torch); BrowserFavorites.Toggle(ItemID.NightsEdge);
+            var stationSets = UISystem.GetStationHosts().Select(host => (host.Stations, Original: host.Stations.ToArray())).ToArray();
+            var drive = UISystem.ActiveNetwork.OfType<MEDiskDriveEntity>().First();
+            var originalDisk = drive.Disks[0];
+            try
+            {
+                foreach (var host in stationSets)
+                    for (int i = 0; i < host.Stations.Length; i++) host.Stations[i] = new Item(ModContent.ItemType<Terraria.ModLoader.Default.UnloadedItem>());
+                drive.Disks[0] = new Item(ModContent.ItemType<Terraria.ModLoader.Default.UnloadedItem>());
+                var tutorial = TerminalGuide.Tutorial();
+                Assert(tutorial.Any(row => row.Text.Contains("第二步") && row.Satisfied == false)
+                    && tutorial.Any(row => row.Text.Contains("第四步") && row.Satisfied == false),
+                    "tutorial never counts missing-content placeholders as an installed disk or usable workstation");
+            }
+            finally
+            {
+                drive.Disks[0] = originalDisk;
+                foreach (var host in stationSets) host.Original.CopyTo(host.Stations, 0);
+            }
+            foreach (var size in new[] { new Point(800, 600), new Point(1280, 720) })
+            {
+                SetViewport(size.X, size.Y, 1f);
+                var guide = new GuideUIState(); guide.Activate(); guide.Show(GuidePage.Tutorial, remember: false);
+                guide.Update(new GameTime());
+                Assert(guide.Rows.Any(r => r.Text.Contains("第一步") && r.Satisfied == true)
+                    && guide.Rows.Any(r => r.Text.Contains("第二步") && r.Satisfied == true),
+                    "tutorial detects the actually connected terminal and installed disk at " + size.X);
+                var list = Field<UIGuideList>(guide, "_list");
+                Assert(list.GetDimensions().ToRectangle().Bottom <= guide.InteractionBounds.Bottom - 12,
+                    "wiki scrollbar and action viewport stop above the resize grip at " + size.X);
+                RenderProbe(guide, "Wiki-tutorial-" + size.X);
+                guide.Show(GuidePage.Sources, ItemID.Squirrel);
+                RenderProbe(guide, "Wiki-capture-" + size.X);
+                var layout = Field<IList>(list, "_layout");
+                object tool = layout.Cast<object>().First(x => TupleField<GuideRow>(x, "Item1").Item == ItemID.BugNet);
+                list.Scroll = TupleField<int>(tool, "Item3"); RenderProbe(guide, null);
+                object hit = Field<IList>(list, "_hits").Cast<object>().First(x => TupleField<GuideRow>(x, "Item2").Item == ItemID.BugNet);
+                var box = TupleField<Rectangle>(hit, "Item1");
+                list.LeftClick(new UIMouseEvent(list, box.Center.ToVector2()));
+                Assert(guide.Rows[0].Item == ItemID.BugNet, "actual wiki tool row click opens its acquisition page");
+                Click(guide, "_back");
+                Assert(guide.Rows[0].Item == ItemID.Squirrel, "wiki back restores the prior acquisition target");
+                guide.Follow(new GuideRow("NPC", Npc: NPCID.Squirrel, Link: GuideLink.Npc));
+                Assert(guide.Rows[0].Npc == NPCID.Squirrel, "source NPC link uses its current stable identity");
+                Click(guide, "_back");
+                Assert(guide.Rows[0].Item == ItemID.Squirrel, "NPC details keep the source navigation return path");
+                guide.Show(GuidePage.Sources, ItemID.FrogLeg); RenderProbe(guide, "Wiki-fishing-" + size.X);
+                guide.Show(GuidePage.Goals);
+                for (int i = 0; i < 300; i++) guide.Update(new GameTime());
+                Assert(guide.Rows.Any(r => r.Text.Contains("合并采集清单")) && guide.Rows.Any(r => r.Link == GuideLink.Sources),
+                    "favorite guide renders actionable next steps and the shared collection list");
+                RenderProbe(guide, "Wiki-goals-" + size.X);
+                guide.Show(GuidePage.Recipe, ItemID.NightsEdge); RenderProbe(guide, "Wiki-recipe-check-" + size.X);
+                Assert(guide.Rows.Any(r => r.Item > 0 && r.Link == GuideLink.Sources), "recipe failure guidance links missing material acquisition");
+                guide.Show(GuidePage.Storage); RenderProbe(guide, "Wiki-storage-check-" + size.X);
+                Assert(guide.Rows.Any(r => r.Link == GuideLink.Network), "storage guidance links the existing authorized network overview");
+                list.Scroll = int.MaxValue; RenderProbe(guide, "Wiki-storage-tail-" + size.X);
+                guide.Show(GuidePage.Tutorial); list.Scroll = int.MaxValue; RenderProbe(guide, "Wiki-tutorial-tail-" + size.X);
+                Assert(Field<IList>(list, "_hits").Cast<object>().Any(x => TupleField<GuideRow>(x, "Item2").Link == GuideLink.Storage),
+                    "last tutorial troubleshooting action is reachable below every step");
+            }
+            var goals = new GuideGoals(); goals.Update(true);
+            for (int tick = 0; tick < 1000 && goals.Pending; tick++) goals.Update();
+            Assert(goals.Trees[0].Nodes[0].Missing > 0, "goal initially sees missing target in the authorized network");
+            typeof(UISystem).GetProperty(nameof(UISystem.ActiveNetworkContents))!.SetValue(null,
+                new Dictionary<ItemKey, long>(originalStock) { [ItemKey.Crafted(ItemID.Torch)] = 3 });
+            SetField(goals, "_checkedAt", 0UL); goals.Update();
+            for (int tick = 0; tick < 1000 && goals.Pending; tick++) goals.Update();
+            Assert(goals.Trees[0].Nodes[0].Missing == 0,
+                "next inventory poll replaces collection instructions when the target enters the network");
+            typeof(UISystem).GetProperty(nameof(UISystem.ActiveNetworkContents))!.SetValue(null, originalStock);
+            UISystem.OverlayInterface.SetState(null);
+            Click(terminal, "_status");
+            Assert(UISystem.OverlayInterface.CurrentState is GuideUIState storageGuide
+                && storageGuide.Rows.Any(r => r.Text.Contains("存取失败")) && PinnedInventory.HasOpenTerminal,
+                "actual terminal status click opens diagnostics without closing its network");
+            var activeGuide = (GuideUIState)UISystem.OverlayInterface.CurrentState;
+            Click(activeGuide, "_back");
+            Assert(UISystem.OverlayInterface.CurrentState == null && PinnedInventory.HasOpenTerminal,
+                "leaving externally opened guidance returns to the terminal without closing it");
+            UISystem.OpenGuide(GuidePage.Tutorial); activeGuide = (GuideUIState)UISystem.OverlayInterface.CurrentState;
+            Click(activeGuide, "_back");
+            Assert(UISystem.OverlayInterface.CurrentState == null,
+                "reopening guidance starts a fresh return path instead of visiting a stale diagnostic");
+        }
+        finally
+        {
+            UISystem.Interface.SetState(oldState);
+            typeof(UISystem).GetProperty(nameof(UISystem.TerminalState))!.SetValue(null, oldTerminal);
+            typeof(UISystem).GetProperty(nameof(UISystem.ActiveNetworkContents))!.SetValue(null, originalStock);
+            UISystem.OverlayInterface.SetState(oldOverlay);
+            restoreViewport();
+        }
+    }
+
     private void RenderChecks()
     {
         if (_done || Main.dedServ || !Main.gameMenu || !StorageSystem.Ready
@@ -1421,6 +1529,7 @@ public sealed class UiRegressionSystem : ModSystem
                 && ReferenceEquals(UISystem.ActiveCraftingTerminal,craftingTerminal) && UISystem.TerminalCanManage,
                 "integrated station fixture resolves installed stations and editable terminal through actual network membership");
             ValidateBrowserPreferences();
+            ValidateWikiGuidance();
             ValidateAltFavorites();
             ValidateSelectedRecipeFavorite();
             ValidatePinnedTreeHud();

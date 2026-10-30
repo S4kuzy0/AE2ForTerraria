@@ -12,7 +12,20 @@ internal static class ProgressionFishingSources
     {
         void Group(int tier, string reason, params int[] items)
         {
-            foreach (int type in items) add(type, tier, reason);
+            foreach (int type in items)
+            {
+                if (tier >= 0) graph.AddSourceHint(type, reason, instructions: "操作：携带鱼竿和鱼饵，在上方说明的水域抛竿、咬钩后收杆。熔岩钓鱼还需满足熔岩鱼饵、钓竿或配饰的要求。稀有鱼获可能需要多次尝试。");
+                add(type, tier, reason);
+            }
+        }
+        void Reward(int tier, string reason, params int[] items)
+        {
+            foreach (int type in items)
+            {
+                if (tier >= 0) graph.AddSourceHint(type, reason, instructions:
+                    "操作：找到渔夫，查看当日任务鱼和钓取地点；钓到后交付任务。奖励数量与世界条件以上方说明及当前模组规则为准。");
+                add(type, tier, reason);
+            }
         }
 
         Group(0, "钓鱼：任意有效水域，无 Boss 门槛",
@@ -63,7 +76,7 @@ internal static class ProgressionFishingSources
         if (hardmode >= 0 && skeletron >= 0)
             Group(Math.Max(hardmode, skeletron), "钓鱼：困难模式地牢，仍需先击败骷髅王", ItemID.DungeonFishingCrateHard);
 
-        Group(0, "渔夫任务奖励：完成对应数量或种类的任务，无 Boss 门槛",
+        Reward(0, "渔夫任务奖励：完成对应数量或种类的任务，无 Boss 门槛",
             ItemID.FuzzyCarrot, ItemID.AnglerHat, ItemID.AnglerVest, ItemID.AnglerPants,
             ItemID.GoldenFishingRod, ItemID.BottomlessBucket, ItemID.SuperAbsorbantSponge,
             ItemID.BottomlessHoneyBucket, ItemID.HoneyAbsorbantSponge, ItemID.GoldenBugNet,
@@ -72,9 +85,9 @@ internal static class ProgressionFishingSources
             ItemID.SeashellHairpin, ItemID.MermaidAdornment, ItemID.MermaidTail,
             ItemID.FishCostumeMask, ItemID.FishCostumeShirt, ItemID.FishCostumeFinskirt,
             ItemID.FishingPotion, ItemID.SonarPotion, ItemID.CratePotion);
-        Group(hardmode, "渔夫任务奖励：困难模式专属，仍需完成对应任务数量",
+        Reward(hardmode, "渔夫任务奖励：困难模式专属，仍需完成对应任务数量",
             ItemID.HotlineFishingHook, ItemID.FinWings);
         if (ModLoader.TryGetMod("CalamityMod", out var calamity) && CalamitySourceCompatibility.Supports(calamity, "angler-sundial"))
-            Group(0, "灾厄：渔夫完成第 26 次任务的奖励，无 Boss 门槛", ItemID.Sundial);
+            Reward(0, "灾厄：渔夫完成第 26 次任务的奖励，无 Boss 门槛", ItemID.Sundial);
     }
 }

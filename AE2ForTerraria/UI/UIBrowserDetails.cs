@@ -373,13 +373,22 @@ internal sealed class UIBrowserDetails : UIElement
     }
     private void BuildSources()
     {
-        foreach (string source in StorageSystem.Acquisition.GetSources(_key.WithoutPrefix()))
-            if (!GameDataIndex.IsIndexedDropText(source)) Add(source);
+        foreach (var entry in WikiGuidance.Sources(_key.Type, includeDrops: false))
+        {
+            foreach (string line in entry.Text.Split('\n'))
+                _rows.Add(new Row(line, entry.Item, entry.Npc, entry.Heading ? UITheme.Info : entry.Satisfied == false ? UITheme.Warn : null,
+                    Click: entry.Link == GuideLink.None ? null : () => FollowGuide(entry)));
+        }
         int shimmer = ItemID.Sets.ShimmerTransformToItem[_key.Type];
         if (shimmer > 0) Add("微光转化：" + Lang.GetItemNameValue(shimmer), shimmer);
         foreach (var drop in GameDataIndex.GetContainerDrops(_key.Type)) AddDrop(drop, false);
         foreach (var drop in GameDataIndex.GetNpcSources(_key.Type)) AddDrop(drop, true);
         foreach (var drop in GameDataIndex.GetContainerSources(_key.Type)) AddDrop(drop, true);
+    }
+    private static void FollowGuide(GuideRow row)
+    {
+        if (row.Link == GuideLink.Npc) UISystem.OpenNpc(row.Npc);
+        else UISystem.OpenGuide(row.Link == GuideLink.Recipe ? GuidePage.Recipe : GuidePage.Sources, row.Item, row.Recipe, row.Quantity);
     }
     private void BuildNpc()
     {
@@ -416,8 +425,9 @@ internal sealed class UIBrowserDetails : UIElement
         var output = new Rectangle((int)d.X + 10, top, 24, 24);
         DrawIcon(batch, _shownRecipe.createItem.type, 0, output);
         if (BrowserFavorites.Contains(_shownRecipe.createItem.type)) FavoriteInput.Mark(batch, output);
-        _hits.Add((new Rectangle((int)d.X + 8, top, (int)d.Width - 16, 25), new Row("", _shownRecipe.createItem.type, Click: static () => { })));
-        Utils.DrawBorderString(batch, Fit("产出  " + _shownRecipe.createItem.Name + " ×" + _shownRecipe.createItem.stack,
+        _hits.Add((new Rectangle((int)d.X + 8, top, (int)d.Width - 16, 25), new Row("", _shownRecipe.createItem.type,
+            Click: () => UISystem.OpenGuide(GuidePage.Recipe, _shownRecipe.createItem.type, BrowserContent.RecipeKey(_shownRecipe), _quantity))));
+        Utils.DrawBorderString(batch, Fit("点击检查  " + _shownRecipe.createItem.Name + " ×" + _shownRecipe.createItem.stack,
             .65f, d.Width - 48), new Vector2(d.X + 38, top + 5), UITheme.Info, .65f);
         int bottom = (int)(d.Y + d.Height - BottomReserve - 6), rowsTop = top + 27;
         float lineWidth = d.Width - 34;

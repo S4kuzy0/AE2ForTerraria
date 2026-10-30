@@ -291,7 +291,7 @@ namespace AE2ForTerraria.UI
         }
         public UIRecipePanel()
         {
-            OnLeftClick += (_,_) => { var line=HoveredLine(); if (line?.ItemType>0) UISystem.OpenRecipe(line.ItemType,false); };
+            OnLeftClick += (_,_) => { var line=HoveredLine(); if (line?.ItemType>0) UISystem.OpenGuide(GuidePage.Sources,line.ItemType); };
             OnRightClick += (_,_) => { var line=HoveredLine(); if (line?.ItemType>0) UISystem.OpenRecipe(line.ItemType,true); };
         }
         public override void Update(GameTime gameTime)

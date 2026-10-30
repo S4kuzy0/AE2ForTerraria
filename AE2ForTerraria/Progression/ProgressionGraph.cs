@@ -31,6 +31,23 @@ namespace AE2ForTerraria.Progression
         private bool[] _effectiveTiers = Array.Empty<bool>();
         public IReadOnlyList<ProgressionTier> DefaultOrder { get; private set; } = Array.Empty<ProgressionTier>();
         private readonly Dictionary<int,string> _sourceReasons = new();
+        internal sealed record SourceHint(string Text, int[] Inputs, string Instructions = "");
+        private readonly Dictionary<int, List<SourceHint>> _sourceHints = new();
+        private readonly Dictionary<int, List<SourceHint>> _routeHints = new();
+        internal void AddSourceHint(int type, string text, int[] inputs = null, string instructions = "")
+        {
+            if (!_sourceHints.TryGetValue(type, out var hints)) _sourceHints[type] = hints = new();
+            int existing = hints.FindIndex(h => h.Text == text);
+            var hint = new SourceHint(text, inputs ?? Array.Empty<int>(), instructions);
+            if (existing < 0) hints.Add(hint);
+            else if (instructions.Length > 0) hints[existing] = hint;
+        }
+        internal IEnumerable<SourceHint> GetSourceHints(int type)
+        {
+            EnsureTierCache();
+            return (_sourceHints.GetValueOrDefault(type) ?? new List<SourceHint>())
+                .Concat(_routeHints.GetValueOrDefault(type) ?? new List<SourceHint>());
+        }
         private readonly Dictionary<int,string> _reasons = new();
         internal void SourceReason(int type, string reason) => _sourceReasons[type] = reason;
         public int Revision { get; private set; }
@@ -601,6 +618,7 @@ namespace AE2ForTerraria.Progression
 		private void AnchorItemsFromBosses()
 		{
             _sourceReasons.Clear();
+            _sourceHints.Clear(); _routeHints.Clear();
 			_bossAnchored.Clear();
 
 			int matchedBosses = 0;
@@ -915,6 +933,16 @@ namespace AE2ForTerraria.Progression
                 Enqueue(index);
             }
             var acquisitionRoutes = ProgressionWorldSources.Routes(this);
+            _routeHints.Clear();
+            foreach (var route in acquisitionRoutes)
+            {
+                if (route.Gate < 0) continue;
+                if (!_routeHints.TryGetValue(route.Output, out var hints)) _routeHints[route.Output] = hints = new();
+                string conditions = route.Conditions == null ? "" : string.Join("；", route.Conditions.Select(c => c.Description.Value));
+                if (route.Drop != null) conditions += string.Join("；", route.Drop.ConditionDescriptions());
+                string gate = route.Gate > 0 && route.Gate < Tiers.Count ? "；进度条件：" + Tiers[route.Gate].DisplayName : "";
+                hints.Add(new(route.Reason + gate + (conditions.Length > 0 ? "；" + conditions : ""), route.Inputs));
+            }
             var sourceUsers = new Dictionary<int,List<ProgressionWorldSources.AcquisitionRoute>>();
             foreach(var route in acquisitionRoutes)
                 foreach(int input in route.Inputs.Distinct())

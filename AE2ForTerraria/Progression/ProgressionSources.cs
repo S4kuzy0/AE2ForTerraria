@@ -158,6 +158,7 @@ internal static class ProgressionSources
         void Add(int type,int tier,string reason = "基础资源 / 生成来源")
         {
             if(type<=0 || tier<0) return;
+            graph.AddSourceHint(type, reason);
             var key=ItemKey.Crafted(type);
             if(!anchors.TryGetValue(key,out int old) || tier<old) { anchors[key]=tier; graph.SourceReason(type, reason); }
         }

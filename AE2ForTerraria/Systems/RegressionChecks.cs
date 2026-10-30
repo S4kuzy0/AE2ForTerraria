@@ -56,6 +56,7 @@ public static class RegressionChecks
             Suite("adaptive progression gates", AdaptiveProgressionRegressionChecks.Run);
             Suite("adaptive storage", StorageAdaptationRegressionChecks.Run);
             Suite("adaptive content lifecycle", LifecycleAdaptationRegressionChecks.Run);
+            Suite("adaptive wiki guidance", WikiGuidanceRegression.Run);
             Suite("storage bus", StorageBusRegression.Run);
             Suite("storage upgrade", StorageUpgradeRegression.Run);
             Suite("autocrafting operations", AutocraftingRegression.Run);

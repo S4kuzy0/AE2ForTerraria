@@ -44,6 +44,15 @@ namespace AE2ForTerraria.Systems
 
 		/// <summary>帮助页(子页面,不再是浏览器里的一块浮层)。</summary>
 		public static HelpUIState HelpState { get; private set; }
+        private static GuideUIState _guideState;
+        internal static void OpenGuide(GuidePage page, int type = 0, string recipe = "", long quantity = 1)
+        {
+            EnsureStates(); _guideState ??= new GuideUIState();
+            if (!ActivateState("行动指南", _guideState)) return;
+            SeparateFromMainWindow(_guideState);
+            _guideState.Show(page, type, recipe, quantity, ReferenceEquals(OverlayInterface?.CurrentState, _guideState));
+            OverlayInterface?.SetState(_guideState);
+        }
 
 		public static DriveUIState DriveState { get; private set; }
 
@@ -397,6 +406,7 @@ namespace AE2ForTerraria.Systems
 			SecondaryInterface = null;
 			SearchState = null; BridgeState = null; ResetTerminalRead();
 			HelpState = null;
+            _guideState = null;
 			DriveState = null;
 			TerminalState = null;
 			AssemblerState = null;

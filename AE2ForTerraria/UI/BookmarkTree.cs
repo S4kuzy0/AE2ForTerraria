@@ -26,7 +26,7 @@ internal sealed class RecipeTreeStock(IReadOnlyDictionary<int, long> source)
 internal sealed class BookmarkTree
 {
     internal sealed record Node(int Item, int Npc, long Amount, int Parent, int Depth, bool Last,
-        int Reference = -1, bool Cycle = false, bool Overflow = false, long Missing = 0, string Group = null, bool Leaf = false);
+        int Reference = -1, bool Cycle = false, bool Overflow = false, long Missing = 0, string Group = null, bool Leaf = false, int RecipeIndex = -1);
     private sealed class Branch(int node, int type, int checkpoint, int[] recipes)
     {
         internal readonly int Node = node, Type = type, Checkpoint = checkpoint;
@@ -46,6 +46,7 @@ internal sealed class BookmarkTree
     internal bool Complete => _pending.Count == 0;
     internal int Revision { get; private set; }
     internal int RootRecipe { get; private set; }
+    internal bool PreferredRecipeMissing { get; }
     internal int MaxDepth { get; private set; }
     internal string MissingContent { get; }
     internal bool MaterialsReady => Complete && Nodes.Count > 0 && Nodes[0].Npc == 0
@@ -57,6 +58,8 @@ internal sealed class BookmarkTree
         { MissingContent = bookmark.Content; return; }
         if (npc) { Nodes.Add(new Node(0, type, 1, -1, 0, true)); return; }
         _rootRecipe = BrowserContent.ResolveRecipe(type, bookmark.Recipe);
+        PreferredRecipeMissing = !string.IsNullOrEmpty(bookmark.Recipe)
+            && (_rootRecipe < 0 || BrowserContent.RecipeKey(Main.recipe[_rootRecipe]) != bookmark.Recipe);
         RootRecipe = _rootRecipe;
         _pending.Push(new Work(type, bookmark.Quantity, -1, 0, true));
     }
@@ -112,6 +115,7 @@ internal sealed class BookmarkTree
     {
         if (branch.Next >= branch.Recipes.Length) return false;
         var node = Nodes[branch.Node]; var recipe = Main.recipe[branch.Recipes[branch.Next++]];
+        Nodes[branch.Node] = node with { RecipeIndex = branch.Recipes[branch.Next - 1] };
         if (node.Parent < 0) RootRecipe = branch.Recipes[branch.Next - 1];
         _path[branch.Type] = branch;
         _pending.Push(new Work(branch.Type, 0, 0, 0, false, Exit: branch));
@@ -139,7 +143,7 @@ internal sealed class BookmarkTree
         for (int i = _reservations.Count - 1; i >= branch.Checkpoint; i--)
         { var taken = _reservations[i]; _stock?.Refund(taken.Type, taken.Amount); }
         if (_reservations.Count > branch.Checkpoint) _reservations.RemoveRange(branch.Checkpoint, _reservations.Count - branch.Checkpoint);
-        if (!Schedule(branch)) Nodes[branch.Node] = Nodes[branch.Node] with { Leaf = true };
+        if (!Schedule(branch)) Nodes[branch.Node] = Nodes[branch.Node] with { Leaf = true, RecipeIndex = -1 };
         Revision++;
     }
 }

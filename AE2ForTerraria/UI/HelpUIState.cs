@@ -57,10 +57,16 @@ namespace AE2ForTerraria.UI
 
 		private UIText _hint;
 		private UIScrollText _body;
+        private UIButton _guide, _goals;
 
 		public override void OnInitialize()
 		{
 			InitWindow(Geometry, ModText.Get("BtnHelp", "? 帮助"));
+            _guide = new UIButton("终端入门", .75f);
+            _guide.OnLeftClick += (_, _) => UISystem.OpenGuide(GuidePage.Tutorial);
+            _goals = new UIButton("收藏目标 · 下一步", .75f);
+            _goals.OnLeftClick += (_, _) => UISystem.OpenGuide(GuidePage.Goals);
+            Window.Append(_guide); Window.Append(_goals);
 
 			_hint = new UIText(string.Empty, 0.75f, false);
 			_hint.TextColor = UITheme.Muted;
@@ -90,12 +96,14 @@ namespace AE2ForTerraria.UI
 			float h = Geo.H;
 
 			_hint.Left.Set(Pad + 4f, 0f);
-			_hint.Top.Set(36f, 0f);
+			_hint.Top.Set(66f, 0f);
+            foreach (var button in new[] { _guide, _goals }) { button.Top.Set(34, 0); button.Height.Set(24, 0); button.Width.Set((w - Pad * 2 - 4) / 2, 0); }
+            _guide.Left.Set(Pad, 0); _goals.Left.Set(w / 2 + 2, 0);
 
 			_body.Left.Set(Pad, 0f);
-			_body.Top.Set(58f, 0f);
+			_body.Top.Set(88f, 0f);
 			_body.Width.Set(Math.Max(160f, w - Pad * 2f), 0f);
-			_body.Height.Set(Math.Max(80f, h - 58f - 16f), 0f);
+			_body.Height.Set(Math.Max(80f, h - 88f - 20f), 0f);
 
 			Window.Recalculate();
 		}

@@ -33,6 +33,9 @@ namespace AE2ForTerraria.Systems
 		private static readonly Dictionary<int, List<DropRecord>> ContainerDrops = new();
         private static readonly Dictionary<int, List<DropRecord>> ContainerSources = new();
         private static readonly HashSet<string> IndexedDropTexts = new();
+        internal sealed record ShopSource(int Npc, string Name, string Price, Condition[] Conditions);
+        private static readonly Dictionary<int, List<ShopSource>> Shops = new();
+        internal static IReadOnlyList<ShopSource> GetShops(int type) => Shops.TryGetValue(type, out var list) ? list : Array.Empty<ShopSource>();
         internal static bool IsIndexedDropText(string text) => IndexedDropTexts.Contains(text);
         internal static IReadOnlyList<DropRecord> GetNpcDropRecords(int npc) => NpcDrops.TryGetValue(npc, out var list) ? list : Array.Empty<DropRecord>();
         internal static IReadOnlyList<DropRecord> GetContainerDrops(int item) => ContainerDrops.TryGetValue(item, out var list) ? list : Array.Empty<DropRecord>();
@@ -40,6 +43,7 @@ namespace AE2ForTerraria.Systems
         public static void Reset()
 		{
 			Built = false; ContainerDrops.Clear(); ContainerSources.Clear(); IndexedDropTexts.Clear();
+            Shops.Clear();
 			DropSources.Clear();
 			NpcDrops.Clear();
 
@@ -60,6 +64,7 @@ namespace AE2ForTerraria.Systems
 			}
 
 			DropSources.Clear(); NpcDrops.Clear(); ContainerDrops.Clear(); ContainerSources.Clear(); IndexedDropTexts.Clear();
+            Shops.Clear();
             Built = false;
             var destination = registry;
             registry = new AcquisitionRegistry();
@@ -854,8 +859,12 @@ namespace AE2ForTerraria.Systems
                             ShopEntryCount++; added++;
                             string conditions = string.Join("、", entry.Conditions.Select(c => c.Description.Value));
                             string label = Lang.GetNPCNameValue(shop.NpcType) + " / " + shop.Name;
+                            string price = item.shopSpecialCurrency < 0 ? FormatPrice(item.shopCustomPrice ?? item.value)
+                                : (item.shopCustomPrice ?? item.value) + " 特殊货币（种类以商店为准）";
+                            if (!Shops.TryGetValue(item.type, out var shopSources)) Shops[item.type] = shopSources = new();
+                            shopSources.Add(new(shop.NpcType, label, price, entry.Conditions.ToArray()));
                             registry.RegisterSource(ItemKey.Crafted(item.type),
-                                ModText.Format("SrcShopSells", "商店「{0}」出售 {1}", label, FormatPrice(item.shopCustomPrice ?? item.value))
+                                ModText.Format("SrcShopSells", "商店「{0}」出售 {1}", label, price)
                                 + (conditions.Length == 0 ? "" : "；条件：" + conditions));
                             registry.RegisterIfAbsent(ItemKey.Crafted(item.type), AcquisitionKind.Shop, ModText.Get("SrcShopShort", "商店出售"));
                         }

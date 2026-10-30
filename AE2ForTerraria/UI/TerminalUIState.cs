@@ -279,6 +279,7 @@ namespace AE2ForTerraria.UI
 
 			_info = new UIBrowserDetails(Window, terminal: true);
             _craftReadiness = new UIText("", .72f) { DynamicallyScaleDownToWidth = true };
+            _craftReadiness.OnLeftClick += (_, _) => { if (!_selected.IsAir) UISystem.OpenGuide(GuidePage.Recipe, _selected.Type, quantity: _orderQuantity); };
             _info.Append(_craftReadiness);
             _info.Selected = key =>
             {
@@ -366,6 +367,7 @@ namespace AE2ForTerraria.UI
 			Window.Append(_keepButton);
 
 			_status = new UIText(string.Empty, 0.72f, false);
+            _status.OnLeftClick += (_, _) => UISystem.OpenGuide(GuidePage.Storage);
 			Window.Append(_status);
 
             foreach (var e in new UIElement[] { _orderButton, _takeButton, _takeAllButton, _quantityButton, _quantityInput, _keepButton }) { e.Remove(); _info.Append(e); }
@@ -877,7 +879,7 @@ namespace AE2ForTerraria.UI
                 : _selectedPlan.Limited ? "规划尚未完成，暂不计为可合成"
                 : _selectedPlan.Missing.Count > 0 ? "缺少：" + _selectedPlan.Missing[0].ItemName + " ×" + _selectedPlan.Missing[0].Amount
                 : "暂无可用合成路线";
-            UITextCache.Set(_craftReadiness, reason);
+            UITextCache.Set(_craftReadiness, "点击排查：" + reason);
             _craftReadiness.TextColor = _selectedPlan.FullySatisfied ? UITheme.Ok : UITheme.Warn;
         }
 
@@ -898,6 +900,7 @@ namespace AE2ForTerraria.UI
                 UIStatus.Toast(_selectedPlan?.BlockedReasons.Count > 0 ? _selectedPlan.BlockedReasons[0]
                     : _selectedPlan?.Missing.Count > 0 ? "缺少：" + _selectedPlan.Missing[0].ItemName
                     : "合成树尚未满足，请查看缺料和工作站条件");
+                UISystem.OpenGuide(GuidePage.Recipe, _selected.Type, quantity: _orderQuantity);
                 return;
             }
 
@@ -1363,6 +1366,10 @@ namespace AE2ForTerraria.UI
 		/// </summary>
 		protected override void DrawHoverTooltip(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch)
 		{
+            if (_status?.Parent != null && _status.ContainsPoint(Main.MouseScreen))
+            {
+                UITooltip.Draw(spriteBatch, "点击排查存取", "查看当前连接、权限、容量与过滤，并可跳转到设备和入门说明"); return;
+            }
             if (!Main.mouseItem.IsAir && _grid.Parent != null && _grid.ContainsPoint(Main.MouseScreen))
             {
                 string message = Main.netMode == NetmodeID.MultiplayerClient
