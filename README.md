@@ -1,9 +1,14 @@
-哇这个好难做啊
 # AE2 for Terraria
 
-把 **ME 网络存储、自动合成与物品查询**带进 Terraria 的 tModLoader 模组。查询物品、配方、用途与掉落，集中存取材料，在终端管理制作任务、库存目标与网络权限。
+一个为 Terraria 增加 ME 网络存储与自动合成的 tModLoader 模组。用物品浏览器查配方、用途和掉落，再把材料存入网络，由终端管理制作队列、库存目标和访问权限。
 
-当前源码版本 **0.28.0**，以 [build.txt](AE2ForTerraria/build.txt) 为准。原创代码采用 [MIT](LICENSE)；这是一款独立社区模组，与 Minecraft Applied Energistics 2、Re-Logic 或 tModLoader 官方无隶属关系。
+| 我想做什么 | 从哪里开始 |
+| --- | --- |
+| 装进游戏 | [下载预览包并安装](#安装与预览) |
+| 搭第一套 ME 网络 | [游戏内入门](docs/quickstart.md) |
+| 编译源码 | [构建步骤](#从源码构建)和[构建清单](AE2ForTerraria/build.txt) |
+
+源码版本以 [build.txt](AE2ForTerraria/build.txt) 为准，已发布的预览包可能早于源码。原创代码采用 [MIT](LICENSE)。本项目是独立社区模组。
 
 ## 界面
 
